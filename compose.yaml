@@ -1,0 +1,51 @@
+services:
+  postgres:
+    profiles: [legacy]
+    image: pgvector/pgvector:pg18-trixie
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: papert
+      POSTGRES_USER: papert_admin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make up}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+  floci:
+    image: floci/floci@sha256:954ea3f472c85c569569ab81d8e79a28dd15a769c10ab8374c106537aa45fc1d
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:7001-7099:7001-7099"
+    environment:
+      FLOCI_HOSTNAME: floci
+      FLOCI_SERVICES_DOCKER_NETWORK: papert-local
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+      FLOCI_SERVICES_RDS_DEFAULT_POSTGRES_IMAGE: papert-pgvector:18-trixie
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make up}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci_data:/app/data
+      - ./infra/floci/ensure-rds.py:/setup/ensure-rds.py:ro
+
+  db:
+    profiles: [tools]
+    image: pgvector/pgvector@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2
+    environment:
+      PGHOST: floci
+      PGPORT: "7001"
+      PGUSER: papert_admin
+      PGDATABASE: papert
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run make up}
+      PGCONNECT_TIMEOUT: "10"
+    volumes:
+      - ./infra/postgres:/setup:ro
+    entrypoint: [psql, -v, ON_ERROR_STOP=1]
+
+volumes:
+  postgres_data:
+  floci_data:
+
+networks:
+  default:
+    name: papert-local

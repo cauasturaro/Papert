@@ -1,0 +1,11 @@
+/internal/
+/Docs/
+**/.venv/
+.env
+**/node_modules/
+**/dist/
+**/coverage/
+**/__pycache__/
+*.pyc
+*.tsbuildinfo
+.DS_Store
