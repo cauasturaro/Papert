@@ -1,4 +1,6 @@
 services:
+  # ── Infrastructure (default profile) ────────────────────────────────────────
+
   postgres:
     profiles: [legacy]
     image: pgvector/pgvector:pg18-trixie
@@ -11,22 +13,29 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+
   floci:
     image: floci/floci@sha256:954ea3f472c85c569569ab81d8e79a28dd15a769c10ab8374c106537aa45fc1d
     ports:
       - "127.0.0.1:4566:4566"
-      - "127.0.0.1:7001-7099:7001-7099"
+      - "127.0.0.1:7001:7001"
     environment:
       FLOCI_HOSTNAME: floci
       FLOCI_SERVICES_DOCKER_NETWORK: papert-local
       FLOCI_STORAGE_MODE: persistent
       FLOCI_STORAGE_PERSISTENT_PATH: /app/data
       FLOCI_SERVICES_RDS_DEFAULT_POSTGRES_IMAGE: papert-pgvector:18-trixie
+      FLOCI_SERVICES_RDS_PROXY_MAX_PORT: "7001"
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run make up}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - floci_data:/app/data
       - ./infra/floci/ensure-rds.py:/setup/ensure-rds.py:ro
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   db:
     profiles: [tools]
@@ -41,6 +50,59 @@ services:
     volumes:
       - ./infra/postgres:/setup:ro
     entrypoint: [psql, -v, ON_ERROR_STOP=1]
+
+  # ── Application services (apps profile) ──────────────────────────────────────
+  # Start with: make up-apps  or  docker compose --profile apps up -d
+  # For development, prefer running each app individually — see README.md.
+
+  core:
+    profiles: [apps]
+    build:
+      context: ./apps/core
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      PORT: "3001"
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD:?Run make up}@floci:7001/papert?schema=core
+    depends_on:
+      floci:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  seymour:
+    profiles: [apps]
+    build:
+      context: ./apps/seymour
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      SEYMOUR_DATABASE_URL: postgresql+asyncpg://seymour_user:${SEYMOUR_DB_PASSWORD:?Run make up}@floci:7001/papert
+    depends_on:
+      floci:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  web:
+    profiles: [apps]
+    build:
+      context: ./apps/web
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - core
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:

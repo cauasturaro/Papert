@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Papert chat/analysis queues and Seymour-to-Core results queue (ADR-001)
+
+Resources:
+  ChatQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: papert-chat
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - ChatDeadLetterQueue
+            - Arn
+        maxReceiveCount: 3
+
+  ChatDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: papert-chat-dlq
+
+  # ADR-001: Seymour publishes structured evaluation results here;
+  # Core consumes them to validate and persist progression.
+  ResultsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: papert-results
+      RedrivePolicy:
+        deadLetterTargetArn:
+          Fn::GetAtt:
+            - ResultsDeadLetterQueue
+            - Arn
+        maxReceiveCount: 3
+
+  ResultsDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: papert-results-dlq

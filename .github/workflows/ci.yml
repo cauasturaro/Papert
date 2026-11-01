@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+env:
+  FORCE_COLOR: "1"
+
+jobs:
+  # ── Core API (NestJS) ───────────────────────────────────────────────────────
+  core:
+    name: Core — lint, build, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/core
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/core/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build -- --noEmit 2>/dev/null || npx tsc --noEmit
+
+      - name: Unit tests
+        run: npm test
+
+  # ── Seymour API (FastAPI) ───────────────────────────────────────────────────
+  seymour:
+    name: Seymour — lint, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/seymour
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/seymour/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Unit tests
+        run: python -m pytest -m "not integration" -v
+
+  # ── Prisma schema validation ────────────────────────────────────────────────
+  core-migration-check:
+    name: Core — Prisma schema validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/core
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/core/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Validate Prisma schema
+        run: npx prisma validate

@@ -1,0 +1,49 @@
+# Ingestion Lambda — serverless.yml skeleton
+# Deploy target: AWS Lambda (Python) triggered by papert-ingestion SQS queue
+# Local execution: not applicable — triggered by S3 ObjectCreated → SQS
+# Stage params: local | dev | prod
+
+service: papert-ingestion
+
+frameworkVersion: ">=4"
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+  memorySize: 512
+  timeout: 300
+  environment:
+    ENVIRONMENT: ${self:provider.stage}
+    SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url, ''}
+    CORE_INTERNAL_URL: ${ssm:/papert/${self:provider.stage}/core/internal-url, ''}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-ingestion"
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+          Resource: !Sub "arn:aws:s3:::papert-sources/*"
+
+package:
+  patterns:
+    - "!.venv/**"
+    - "!__pycache__/**"
+    - "!*.pyc"
+
+functions:
+  ingest:
+    handler: handler.handle
+    events:
+      - sqs:
+          arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-ingestion"
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+    # TODO: implement handler.py — extract, chunk, embed, store

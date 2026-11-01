@@ -1,0 +1,21 @@
+// Core API — Prisma schema
+// Schema: "core" (isolated from seymour)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["core"]
+}
+
+// Proof-of-migration table: verifies the ORM workflow and DB connectivity.
+// Replace with a domain model later.
+model HealthCheck {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("health_check")
+  @@schema("core")
+}

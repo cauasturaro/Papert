@@ -1,0 +1,62 @@
+# Seymour API — serverless.yml skeleton
+# Deploy target: AWS Lambda (FastAPI + Mangum)
+# Local execution: uvicorn main:app --reload --port 3002 (see README.md)
+# Stage params: local | dev | prod
+
+service: papert-seymour
+
+frameworkVersion: ">=4"
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+  memorySize: 1024
+  timeout: 900
+  environment:
+    ENVIRONMENT: ${self:provider.stage}
+    SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url, ''}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+        - Effect: Allow
+          Action:
+            - execute-api:ManageConnections
+          Resource: "*"
+
+package:
+  patterns:
+    - "!.venv/**"
+    - "!tests/**"
+    - "!__pycache__/**"
+    - "!*.pyc"
+
+functions:
+  api:
+    handler: mangum_handler.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+    # TODO: attach to the shared HTTP API ARN
+
+  worker:
+    handler: worker_handler.handler
+    timeout: 900
+    events:
+      - sqs:
+          arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+    # TODO: implement worker_handler.py

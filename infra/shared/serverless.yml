@@ -1,0 +1,130 @@
+# Shared infrastructure — serverless.yml skeleton
+# Declares shared AWS resources consumed by all Lambda services.
+# Deploy with: npx serverless deploy --config infra/shared/serverless.yml --stage <stage>
+# Local stack is managed by Docker Compose + Floci (compose.yaml + make infra).
+
+service: papert-shared
+
+frameworkVersion: ">=4"
+
+provider:
+  name: aws
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+
+resources:
+  Resources:
+    # ── SQS Queues ─────────────────────────────────────────────────────────────
+
+    IngestionDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-ingestion-dlq-${self:provider.stage}
+
+    IngestionQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-ingestion-${self:provider.stage}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt IngestionDLQ.Arn
+          maxReceiveCount: 3
+
+    ChatDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-chat-dlq-${self:provider.stage}
+
+    ChatQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-chat-${self:provider.stage}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ChatDLQ.Arn
+          maxReceiveCount: 3
+
+    # ADR-001: Seymour → Core structured evaluation results
+    ResultsDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-results-dlq-${self:provider.stage}
+
+    ResultsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-results-${self:provider.stage}
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ResultsDLQ.Arn
+          maxReceiveCount: 3
+
+    # ── S3 ─────────────────────────────────────────────────────────────────────
+
+    SourcesBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: papert-sources-${self:provider.stage}
+        VersioningConfiguration:
+          Status: Enabled
+        # S3 → SQS notification (ObjectCreated) configured after bucket creation
+        # to avoid circular dependency.
+
+    # ── DynamoDB ───────────────────────────────────────────────────────────────
+
+    SessionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: papert-sessions-${self:provider.stage}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+          - AttributeName: sk
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: ttl
+          Enabled: true
+
+    # ── API Gateway ────────────────────────────────────────────────────────────
+    # TODO: HTTP API and WebSocket API shared resources
+    # HttpApi:
+    #   Type: AWS::ApiGatewayV2::Api
+    #   Properties:
+    #     Name: papert-http-${self:provider.stage}
+    #     ProtocolType: HTTP
+    #
+    # WebSocketApi:
+    #   Type: AWS::ApiGatewayV2::Api
+    #   Properties:
+    #     Name: papert-ws-${self:provider.stage}
+    #     ProtocolType: WEBSOCKET
+    #     RouteSelectionExpression: "$request.body.action"
+
+  Outputs:
+    IngestionQueueArn:
+      Value: !GetAtt IngestionQueue.Arn
+      Export:
+        Name: papert-shared-IngestionQueueArn-${self:provider.stage}
+
+    ChatQueueArn:
+      Value: !GetAtt ChatQueue.Arn
+      Export:
+        Name: papert-shared-ChatQueueArn-${self:provider.stage}
+
+    ResultsQueueArn:
+      Value: !GetAtt ResultsQueue.Arn
+      Export:
+        Name: papert-shared-ResultsQueueArn-${self:provider.stage}
+
+    SourcesBucketName:
+      Value: !Ref SourcesBucket
+      Export:
+        Name: papert-shared-SourcesBucketName-${self:provider.stage}
+
+    SessionsTableName:
+      Value: !Ref SessionsTable
+      Export:
+        Name: papert-shared-SessionsTableName-${self:provider.stage}

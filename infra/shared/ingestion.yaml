@@ -1,0 +1,20 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Papert document ingestion queues
+
+
+Resources: 
+  IngestionQueue: 
+    Type: AWS::SQS::Queue
+    Properties: 
+      QueueName: "papert-ingestion"
+      RedrivePolicy: 
+        deadLetterTargetArn: 
+          Fn::GetAtt: 
+            - "IngestionDeadLetterQueue"
+            - "Arn"
+        maxReceiveCount: 3
+  IngestionDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: papert-ingestion-dlq
+

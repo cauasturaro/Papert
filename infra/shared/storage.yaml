@@ -1,0 +1,10 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Papert S3 bucket for uploaded source documents
+
+Resources:
+  SourcesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: papert-sources
+      VersioningConfiguration:
+        Status: Enabled

@@ -1,0 +1,59 @@
+# Core API — serverless.yml skeleton
+# Deploy target: AWS Lambda (NestJS + @vendia/serverless-express)
+# Local execution: npm run start:dev (see README.md — do not use sls offline for this service)
+# Stage params: local | dev | prod
+
+service: papert-core
+
+frameworkVersion: ">=4"
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+  memorySize: 512
+  timeout: 29 # API Gateway HTTP max
+  environment:
+    NODE_ENV: ${self:provider.stage}
+    DATABASE_URL: ${ssm:/papert/${self:provider.stage}/core/database-url, ''}
+  iam:
+    role:
+      statements:
+        # Principle of least privilege — expand as features are added
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+
+package:
+  individually: true
+  patterns:
+    - "!node_modules/.prisma/client/libquery_engine-*"
+    - "node_modules/.prisma/client/libquery_engine-rhel-*"
+
+functions:
+  api:
+    handler: dist/lambda.handler
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+    # TODO: attach to the shared HTTP API ARN from infra/shared/serverless.yml
+    # httpApi:
+    #   id: !ImportValue papert-shared-HttpApiId
+
+  # TODO: add results queue consumer function
+  # resultsConsumer:
+  #   handler: dist/results-consumer.handler
+  #   events:
+  #     - sqs:
+  #         arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+  #         batchSize: 1
+
+plugins:
+  - serverless-offline # dev only; remove for prod deploys
