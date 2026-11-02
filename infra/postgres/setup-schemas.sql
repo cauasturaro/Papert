@@ -6,13 +6,9 @@
 
 -- ── Core user and schema ───────────────────────────────────────────────────────
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'core_user') THEN
-    CREATE ROLE core_user LOGIN PASSWORD :'core_password';
-  END IF;
-END
-$$;
+SELECT format('CREATE ROLE core_user LOGIN PASSWORD %L', :'core_password')
+WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'core_user')
+\gexec
 
 CREATE SCHEMA IF NOT EXISTS core AUTHORIZATION core_user;
 
@@ -33,13 +29,9 @@ $$;
 
 -- ── Seymour user and schema ────────────────────────────────────────────────────
 
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'seymour_user') THEN
-    CREATE ROLE seymour_user LOGIN PASSWORD :'seymour_password';
-  END IF;
-END
-$$;
+SELECT format('CREATE ROLE seymour_user LOGIN PASSWORD %L', :'seymour_password')
+WHERE NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'seymour_user')
+\gexec
 
 CREATE SCHEMA IF NOT EXISTS seymour AUTHORIZATION seymour_user;
 

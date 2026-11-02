@@ -47,7 +47,8 @@ npm run dev
 ```sh
 # Core — Node.js and npm
 cd apps/core
-npm ci
+npm ci --legacy-peer-deps
+# Load the root environment and apply migrations first — see Authentication below.
 npm run start:dev
 ```
 
@@ -62,4 +63,8 @@ python -m uvicorn main:app --reload --port 3002
 
 Web uses port `3000`; Core uses `3001`; Seymour responds at `http://localhost:3002/health`. Ingestion currently has only its Python environment prepared.
 
-The current setup covers Floci and RDS/pgvector. Applications still run locally: database integration, separate service users, buckets, queues, DynamoDB tables, and Lambda deployments will be added during development.
+Local infrastructure includes Floci/RDS, isolated service schemas, queues, storage and the sessions table. Application hosting and Lambda integration remain under development.
+
+## Authentication
+
+Core now provides registration, login, renewable JWE sessions, ownership checks and logout. The Web account flow is at `/account`. Follow [authentication setup and policy](apps/core/AUTHENTICATION.md) to load the root environment, migrate the database, configure secrets and run tests. `make auth-env` prepares a missing local JWE key without replacing existing material.

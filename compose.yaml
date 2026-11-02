@@ -63,6 +63,10 @@ services:
       - "127.0.0.1:3001:3001"
     environment:
       PORT: "3001"
+      NODE_ENV: development
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+      AUTH_JWE_ACTIVE_KID: ${AUTH_JWE_ACTIVE_KID:-}
+      AUTH_JWE_KEYS: ${AUTH_JWE_KEYS:-}
       DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD:?Run make up}@floci:7001/papert?schema=core
     depends_on:
       floci:
@@ -96,10 +100,12 @@ services:
       context: ./apps/web
     ports:
       - "127.0.0.1:3000:3000"
+    environment:
+      CORE_API_URL: http://core:3001
     depends_on:
       - core
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
       interval: 10s
       timeout: 5s
       retries: 10

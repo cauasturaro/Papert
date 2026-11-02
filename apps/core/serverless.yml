@@ -15,7 +15,10 @@ provider:
   memorySize: 512
   timeout: 29 # API Gateway HTTP max
   environment:
-    NODE_ENV: ${self:provider.stage}
+    NODE_ENV: production
+    WEB_ORIGIN: ${ssm:/papert/${self:provider.stage}/web/origin}
+    AUTH_JWE_ACTIVE_KID: ${ssm:/papert/${self:provider.stage}/core/jwe-active-kid}
+    AUTH_JWE_KEYS: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/core/jwe-keys}
     DATABASE_URL: ${ssm:/papert/${self:provider.stage}/core/database-url, ''}
   iam:
     role:
@@ -43,6 +46,16 @@ functions:
       - httpApi:
           path: /{proxy+}
           method: ANY
+      - httpApi:
+          path: /internal
+          method: ANY
+          authorizer:
+            type: aws_iam
+      - httpApi:
+          path: /internal/{proxy+}
+          method: ANY
+          authorizer:
+            type: aws_iam
     # TODO: attach to the shared HTTP API ARN from infra/shared/serverless.yml
     # httpApi:
     #   id: !ImportValue papert-shared-HttpApiId

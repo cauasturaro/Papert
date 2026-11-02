@@ -19,3 +19,35 @@ model HealthCheck {
   @@map("health_check")
   @@schema("core")
 }
+
+model User {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String        @unique @db.VarChar(254)
+  passwordHash String        @map("password_hash")
+  sessions     AuthSession[]
+
+  @@map("app_user")
+  @@schema("core")
+}
+
+model AuthSession {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenId   String    @map("token_id") @db.Uuid
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("auth_session")
+  @@schema("core")
+}
+
+model AuthAttempt {
+  key      String   @id
+  count    Int
+  resetsAt DateTime @map("resets_at") @db.Timestamptz(3)
+
+  @@map("auth_attempt")
+  @@schema("core")
+}

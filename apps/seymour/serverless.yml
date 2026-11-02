@@ -47,8 +47,10 @@ functions:
     handler: mangum_handler.handler
     events:
       - httpApi:
-          path: /{proxy+}
+          path: /internal/seymour/{proxy+}
           method: ANY
+          authorizer:
+            type: aws_iam
     # TODO: attach to the shared HTTP API ARN
 
   worker:

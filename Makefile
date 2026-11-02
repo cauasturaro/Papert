@@ -21,6 +21,7 @@ up:
 				"$$core_password" "$$seymour_password" >> .env); \
 		fi; \
 	fi
+	$(MAKE) auth-env
 	@docker image inspect $(PGVECTOR_IMAGE) >/dev/null 2>&1 || docker pull $(PGVECTOR_IMAGE)
 	# shortcut: Floci recognizes numeric PostgreSQL tags; keep this alias until pg18-* tags are supported.
 	docker tag $(PGVECTOR_IMAGE) papert-pgvector:18-trixie
@@ -117,3 +118,12 @@ down:
 
 logs:
 	docker compose logs -f floci
+
+# Generate a server-only local key once; preserve existing keys and sessions.
+.PHONY: auth-env
+auth-env:
+	@test -f .env || (echo "Run make up first." && exit 1)
+	@if ! grep -q '^AUTH_JWE_KEYS=' .env; then \
+		key=$$(openssl rand -hex 32) || exit 1; \
+		(umask 077; printf "\nAUTH_JWE_ACTIVE_KID=local-v1\nAUTH_JWE_KEYS='{\"local-v1\":\"%s\"}'\n" "$$key" >> .env); \
+	fi

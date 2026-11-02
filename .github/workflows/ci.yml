@@ -13,6 +13,21 @@ jobs:
   # ── Core API (NestJS) ───────────────────────────────────────────────────────
   core:
     name: Core — lint, build, test
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: papert
+          POSTGRES_USER: core_user
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U core_user -d papert"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://core_user:ci-only-password@localhost:5432/papert?schema=core
+      AUTH_TEST_DATABASE_URL: postgresql://core_user:ci-only-password@localhost:5432/papert?schema=core
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -37,10 +52,18 @@ jobs:
         run: npm run lint
 
       - name: Build
-        run: npm run build -- --noEmit 2>/dev/null || npx tsc --noEmit
+        run: npm run build
 
       - name: Unit tests
         run: npm test
+
+      - name: Migrate test database
+        run: |
+          psql "postgresql://core_user:ci-only-password@localhost:5432/papert" -c 'CREATE SCHEMA IF NOT EXISTS core AUTHORIZATION core_user;'
+          npx prisma migrate deploy
+
+      - name: HTTP and database tests
+        run: npm run test:e2e
 
   # ── Seymour API (FastAPI) ───────────────────────────────────────────────────
   seymour:
@@ -90,3 +113,20 @@ jobs:
 
       - name: Validate Prisma schema
         run: npx prisma validate
+
+  web:
+    name: Web — lint, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

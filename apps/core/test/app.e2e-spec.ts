@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
+import { AuthService } from '../src/auth/application/auth.service.js';
 import { AppModule } from './../src/app.module.js';
 import { PrismaService } from './../src/infrastructure/database/prisma.service.js';
 
@@ -12,6 +13,8 @@ describe('AppController (e2e)', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      .overrideProvider(AuthService)
+      .useValue({})
       .overrideProvider(PrismaService)
       .useValue({
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
