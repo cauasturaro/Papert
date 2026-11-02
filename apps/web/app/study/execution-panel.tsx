@@ -1,0 +1,333 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { newerSnapshot, isRunning } from "./execution-state";
+import type { Execution } from "./execution-state";
+
+type Quota = {
+  limit: number;
+  used: number;
+  reserved: number;
+  reservation: number;
+  period: string;
+  resetsAt: number;
+};
+
+async function request<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`/api/executions/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store",
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    throw new Error(result.message ?? "Execution service unavailable.");
+  }
+
+  return result;
+}
+
+export function ExecutionPanel({
+  workspaceId,
+  revision,
+}: {
+  workspaceId: string;
+  revision: number;
+}) {
+  const [execution, setExecution] = useState<Execution | null>(null);
+  const [quota, setQuota] = useState<Quota | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [kind, setKind] = useState("chat");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const [pending, setPending] = useState<{
+    requestKey: string;
+    prompt: string;
+    kind: string;
+    revision: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let disposed = false;
+
+    Promise.all([
+      request<Execution[]>(`workspaces/${workspaceId}`),
+      request<Quota>("quota"),
+    ])
+      .then(([jobs, currentQuota]) => {
+        if (!disposed) {
+          setExecution(jobs[0] ?? null);
+          setQuota(currentQuota);
+          setMessage("");
+        }
+      })
+      .catch((error: Error) => {
+        if (!disposed) {
+          setMessage(error.message);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [workspaceId, retry]);
+
+  const executionId = execution?.id;
+  const running = isRunning(execution);
+
+  useEffect(() => {
+    if (!executionId || !running) {
+      return;
+    }
+
+    let disposed = false;
+    let socket: WebSocket | undefined;
+    let reconnect: ReturnType<typeof setTimeout> | undefined;
+
+    async function connect() {
+      try {
+        const ticket = await request<{ url: string | null }>(
+          `${executionId}/ticket`,
+          {},
+        );
+        if (disposed || !ticket.url) {
+          return;
+        }
+
+        socket = new WebSocket(ticket.url);
+        socket.onopen = () =>
+          socket?.send(JSON.stringify({ action: "resume" }));
+        socket.onmessage = (event) => {
+          try {
+            const snapshot = JSON.parse(event.data) as Execution;
+            if (
+              !disposed &&
+              snapshot.id === executionId &&
+              typeof snapshot.sequence === "number"
+            ) {
+              setExecution((current) => newerSnapshot(current, snapshot));
+            }
+          } catch {
+            // The persisted HTTP snapshot remains the recovery source.
+          }
+        };
+        socket.onclose = () => {
+          if (!disposed) {
+            reconnect = setTimeout(() => void connect(), 3000);
+          }
+        };
+      } catch {
+        if (!disposed) {
+          reconnect = setTimeout(() => void connect(), 5000);
+        }
+      }
+    }
+
+    async function refresh() {
+      try {
+        const [snapshot, currentQuota] = await Promise.all([
+          request<Execution>(executionId!),
+          request<Quota>("quota"),
+        ]);
+        if (!disposed) {
+          setExecution((current) => newerSnapshot(current, snapshot));
+          setQuota(currentQuota);
+        }
+      } catch (error) {
+        if (!disposed) {
+          setMessage((error as Error).message);
+        }
+      }
+    }
+
+    void connect();
+    const poll = setInterval(() => void refresh(), 1500);
+
+    return () => {
+      disposed = true;
+      clearInterval(poll);
+      clearTimeout(reconnect);
+      socket?.close();
+    };
+  }, [executionId, running]);
+
+  useEffect(() => {
+    if (!executionId || running) {
+      return;
+    }
+
+    let disposed = false;
+    request<Quota>("quota")
+      .then((currentQuota) => {
+        if (!disposed) {
+          setQuota(currentQuota);
+        }
+      })
+      .catch((error: Error) => {
+        if (!disposed) {
+          setMessage(error.message);
+        }
+      });
+
+    return () => {
+      disposed = true;
+    };
+  }, [executionId, running]);
+
+  async function submit() {
+    const payload = pending ?? {
+      requestKey: crypto.randomUUID(),
+      prompt,
+      kind,
+      revision,
+    };
+    setPending(payload);
+    setBusy(true);
+    setMessage("");
+
+    try {
+      const created = await request<Execution>(
+        `workspaces/${workspaceId}`,
+        payload,
+      );
+      setExecution(created);
+      setPending(null);
+
+      const currentQuota = await request<Quota>("quota");
+      setQuota(currentQuota);
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    if (!execution) {
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const cancelled = await request<Execution>(`${execution.id}/cancel`, {});
+      setExecution(cancelled);
+
+      const currentQuota = await request<Quota>("quota");
+      setQuota(currentQuota);
+    } catch (error) {
+      setMessage((error as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const blocked =
+    !!quota && quota.used + quota.reserved + quota.reservation > quota.limit;
+
+  return (
+    <section className="space-y-4" aria-label="Seymour execution">
+      <h2 className="text-xl font-semibold">Seymour</h2>
+      <p className="text-sm">
+        Deterministic transport preview. No AI or code execution; steps remain
+        locked.
+      </p>
+
+      {quota && (
+        <p className="text-sm" aria-label="Token quota">
+          Tokens: {quota.used} used + {quota.reserved} reserved / {quota.limit}.
+          Daily reset: 00:00 UTC. Each request reserves {quota.reservation}{" "}
+          tokens for up to three attempts.
+        </p>
+      )}
+      {blocked && (
+        <p role="alert">Daily quota exhausted. Try again after 00:00 UTC.</p>
+      )}
+      <p role="status">{message}</p>
+
+      <form
+        className="space-y-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+
+          void submit();
+        }}
+      >
+        <label className="block" htmlFor="execution-kind">
+          Request type
+        </label>
+        <select
+          id="execution-kind"
+          className="auth-input"
+          value={kind}
+          disabled={busy || running || !!pending}
+          onChange={(event) => setKind(event.target.value)}
+        >
+          <option value="chat">Chat</option>
+          <option value="analysis">Analysis transport preview</option>
+        </select>
+
+        <label className="block" htmlFor="execution-prompt">
+          Message about your saved revision {revision}
+        </label>
+        <textarea
+          id="execution-prompt"
+          className="auth-input"
+          value={prompt}
+          maxLength={2000}
+          disabled={busy || running || !!pending}
+          onChange={(event) => setPrompt(event.target.value)}
+        />
+
+        <div className="flex flex-wrap gap-2">
+          <Button
+            disabled={busy || running || blocked || !quota || !prompt.trim()}
+            type="submit"
+          >
+            {pending ? "Retry request" : "Send saved revision"}
+          </Button>
+          {running && (
+            <Button
+              disabled={busy}
+              type="button"
+              variant="outline"
+              onClick={() => void cancel()}
+            >
+              Cancel
+            </Button>
+          )}
+          {pending && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setPending(null)}
+            >
+              Edit request
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || running}
+            onClick={() => setRetry((value) => value + 1)}
+          >
+            Refresh
+          </Button>
+        </div>
+      </form>
+
+      {execution && (
+        <div className="space-y-2 rounded-lg border border-current/15 p-3">
+          <p role="status">Execution: {execution.status}</p>
+          <p className="whitespace-pre-wrap text-sm" aria-live="polite">
+            {execution.text}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}

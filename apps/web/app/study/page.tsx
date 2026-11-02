@@ -5,6 +5,7 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useStudy } from "./use-study";
+import { ExecutionPanel } from "./execution-panel";
 import { WorkspaceEditor } from "./workspace-editor";
 
 export default function Study() {
@@ -156,20 +157,11 @@ function StudySpace() {
             savedFiles={workspace.files}
             onChange={setFiles}
             tutor={
-              <div className="space-y-4">
-                <p className="text-xs font-semibold uppercase tracking-widest text-foreground/60">
-                  Your learning companion
-                </p>
-                <h2 className="text-xl font-semibold">Seymour</h2>
-                <p className="text-sm leading-6">
-                  Work through the acceptance criteria, keep your rules
-                  explicit, and record what you learn.
-                </p>
-                <p className="rounded-lg border border-current/15 p-3 text-sm text-foreground/65">
-                  Live tutoring and code evaluation will be available in later
-                  phases. Your code is never executed here.
-                </p>
-              </div>
+              <ExecutionPanel
+                key={workspace.id}
+                workspaceId={workspace.id}
+                revision={workspace.revision}
+              />
             }
           />
 

@@ -6,6 +6,8 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: papert-chat
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 345600
       RedrivePolicy:
         deadLetterTargetArn:
           Fn::GetAtt:
@@ -17,6 +19,7 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: papert-chat-dlq
+      MessageRetentionPeriod: 1209600
 
   # ADR-001: Seymour publishes structured evaluation results here;
   # Core consumes them to validate and persist progression.
@@ -24,6 +27,8 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: papert-results
+      VisibilityTimeout: 180
+      MessageRetentionPeriod: 345600
       RedrivePolicy:
         deadLetterTargetArn:
           Fn::GetAtt:
@@ -35,3 +40,4 @@ Resources:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: papert-results-dlq
+      MessageRetentionPeriod: 1209600

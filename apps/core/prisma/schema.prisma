@@ -21,12 +21,14 @@ model HealthCheck {
 }
 
 model User {
-  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email        String        @unique @db.VarChar(254)
-  passwordHash String        @map("password_hash")
+  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String           @unique @db.VarChar(254)
+  passwordHash String           @map("password_hash")
   sessions     AuthSession[]
   roadmaps     Roadmap[]
   workspaces   Workspace[]
+  quotas       ExecutionQuota[]
+  executions   Execution[]
 
   @@map("app_user")
   @@schema("core")
@@ -81,6 +83,7 @@ model Workspace {
   createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   session     StudySession?
   attempts    StudyAttempt[]
+  executions  Execution[]
 
   @@unique([userId, roadmapId])
   @@map("workspace")
@@ -110,5 +113,67 @@ model StudyAttempt {
 
   @@unique([workspaceId, revision, stepId])
   @@map("study_attempt")
+  @@schema("core")
+}
+
+model ExecutionQuota {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  period     String
+  used       Int         @default(0)
+  reserved   Int         @default(0)
+  executions Execution[]
+
+  @@unique([userId, period])
+  @@map("execution_quota")
+  @@schema("core")
+}
+
+model Execution {
+  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String         @map("user_id") @db.Uuid
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaceId   String         @map("workspace_id") @db.Uuid
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quotaId       String         @map("quota_id") @db.Uuid
+  quota         ExecutionQuota @relation(fields: [quotaId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  requestKey    String         @map("request_key") @db.Uuid
+  input         Json
+  status        String         @default("queued")
+  text          String         @default("")
+  sequence      Int            @default(0)
+  eventIndex    Int            @default(0) @map("event_index")
+  attempts      Int            @default(0)
+  reserved      Int            @default(3000)
+  leases        String[]       @default([]) @db.Uuid
+  settledLeases String[]       @default([]) @map("settled_leases") @db.Uuid
+  charged       Int            @default(0)
+  lease         String?        @db.Uuid
+  leaseUntil    DateTime?      @map("lease_until") @db.Timestamptz(3)
+  publishedAt   DateTime?      @map("published_at") @db.Timestamptz(3)
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  deadline      DateTime       @db.Timestamptz(3)
+  firstEventAt  DateTime?      @map("first_event_at") @db.Timestamptz(3)
+  finishedAt    DateTime?      @map("finished_at") @db.Timestamptz(3)
+  tickets       StreamTicket[]
+
+  @@unique([userId, requestKey])
+  @@index([status, publishedAt])
+  @@index([userId, createdAt])
+  @@map("execution")
+  @@schema("core")
+}
+
+model StreamTicket {
+  hash          String    @id
+  executionId   String    @map("execution_id") @db.Uuid
+  execution     Execution @relation(fields: [executionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  authSessionId String    @map("auth_session_id") @db.Uuid
+  tokenId       String    @map("token_id") @db.Uuid
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("stream_ticket")
   @@schema("core")
 }

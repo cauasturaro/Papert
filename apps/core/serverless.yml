@@ -16,6 +16,10 @@ provider:
   timeout: 29 # API Gateway HTTP max
   environment:
     NODE_ENV: production
+    CHAT_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/papert-chat"
+    SESSIONS_TABLE: papert-sessions
+    WEBSOCKET_URL: !Sub "wss://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}"
+    WEBSOCKET_MANAGEMENT_URL: !Sub "https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}"
     WEB_ORIGIN: ${ssm:/papert/${self:provider.stage}/web/origin}
     AUTH_JWE_ACTIVE_KID: ${ssm:/papert/${self:provider.stage}/core/jwe-active-kid}
     AUTH_JWE_KEYS: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/core/jwe-keys}
@@ -29,9 +33,14 @@ provider:
             - sqs:SendMessage
           Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"
         - Effect: Allow
-          Action:
-            - sqs:SendMessage
+          Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
           Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+        - Effect: Allow
+          Action: [dynamodb:PutItem, dynamodb:GetItem, dynamodb:Query, dynamodb:DeleteItem]
+          Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/papert-sessions"
+        - Effect: Allow
+          Action: execute-api:ManageConnections
+          Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/POST/@connections/*"
 
 package:
   individually: true
@@ -60,13 +69,28 @@ functions:
     # httpApi:
     #   id: !ImportValue papert-shared-HttpApiId
 
-  # TODO: add results queue consumer function
-  # resultsConsumer:
-  #   handler: dist/results-consumer.handler
-  #   events:
-  #     - sqs:
-  #         arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
-  #         batchSize: 1
+  resultsConsumer:
+    handler: dist/executions/infrastructure/handlers.results
+    events:
+      - sqs:
+          arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+          batchSize: 1
+          functionResponseType: ReportBatchItemFailures
+
+  executionControl:
+    handler: dist/executions/infrastructure/handlers.workerControl
+
+  executionMaintenance:
+    handler: dist/executions/infrastructure/handlers.maintenance
+    events:
+      - schedule: rate(1 minute)
+
+  stream:
+    handler: dist/executions/infrastructure/handlers.websocket
+    events:
+      - websocket: $connect
+      - websocket: $disconnect
+      - websocket: $default
 
 plugins:
   - serverless-offline # dev only; remove for prod deploys

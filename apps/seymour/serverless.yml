@@ -13,8 +13,10 @@ provider:
   region: ${opt:region, 'us-east-1'}
   stage: ${opt:stage, 'local'}
   memorySize: 1024
-  timeout: 900
+  timeout: 30
   environment:
+    RESULTS_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/papert-results"
+    CORE_EXECUTION_CONTROL_FUNCTION: papert-core-${self:provider.stage}-executionControl
     ENVIRONMENT: ${self:provider.stage}
     SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url, ''}
   iam:
@@ -31,9 +33,8 @@ provider:
             - sqs:SendMessage
           Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
         - Effect: Allow
-          Action:
-            - execute-api:ManageConnections
-          Resource: "*"
+          Action: lambda:InvokeFunction
+          Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:papert-core-${self:provider.stage}-executionControl"
 
 package:
   patterns:
@@ -55,10 +56,9 @@ functions:
 
   worker:
     handler: worker_handler.handler
-    timeout: 900
+    timeout: 30
     events:
       - sqs:
           arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"
           batchSize: 1
           functionResponseType: ReportBatchItemFailures
-    # TODO: implement worker_handler.py

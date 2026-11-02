@@ -1,3 +1,4 @@
+import { ExecutionModule } from './executions/execution.module.js';
 import { StudyModule } from './study/study.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { Module } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { AppService } from './app.service.js';
     HealthModule,
     AuthModule,
     StudyModule,
+    ExecutionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
