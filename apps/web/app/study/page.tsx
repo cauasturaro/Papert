@@ -1,16 +1,46 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 import { useStudy } from "./use-study";
+import { WorkspaceEditor } from "./workspace-editor";
 
 export default function Study() {
-  const { roadmap, workspace, notes, setNotes, busy, message, start, save } =
-    useStudy();
+  const [client] = useState(() => new QueryClient());
+
+  return (
+    <QueryClientProvider client={client}>
+      <StudySpace />
+    </QueryClientProvider>
+  );
+}
+
+function StudySpace() {
+  const {
+    roadmap,
+    workspace,
+    files,
+    setFiles,
+    notes,
+    setNotes,
+    busy,
+    message,
+    status,
+    online,
+    conflict,
+    start,
+    retryLoad,
+    save,
+    reload,
+    download,
+  } = useStudy();
 
   const step = workspace?.roadmap.definition.steps[workspace.currentStep];
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-16">
+    <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-4 py-8 lg:px-8">
       <nav className="flex gap-6" aria-label="Main navigation">
         <Link href="/" className="underline">
           Papert
@@ -25,6 +55,10 @@ export default function Study() {
       <p role="status" aria-live="polite">
         {busy ? "Please wait…" : message}
       </p>
+
+      {!roadmap && !busy && (
+        <Button onClick={retryLoad}>Retry loading study</Button>
+      )}
 
       {roadmap && (
         <section className="flex flex-col gap-3" aria-label="Roadmap">
@@ -86,18 +120,58 @@ export default function Study() {
             </ul>
           </section>
 
-          <section className="flex flex-col gap-3" aria-label="Workspace files">
-            <h2 className="text-xl font-semibold">Saved files</h2>
-
-            {Object.entries(workspace.files).map(([path, content]) => (
-              <div key={path}>
-                <h3 className="font-mono text-sm">{path}</h3>
-                <pre className="overflow-auto rounded border p-4">
-                  <code>{content}</code>
-                </pre>
+          <section
+            aria-label="Save status"
+            className="flex flex-wrap items-center gap-3 rounded-xl border border-current/15 p-4"
+          >
+            <p role="status" className="mr-auto text-sm">
+              {online
+                ? status
+                : "Offline. Your draft stays in this tab; reconnect to save."}
+            </p>
+            <span className="text-xs">Saved revision {workspace.revision}</span>
+            <Button variant="outline" onClick={download}>
+              Download draft
+            </Button>
+            <Button onClick={() => void save()} disabled={conflict || !online}>
+              Save now / Retry
+            </Button>
+            {conflict && (
+              <div role="alert" className="w-full space-y-3">
+                <p>
+                  Another tab or session changed this workspace. Your draft is
+                  preserved. Download it before loading the server version, then
+                  reapply your changes.
+                </p>
+                <Button variant="outline" onClick={() => void reload()}>
+                  Load server version
+                </Button>
               </div>
-            ))}
+            )}
           </section>
+
+          <WorkspaceEditor
+            workspaceId={workspace.id}
+            files={files}
+            savedFiles={workspace.files}
+            onChange={setFiles}
+            tutor={
+              <div className="space-y-4">
+                <p className="text-xs font-semibold uppercase tracking-widest text-foreground/60">
+                  Your learning companion
+                </p>
+                <h2 className="text-xl font-semibold">Seymour</h2>
+                <p className="text-sm leading-6">
+                  Work through the acceptance criteria, keep your rules
+                  explicit, and record what you learn.
+                </p>
+                <p className="rounded-lg border border-current/15 p-3 text-sm text-foreground/65">
+                  Live tutoring and code evaluation will be available in later
+                  phases. Your code is never executed here.
+                </p>
+              </div>
+            }
+          />
 
           <form
             className="flex flex-col gap-3"
@@ -122,13 +196,17 @@ export default function Study() {
             />
 
             <div className="flex flex-wrap gap-3">
-              <button className="auth-button" type="submit" disabled={busy}>
+              <button
+                className="auth-button"
+                type="submit"
+                disabled={busy || conflict || !online}
+              >
                 Save notes
               </button>
               <button
                 className="rounded border px-5 py-3"
                 type="button"
-                disabled={busy}
+                disabled={busy || conflict || !online}
                 onClick={() => void save(true)}
               >
                 Save notes and record attempt

@@ -242,6 +242,78 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
       );
     });
 
+    it('persists a multi-file tree and rejects invalid operations without changing the saved revision', async () => {
+      const cookie = await register();
+      const fixture = (
+        await api('get', `${base}/roadmaps/fixture`, cookie).expect(200)
+      ).body;
+      const started = (
+        await api('post', `${base}/roadmaps/${fixture.id}/start`, cookie)
+          .send({})
+          .expect(200)
+      ).body;
+      const path = `${base}/workspaces/${started.id}`;
+      const files = {
+        'src/': '',
+        'src/domain/': '',
+        'src/domain/service.ts': 'export const answer = 42;',
+        'tests/empty/': '',
+        'config/settings.yaml': 'enabled: true',
+      };
+
+      const created = (
+        await api('put', path, cookie)
+          .send({ revision: 0, notes: '', files })
+          .expect(200)
+      ).body;
+
+      expect(created.files).toEqual(files);
+      expect(created.revision).toBe(1);
+
+      for (const invalid of [
+        { '../secret.ts': 'bad' },
+        { src: 'file', 'src/main.ts': 'collision' },
+        { 'empty/': 'not empty' },
+        { 'src/main.ts': 'a'.repeat(16001) },
+      ]) {
+        await api('put', path, cookie)
+          .send({ revision: 1, notes: '', files: invalid })
+          .expect(400);
+      }
+
+      const renamedFiles = {
+        'lib/': '',
+        'lib/domain/': '',
+        'lib/domain/service.ts': 'export const answer = 43;',
+        'tests/empty/': '',
+      };
+      const renamed = (
+        await api('put', path, cookie)
+          .send({
+            revision: 1,
+            notes: 'Renamed and removed config.',
+            files: renamedFiles,
+          })
+          .expect(200)
+      ).body;
+
+      expect(renamed.files).toEqual(renamedFiles);
+      expect(renamed.revision).toBe(2);
+
+      await api('put', path, cookie)
+        .send({ revision: 1, notes: '', files })
+        .expect(409);
+
+      const resumed = (
+        await api('post', `${base}/roadmaps/${fixture.id}/start`, cookie)
+          .send({})
+          .expect(200)
+      ).body;
+
+      expect(resumed.files).toEqual(renamedFiles);
+      expect(resumed.revision).toBe(2);
+    });
+
     it('serializes concurrent starts, saves and attempt snapshots without losing a revision', async () => {
       const cookie = await register();
 

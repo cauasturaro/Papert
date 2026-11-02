@@ -15,6 +15,7 @@ const path = z
   .max(200)
   .refine((value) =>
     value
+      .replace(/\/$/, '')
       .split('/')
       .every(
         (part) =>
@@ -26,6 +27,28 @@ const path = z
 export const filesSchema = z
   .record(path, z.string().max(16000))
   .superRefine((files, ctx) => {
+    const paths = Object.keys(files);
+
+    for (const entry of paths) {
+      const directory = entry.endsWith('/');
+      const name = directory ? entry.slice(0, -1) : entry;
+      const parts = name.split('/');
+      const ancestors = parts
+        .slice(0, -1)
+        .map((_, index) => parts.slice(0, index + 1).join('/'));
+      const collides =
+        ancestors.some((ancestor) => Object.hasOwn(files, ancestor)) ||
+        (directory && Object.hasOwn(files, name));
+
+      if (collides || (directory && files[entry] !== '')) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'Directories must be empty markers and cannot overlap files.',
+        });
+      }
+    }
+
     if (
       Object.keys(files).length > 20 ||
       new TextEncoder().encode(JSON.stringify(files)).length > 64000

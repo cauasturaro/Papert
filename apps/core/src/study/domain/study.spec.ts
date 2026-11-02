@@ -62,6 +62,31 @@ describe('Study contracts', () => {
     expect(filesSchema.safeParse(oversizedWorkspace).success).toBe(false);
   });
 
+  it('validates empty directories and file ancestors without changing existing text limits', () => {
+    const tree = {
+      'src/': '',
+      'src/nested/': '',
+      'src/nested/main.ts': 'code',
+    };
+
+    expect(filesSchema.safeParse(tree).success).toBe(true);
+    expect(filesSchema.safeParse({ 'main.ts': 'é'.repeat(8001) }).success).toBe(
+      true,
+    );
+
+    for (const files of [
+      { 'src/': 'not empty' },
+      { src: 'file', 'src/main.ts': 'code' },
+      { src: '', 'src/': '' },
+      { '/': '' },
+      { 'src//': '' },
+      { 'src/../': '' },
+      { 'main.ts': 'a'.repeat(16001) },
+    ]) {
+      expect(filesSchema.safeParse(files).success).toBe(false);
+    }
+  });
+
   it('rejects client-provided status, ownership, approval and snapshot results', () => {
     const save = { revision: 0, notes: '', files: {} };
 

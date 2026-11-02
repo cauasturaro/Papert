@@ -115,7 +115,7 @@ jobs:
         run: npx prisma validate
 
   web:
-    name: Web — lint, build
+    name: Web — lint, test, build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -129,4 +129,5 @@ jobs:
           cache-dependency-path: apps/web/package-lock.json
       - run: npm ci
       - run: npm run lint
+      - run: npm test
       - run: npm run build
