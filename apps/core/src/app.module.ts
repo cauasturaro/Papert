@@ -1,3 +1,4 @@
+import { StudyModule } from './study/study.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -12,6 +13,7 @@ import { AppService } from './app.service.js';
     DatabaseModule,
     HealthModule,
     AuthModule,
+    StudyModule,
   ],
   controllers: [AppController],
   providers: [AppService],

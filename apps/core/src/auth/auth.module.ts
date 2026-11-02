@@ -12,7 +12,7 @@ import { PrismaService } from '../infrastructure/database/prisma.service.js';
 
 @Module({
   controllers: [AuthController],
-  exports: [AuthService],
+  exports: [AuthService, AUTH_ORIGIN],
   providers: [
     {
       provide: AUTH_ORIGIN,

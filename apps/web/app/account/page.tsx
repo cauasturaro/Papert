@@ -39,7 +39,9 @@ export default function Account() {
             <p>
               Signed in as <strong>{user.email}</strong>
             </p>
-            <p>Your private study space starts here.</p>
+            <Link className="auth-button" href="/study">
+              Start or resume your study
+            </Link>
             <button
               className="auth-button"
               type="button"

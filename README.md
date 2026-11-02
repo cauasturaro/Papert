@@ -68,3 +68,17 @@ Local infrastructure includes Floci/RDS, isolated service schemas, queues, stora
 ## Authentication
 
 Core now provides registration, login, renewable JWE sessions, ownership checks and logout. The Web account flow is at `/account`. Follow [authentication setup and policy](apps/core/AUTHENTICATION.md) to load the root environment, migrate the database, configure secrets and run tests. `make auth-env` prepares a missing local JWE key without replacing existing material.
+
+## Study workspaces
+
+After signing in at `/account`, open `/study` to start or resume the practice roadmap, view its author and challenge criteria, save notes and inspect attempt history. Roadmap definitions remain immutable; each student's files, notes and progress are private. File editing and AI evaluation are not available yet.
+
+Apply the current Core migrations against local RDS before starting the applications:
+
+```sh
+set -a
+. ./.env
+set +a
+export DATABASE_URL="postgresql://core_user:${CORE_DB_PASSWORD}@localhost:7001/papert?schema=core"
+make migrate-core
+```

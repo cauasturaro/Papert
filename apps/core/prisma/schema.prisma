@@ -25,6 +25,8 @@ model User {
   email        String        @unique @db.VarChar(254)
   passwordHash String        @map("password_hash")
   sessions     AuthSession[]
+  roadmaps     Roadmap[]
+  workspaces   Workspace[]
 
   @@map("app_user")
   @@schema("core")
@@ -33,7 +35,7 @@ model User {
 model AuthSession {
   id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String    @map("user_id") @db.Uuid
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   tokenId   String    @map("token_id") @db.Uuid
   expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
   revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
@@ -49,5 +51,64 @@ model AuthAttempt {
   resetsAt DateTime @map("resets_at") @db.Timestamptz(3)
 
   @@map("auth_attempt")
+  @@schema("core")
+}
+
+// A consolidated roadmap is immutable; generation drafts are not roadmaps.
+model Roadmap {
+  id           String      @id @db.VarChar(100)
+  authorName   String      @map("author_name")
+  authorUserId String?     @map("author_user_id") @db.Uuid
+  author       User?       @relation(fields: [authorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  definition   Json
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspaces   Workspace[]
+
+  @@map("roadmap")
+  @@schema("core")
+}
+
+model Workspace {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String         @map("user_id") @db.Uuid
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roadmapId   String         @map("roadmap_id") @db.VarChar(100)
+  roadmap     Roadmap        @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  currentStep Int            @default(0) @map("current_step")
+  revision    Int            @default(0)
+  notes       String         @default("")
+  files       Json
+  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  session     StudySession?
+  attempts    StudyAttempt[]
+
+  @@unique([userId, roadmapId])
+  @@map("workspace")
+  @@schema("core")
+}
+
+model StudySession {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String    @unique @map("workspace_id") @db.Uuid
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  lastOpenedAt DateTime  @default(now()) @map("last_opened_at") @db.Timestamptz(3)
+
+  @@map("study_session")
+  @@schema("core")
+}
+
+model StudyAttempt {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  stepId      String    @map("step_id")
+  revision    Int
+  files       Json
+  challenge   Json
+  result      Json      @default("{\"status\":\"not_evaluated\"}")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, revision, stepId])
+  @@map("study_attempt")
   @@schema("core")
 }

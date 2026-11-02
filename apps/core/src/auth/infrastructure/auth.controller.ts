@@ -15,9 +15,10 @@ import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService, TOKEN_SECONDS } from '../application/auth.service.js';
 import { AuthError } from '../domain/auth.js';
+import { COOKIE_NAME, prepareRequest, sessionToken } from './auth-http.js';
 
 export const AUTH_ORIGIN = Symbol('AUTH_ORIGIN');
-export const COOKIE_NAME = 'papert_session';
+export { COOKIE_NAME } from './auth-http.js';
 
 @Catch(AuthError)
 export class AuthExceptionFilter implements ExceptionFilter {
@@ -41,28 +42,11 @@ export class AuthController {
   ) {}
 
   private prepare(req: Request, res: Response, mutation = false) {
-    res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-
-    if (
-      mutation &&
-      (req.get('origin') !== this.origin || !req.is('application/json'))
-    ) {
-      throw new AuthError(
-        403,
-        'Request origin or content type is not allowed.',
-      );
-    }
+    prepareRequest(req, res, this.origin, mutation);
   }
 
   private principal(req: Request) {
-    const token = req.headers.cookie
-      ?.split(';')
-      .map((part) => part.trim())
-      .find((part) => part.startsWith(`${COOKIE_NAME}=`))
-      ?.slice(COOKIE_NAME.length + 1);
-
-    return this.auth.authenticate(token ?? '');
+    return this.auth.authenticate(sessionToken(req));
   }
 
   private sendGrant(
