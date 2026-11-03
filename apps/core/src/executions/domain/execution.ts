@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
+import { DomainError } from '../../common/domain/domain-error.js';
+
+export class ExecutionError extends DomainError {}
 
 export const DAILY_LIMIT = 30000;
 export const ATTEMPT_BUDGET = 1000;

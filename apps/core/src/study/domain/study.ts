@@ -1,13 +1,7 @@
 import { z } from 'zod';
+import { DomainError } from '../../common/domain/domain-error.js';
 
-export class StudyError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+export class StudyError extends DomainError {}
 
 const text = z.string().trim().min(1).max(8000);
 const path = z
@@ -124,7 +118,7 @@ export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) {
     throw new StudyError(
-      400,
+      'invalid',
       'Invalid study request. Check the fields and limits.',
     );
   }

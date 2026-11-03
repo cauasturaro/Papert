@@ -24,7 +24,8 @@ describe('Sign-in rate limiter', () => {
     await expect(
       limiter.check('alice@example.com', 'peer'),
     ).rejects.toMatchObject({
-      status: 429,
+      kind: 'rate_limited',
+      retryAfterSeconds: 900,
     });
     expect(consumeAttempt).toHaveBeenCalledTimes(1);
   });

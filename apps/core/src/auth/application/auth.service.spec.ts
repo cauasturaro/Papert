@@ -135,7 +135,7 @@ describe('Authentication policy', () => {
     expect(repo.sessions).toHaveLength(2);
 
     await expect(auth.register(credentials, 'peer')).rejects.toMatchObject({
-      status: 409,
+      kind: 'conflict',
     });
     expect(repo.users).toHaveLength(1);
     expect(repo.sessions).toHaveLength(2);
@@ -148,7 +148,7 @@ describe('Authentication policy', () => {
       await expect(
         auth.login({ email, password: 'wrong' }, 'peer'),
       ).rejects.toMatchObject({
-        status: 401,
+        kind: 'unauthenticated',
         message: 'Email or password is incorrect.',
       });
     }
@@ -166,7 +166,7 @@ describe('Authentication policy', () => {
       { email: 'a@b.com', password: 'é'.repeat(65) },
     ]) {
       await expect(auth.register(body, 'peer')).rejects.toMatchObject({
-        status: 400,
+        kind: 'invalid',
       });
     }
   });
@@ -211,7 +211,7 @@ describe('Authentication policy', () => {
     });
     await expect(
       auth.ownedSession(principal, secondAccount.sessionId),
-    ).rejects.toMatchObject({ status: 404 });
+    ).rejects.toMatchObject({ kind: 'not_found' });
   });
 
   it('rotates tokens on renewal, rejects replay and revokes immediately on logout', async () => {
@@ -223,15 +223,15 @@ describe('Authentication policy', () => {
     const refreshed = await auth.refresh(principal);
 
     await expect(auth.authenticate(firstAccount.token)).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
     await expect(auth.refresh(principal)).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
 
     await auth.logout(await auth.authenticate(refreshed.token));
     await expect(auth.authenticate(refreshed.token)).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
   });
 
@@ -244,7 +244,7 @@ describe('Authentication policy', () => {
     const parts = firstAccount.token.split('.');
     parts[3] = (parts[3][0] === 'A' ? 'B' : 'A') + parts[3].slice(1);
     await expect(auth.authenticate(parts.join('.'))).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
 
     const expired = await tokens.issue(
@@ -254,12 +254,12 @@ describe('Authentication policy', () => {
       new Date(Date.now() - 1000),
     );
     await expect(auth.authenticate(expired)).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
 
     repo.sessions[0].expiresAt = new Date(Date.now() - 1);
     await expect(auth.authenticate(firstAccount.token)).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
   });
 
@@ -290,7 +290,7 @@ describe('Authentication policy', () => {
         .setExpirationTime('15m')
         .encrypt(Buffer.from('ab'.repeat(32), 'hex'));
       await expect(auth.authenticate(token)).rejects.toMatchObject({
-        status: 401,
+        kind: 'unauthenticated',
       });
     }
 
@@ -301,7 +301,7 @@ describe('Authentication policy', () => {
       new Date(Date.now() + 60_000),
     );
     await expect(auth.authenticate(token)).rejects.toMatchObject({
-      status: 401,
+      kind: 'unauthenticated',
     });
   });
 
@@ -309,12 +309,12 @@ describe('Authentication policy', () => {
     for (let i = 0; i < 10; i++) {
       await expect(
         auth.login({ email: 'a@example.com', password: 'bad' }, `peer-${i}`),
-      ).rejects.toMatchObject({ status: 401 });
+      ).rejects.toMatchObject({ kind: 'unauthenticated' });
     }
 
     await expect(
       auth.login({ email: 'a@example.com', password: 'bad' }, 'new-peer'),
-    ).rejects.toMatchObject({ status: 429 });
+    ).rejects.toMatchObject({ kind: 'rate_limited' });
   });
 
   it('accepts retained keys during rotation and rejects retired or unknown keys', async () => {

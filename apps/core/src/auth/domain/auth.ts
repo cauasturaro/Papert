@@ -1,11 +1,6 @@
-export class AuthError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+import { DomainError } from '../../common/domain/domain-error.js';
+
+export class AuthError extends DomainError {}
 
 export type User = {
   id: string;
@@ -37,7 +32,7 @@ export interface AuthRepository {
   ): Promise<Session>;
 
   findSession(id: string): Promise<(Session & { user: User }) | null>;
-  
+
   rotateSession(
     id: string,
     oldTokenId: string,

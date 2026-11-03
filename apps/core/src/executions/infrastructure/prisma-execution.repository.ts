@@ -2,14 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { Execution, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
-import {
-  StudyError,
-  roadmapSchema,
-  stepSchema,
-} from '../../study/domain/study.js';
+import { roadmapSchema, stepSchema } from '../../study/domain/study.js';
 import type { Step } from '../../study/domain/study.js';
 import {
   assessEvaluation,
+  ExecutionError,
   ATTEMPT_BUDGET,
   DAILY_LIMIT,
   DEADLINE_MS,
@@ -132,8 +129,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           old.activeFile !== input.activeFile ||
           JSON.stringify(old.selection) !== JSON.stringify(input.selection)
         ) {
-          throw new StudyError(
-            409,
+          throw new ExecutionError(
+            'conflict',
             'This request key already identifies a different request.',
           );
         }
@@ -142,7 +139,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       }
 
       if (!(await lockWorkspace(tx, workspaceId, userId))) {
-        throw new StudyError(404, 'Workspace not found.');
+        throw new ExecutionError('not_found', 'Workspace not found.');
       }
       const workspace = await tx.workspace.findUniqueOrThrow({
         where: { id: workspaceId },
@@ -152,8 +149,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         },
       });
       if (workspace.revision !== input.revision) {
-        throw new StudyError(
-          409,
+        throw new ExecutionError(
+          'conflict',
           'Save and reload the workspace before starting an execution.',
         );
       }
@@ -161,7 +158,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       const definition = roadmapSchema.parse(workspace.roadmap.definition);
       const step = definition.steps[workspace.currentStep];
       if (!step || !workspace.session) {
-        throw new StudyError(409, 'No active study step.');
+        throw new ExecutionError('conflict', 'No active study step.');
       }
 
       const files = workspace.files as Record<string, string>;
@@ -170,7 +167,10 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         (!Object.hasOwn(files, input.activeFile) ||
           input.activeFile.endsWith('/'))
       ) {
-        throw new StudyError(400, 'Select a file in the saved workspace.');
+        throw new ExecutionError(
+          'invalid',
+          'Select a file in the saved workspace.',
+        );
       }
       if (input.selection) {
         const content = input.activeFile ? files[input.activeFile] : undefined;
@@ -179,7 +179,10 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           input.selection.start > input.selection.end ||
           input.selection.end > content.length
         ) {
-          throw new StudyError(400, 'Selection is outside the saved file.');
+          throw new ExecutionError(
+            'invalid',
+            'Selection is outside the saved file.',
+          );
         }
       }
 
@@ -193,8 +196,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         : [];
       const solutionAllowed = recentResults.length >= 3;
       if (input.mode === 'solution' && !solutionAllowed) {
-        throw new StudyError(
-          403,
+        throw new ExecutionError(
+          'forbidden',
           'Solution guidance requires three saved attempts on different revisions of this step.',
         );
       }
@@ -203,8 +206,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       if (input.kind === 'analysis') {
         // The service linted this revision's files; the workspace lock keeps them unchanged.
         if (!syntax) {
-          throw new StudyError(
-            409,
+          throw new ExecutionError(
+            'conflict',
             'Save and reload the workspace before starting an execution.',
           );
         }
@@ -218,8 +221,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         );
         const state = attempt.result as AttemptState;
         if (state.status === 'approved' || state.status === 'needs_work') {
-          throw new StudyError(
-            409,
+          throw new ExecutionError(
+            'conflict',
             'This revision was already analyzed. Save a change before analyzing again.',
           );
         }
@@ -229,8 +232,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
             where: { id: state.executionId },
           });
           if (running && !terminal(running.status)) {
-            throw new StudyError(
-              409,
+            throw new ExecutionError(
+              'conflict',
               'An analysis of this revision is already running.',
             );
           }
@@ -243,14 +246,14 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         where: { userId, createdAt: { gte: new Date(now.getTime() - 60000) } },
       });
       if (recent >= RATE_LIMIT) {
-        throw new StudyError(
-          429,
+        throw new ExecutionError(
+          'rate_limited',
           'Execution rate limit reached. Retry in one minute.',
         );
       }
       if (quota.used + quota.reserved + reservation > DAILY_LIMIT) {
-        throw new StudyError(
-          429,
+        throw new ExecutionError(
+          'rate_limited',
           'Daily token quota exhausted. It resets at 00:00 UTC.',
         );
       }
@@ -317,7 +320,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       where: { id: workspaceId, userId },
     });
     if (!workspace) {
-      throw new StudyError(404, 'Workspace not found.');
+      throw new ExecutionError('not_found', 'Workspace not found.');
     }
 
     if (workspace.revision !== revision) {
@@ -335,7 +338,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   ) {
     return this.db.$transaction(async (tx) => {
       if (!(await lockWorkspace(tx, workspaceId, userId))) {
-        throw new StudyError(404, 'Workspace not found.');
+        throw new ExecutionError('not_found', 'Workspace not found.');
       }
 
       const workspace = await tx.workspace.findUniqueOrThrow({
@@ -343,8 +346,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         include: { roadmap: true },
       });
       if (workspace.revision !== revision) {
-        throw new StudyError(
-          409,
+        throw new ExecutionError(
+          'conflict',
           'Save and reload the workspace before starting an execution.',
         );
       }
@@ -352,7 +355,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       const definition = roadmapSchema.parse(workspace.roadmap.definition);
       const step = definition.steps[workspace.currentStep];
       if (!step) {
-        throw new StudyError(409, 'No active study step.');
+        throw new ExecutionError('conflict', 'No active study step.');
       }
 
       const attempt = await snapshotAttempt(
@@ -377,7 +380,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   async owned(userId: string, id: string) {
     const job = await this.db.execution.findFirst({ where: { id, userId } });
     if (!job) {
-      throw new StudyError(404, 'Execution not found.');
+      throw new ExecutionError('not_found', 'Execution not found.');
     }
 
     return job;
@@ -388,7 +391,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       where: { id: workspaceId, userId },
     });
     if (!workspace) {
-      throw new StudyError(404, 'Workspace not found.');
+      throw new ExecutionError('not_found', 'Workspace not found.');
     }
 
     const jobs = await this.db.execution.findMany({
@@ -408,7 +411,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       const records = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM core.execution WHERE id = ${id}::uuid FOR UPDATE`;
       if (!records.length) {
-        throw new StudyError(404, 'Execution not found.');
+        throw new ExecutionError('not_found', 'Execution not found.');
       }
 
       const job = await tx.execution.findUniqueOrThrow({ where: { id } });
@@ -642,8 +645,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       let current = record;
       const budget = attemptBudget(current.input);
       if (event.tokens > budget) {
-        throw new StudyError(
-          400,
+        throw new ExecutionError(
+          'invalid',
           'Usage exceeds the authorized attempt budget.',
         );
       }

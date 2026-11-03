@@ -3,8 +3,12 @@ import type {
   SyntaxChecker,
   SyntaxReport,
 } from '../../analysis/domain/syntax.js';
-import { parse, StudyError } from '../../study/domain/study.js';
-import { executionRequest, workerEvent } from '../domain/execution.js';
+import { parse } from '../../study/domain/study.js';
+import {
+  ExecutionError,
+  executionRequest,
+  workerEvent,
+} from '../domain/execution.js';
 import type {
   ExecutionRequest,
   ExecutionQueue,
@@ -36,7 +40,10 @@ export class ExecutionService {
   async create(userId: string, workspaceId: string, body: unknown) {
     const input = parse(executionRequest, body);
     if (input.kind === 'analysis') {
-      throw new StudyError(400, 'Submit analysis through its own request.');
+      throw new ExecutionError(
+        'invalid',
+        'Submit analysis through its own request.',
+      );
     }
 
     return this.start(userId, workspaceId, input);

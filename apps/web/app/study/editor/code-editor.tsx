@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import type * as Monaco from "monaco-editor";
 import Editor, { loader } from "@monaco-editor/react";
-import "../../public/monaco/editor.css";
+import type { ResolvedTheme } from "@/lib/theme";
+import { languageFor } from "./language";
+import { defineMonacoThemes, monacoThemeName } from "./monaco-themes";
+import "../../../public/monaco/editor.css";
 
 declare global {
   interface Window {
@@ -40,6 +43,7 @@ function loadMonaco() {
         }
 
         loader.config({ monaco: window.papertMonaco });
+        defineMonacoThemes(window.papertMonaco);
         resolve();
       };
       script.onerror = () => {
@@ -58,11 +62,13 @@ function loadMonaco() {
 export function CodeEditor({
   path,
   value,
+  theme,
   onChange,
   onSelectionChange,
 }: {
   path: string;
   value: string;
+  theme: ResolvedTheme;
   onChange: (value: string) => void;
   onSelectionChange: (range: { start: number; end: number }) => void;
 }) {
@@ -91,26 +97,11 @@ export function CodeEditor({
     };
   }, []);
 
-  const extension = path.split(".").pop()?.toLowerCase();
-  const languages: Record<string, string> = {
-    ts: "typescript",
-    tsx: "typescript",
-    js: "javascript",
-    py: "python",
-    yml: "yaml",
-    yaml: "yaml",
-    sql: "sql",
-    json: "json",
-    md: "markdown",
-  };
-  const language =
-    path.split("/").pop() === "Dockerfile"
-      ? "dockerfile"
-      : (languages[extension ?? ""] ?? "plaintext");
+  const language = languageFor(path);
 
   if (!ready) {
     return (
-      <p className="p-4" role="status">
+      <p className="p-4 text-sm text-muted-foreground" role="status">
         {error || "Loading editor…"}
       </p>
     );
@@ -120,6 +111,7 @@ export function CodeEditor({
     <Editor
       height="100%"
       path={path}
+      theme={monacoThemeName(theme)}
       language={language}
       value={value}
       onChange={(content) => onChange(content ?? "")}
@@ -137,15 +129,19 @@ export function CodeEditor({
         });
       }}
       loading={
-        <p className="p-4" role="status">
+        <p className="p-4 text-sm text-muted-foreground" role="status">
           Loading editor…
         </p>
       }
       options={{
         ariaLabel: `Code editor: ${path}`,
         minimap: { enabled: false },
-        fontSize: 14,
-        padding: { top: 16 },
+        fontSize: 13,
+        fontFamily: "var(--font-geist-mono), ui-monospace, monospace",
+        lineHeight: 21,
+        padding: { top: 12 },
+        renderLineHighlight: "all",
+        smoothScrolling: true,
         scrollBeyondLastLine: false,
         automaticLayout: true,
         tabSize: 2,

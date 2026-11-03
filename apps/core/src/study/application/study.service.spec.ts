@@ -51,12 +51,12 @@ describe('StudyService', () => {
     repo.workspace.mockResolvedValue(null);
 
     await expect(service.workspace('other', id)).rejects.toMatchObject({
-      status: 404,
+      kind: 'not_found',
     });
 
     await expect(
       service.save('other', id, { revision: 0, notes: '', files: {} }),
-    ).rejects.toMatchObject({ status: 404 });
+    ).rejects.toMatchObject({ kind: 'not_found' });
 
     expect(repo.save).not.toHaveBeenCalled();
   });
@@ -64,14 +64,14 @@ describe('StudyService', () => {
   it('does not start locked steps or record an attempt for them', async () => {
     await expect(
       service.step('student', id, 'separate-rules'),
-    ).rejects.toMatchObject({ status: 403 });
+    ).rejects.toMatchObject({ kind: 'forbidden' });
 
     await expect(
       service.recordAttempt('student', id, {
         revision: 0,
         stepId: 'separate-rules',
       }),
-    ).rejects.toMatchObject({ status: 403 });
+    ).rejects.toMatchObject({ kind: 'forbidden' });
 
     expect(repo.recordAttempt).not.toHaveBeenCalled();
 
@@ -83,7 +83,7 @@ describe('StudyService', () => {
   it('rejects forged start state and stale writes', async () => {
     await expect(
       service.start('student', FIXTURE_ID, { currentStep: 1 }),
-    ).rejects.toMatchObject({ status: 400 });
+    ).rejects.toMatchObject({ kind: 'invalid' });
 
     expect(repo.start).not.toHaveBeenCalled();
 
@@ -91,6 +91,6 @@ describe('StudyService', () => {
 
     await expect(
       service.save('student', id, { revision: 0, notes: '', files: {} }),
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({ kind: 'conflict' });
   });
 });

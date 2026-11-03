@@ -1,13 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { executionRequest as request } from "./execution-api";
-import type { Quota } from "./execution-api";
-import { newerSnapshot, isRunning } from "./execution-state";
-import type { Execution } from "./execution-state";
+import { executionRequest as request } from "../execution-api";
+import type { Quota } from "../execution-api";
+import { newerSnapshot, isRunning } from "../execution-state";
+import type { Execution } from "../execution-state";
 
-export function ExecutionPanel({
+export type CodeSelection = { start: number; end: number };
+
+type SeymourRequest = {
+  requestKey: string;
+  prompt: string;
+  kind: string;
+  revision: number;
+  mode: string;
+  effort: string;
+  activeFile?: string;
+  selection?: CodeSelection;
+};
+
+/**
+ * Seymour chat jobs for one workspace: restores the latest job, follows it
+ * over WebSocket with HTTP polling as the recovery path, and tracks the quota.
+ */
+export function useSeymour({
   workspaceId,
   revision,
   activeFile,
@@ -16,7 +32,7 @@ export function ExecutionPanel({
   workspaceId: string;
   revision: number;
   activeFile?: string;
-  selection?: { start: number; end: number };
+  selection?: CodeSelection;
 }) {
   const [execution, setExecution] = useState<Execution | null>(null);
   const [quota, setQuota] = useState<Quota | null>(null);
@@ -26,16 +42,8 @@ export function ExecutionPanel({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
-  const [pending, setPending] = useState<{
-    requestKey: string;
-    prompt: string;
-    kind: string;
-    revision: number;
-    mode: string;
-    effort: string;
-    activeFile?: string;
-    selection?: { start: number; end: number };
-  } | null>(null);
+  const [pending, setPending] = useState<SeymourRequest | null>(null);
+  const [sentPrompt, setSentPrompt] = useState("");
 
   useEffect(() => {
     let disposed = false;
@@ -186,6 +194,7 @@ export function ExecutionPanel({
       );
       setExecution(created);
       setPending(null);
+      setSentPrompt(payload.prompt);
 
       const currentQuota = await request<Quota>("quota");
       setQuota(currentQuota);
@@ -219,132 +228,24 @@ export function ExecutionPanel({
   const blocked =
     !!quota && quota.used + quota.reserved + quota.reservation > quota.limit;
 
-  return (
-    <section className="space-y-4" aria-label="Seymour execution">
-      <h2 className="text-xl font-semibold">Seymour</h2>
-      <p className="text-sm">
-        Ask about your saved code or learn one step at a time. Seymour reads
-        your saved context without executing your code. Step approval is
-        separate.
-      </p>
-
-      {quota && (
-        <p className="text-sm" aria-label="Token quota">
-          Tokens: {quota.used} used + {quota.reserved} reserved / {quota.limit}.
-          Daily reset: 00:00 UTC. Each request reserves {quota.reservation}{" "}
-          tokens for up to three attempts.
-        </p>
-      )}
-      {blocked && (
-        <p role="alert">Daily quota exhausted. Try again after 00:00 UTC.</p>
-      )}
-      <p role="status">{message}</p>
-
-      <form
-        className="space-y-3"
-        onSubmit={(event) => {
-          event.preventDefault();
-
-          void submit();
-        }}
-      >
-        <label className="block" htmlFor="execution-kind">
-          Tutor mode
-        </label>
-        <select
-          id="execution-kind"
-          className="auth-input"
-          value={mode}
-          disabled={busy || running || !!pending}
-          onChange={(event) => setMode(event.target.value)}
-        >
-          <option value="doubt">Doubt — a focused hint</option>
-          <option value="teaching">Teaching — step by step</option>
-          <option value="review">
-            Review — logic, contracts, structure and security
-          </option>
-          <option value="solution">
-            Solution guidance — after three saved attempts
-          </option>
-        </select>
-
-        <label className="block" htmlFor="execution-effort">
-          Reasoning effort
-        </label>
-        <select
-          id="execution-effort"
-          className="auth-input"
-          value={effort}
-          disabled={busy || running || !!pending}
-          onChange={(event) => setEffort(event.target.value)}
-        >
-          <option value="low">Low — direct response</option>
-          <option value="medium">Medium — balanced reasoning</option>
-          <option value="high">High — thinking enabled</option>
-        </select>
-        <p className="text-sm">
-          Current file: {activeFile ?? "none"}. Solution guidance requires
-          attempts on three different saved revisions of this step.
-        </p>
-
-        <label className="block" htmlFor="execution-prompt">
-          Message about your saved revision {revision}
-        </label>
-        <textarea
-          id="execution-prompt"
-          className="auth-input"
-          value={prompt}
-          maxLength={2000}
-          disabled={busy || running || !!pending}
-          onChange={(event) => setPrompt(event.target.value)}
-        />
-
-        <div className="flex flex-wrap gap-2">
-          <Button
-            disabled={busy || running || blocked || !quota || !prompt.trim()}
-            type="submit"
-          >
-            {pending ? "Retry request" : "Send saved revision"}
-          </Button>
-          {running && (
-            <Button
-              disabled={busy}
-              type="button"
-              variant="outline"
-              onClick={() => void cancel()}
-            >
-              Cancel
-            </Button>
-          )}
-          {pending && (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={busy}
-              onClick={() => setPending(null)}
-            >
-              Edit request
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={busy || running}
-            onClick={() => setRetry((value) => value + 1)}
-          >
-            Refresh
-          </Button>
-        </div>
-      </form>
-
-      {execution && (
-        <div className="space-y-2 rounded-lg border border-current/15 p-3">
-          <p role="status">Execution: {execution.status}</p>
-          <p className="whitespace-pre-wrap text-sm" aria-live="polite">
-            {execution.text}
-          </p>
-        </div>
-      )}
-    </section>
-  );
+  return {
+    execution,
+    quota,
+    prompt,
+    setPrompt,
+    sentPrompt,
+    mode,
+    setMode,
+    effort,
+    setEffort,
+    message,
+    busy,
+    running,
+    blocked,
+    pending: pending !== null,
+    submit,
+    cancel,
+    discardPending: () => setPending(null),
+    refresh: () => setRetry((value) => value + 1),
+  };
 }

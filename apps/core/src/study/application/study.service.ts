@@ -20,7 +20,7 @@ export class StudyService {
 
     const workspace = await this.repo.start(userId, roadmapId);
     if (!workspace) {
-      throw new StudyError(404, 'Roadmap not found.');
+      throw new StudyError('not_found', 'Roadmap not found.');
     }
 
     return workspace;
@@ -31,7 +31,7 @@ export class StudyService {
 
     const workspace = await this.repo.workspace(userId, id);
     if (!workspace) {
-      throw new StudyError(404, 'Workspace not found.');
+      throw new StudyError('not_found', 'Workspace not found.');
     }
 
     return workspace;
@@ -45,11 +45,11 @@ export class StudyService {
     );
 
     if (index < 0) {
-      throw new StudyError(404, 'Step not found.');
+      throw new StudyError('not_found', 'Step not found.');
     }
 
     if (index > workspace.currentStep) {
-      throw new StudyError(403, 'This step is locked.');
+      throw new StudyError('forbidden', 'This step is locked.');
     }
 
     return workspace.roadmap.definition.steps[index];
@@ -63,7 +63,7 @@ export class StudyService {
     const saved = await this.repo.save(userId, id, changes);
     if (!saved) {
       throw new StudyError(
-        409,
+        'conflict',
         'The workspace changed. Reload before saving again.',
       );
     }
@@ -79,7 +79,10 @@ export class StudyService {
     const current = workspace.roadmap.definition.steps[workspace.currentStep];
 
     if (!current || stepId !== current.id) {
-      throw new StudyError(403, 'Only the current step accepts attempts.');
+      throw new StudyError(
+        'forbidden',
+        'Only the current step accepts attempts.',
+      );
     }
 
     return this.repo.recordAttempt(userId, id, revision, stepId);

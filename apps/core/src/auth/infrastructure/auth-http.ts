@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { AuthError } from '../domain/auth.js';
 
 export const COOKIE_NAME = 'papert_session';
+export const AUTH_ORIGIN = Symbol('AUTH_ORIGIN');
 
 export function prepareRequest(
   req: Request,
@@ -16,7 +17,10 @@ export function prepareRequest(
     mutation &&
     (req.get('origin') !== origin || !req.is('application/json'))
   ) {
-    throw new AuthError(403, 'Request origin or content type is not allowed.');
+    throw new AuthError(
+      'forbidden',
+      'Request origin or content type is not allowed.',
+    );
   }
 }
 

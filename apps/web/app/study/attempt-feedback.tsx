@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Badge, type BadgeProps } from "@/components/ui/badge/badge";
+import { Button } from "@/components/ui/button/button";
 import type { AttemptResult, Challenge, SyntaxReport } from "./study-api";
 
 const statusLabels: Record<AttemptResult["status"], string> = {
@@ -13,8 +14,25 @@ const statusLabels: Record<AttemptResult["status"], string> = {
   analysis_failed: "Analysis did not complete",
 };
 
+const statusVariants: Record<AttemptResult["status"], BadgeProps["variant"]> = {
+  not_evaluated: "outline",
+  syntax_error: "destructive",
+  evaluating: "secondary",
+  needs_work: "destructive",
+  approved: "success",
+  analysis_failed: "destructive",
+};
+
 export function statusLabel(result: AttemptResult) {
   return statusLabels[result.status] ?? result.status;
+}
+
+export function AttemptStatusBadge({ result }: { result: AttemptResult }) {
+  return (
+    <Badge size="sm" variant={statusVariants[result.status] ?? "outline"}>
+      {statusLabel(result)}
+    </Badge>
+  );
 }
 
 export function nextAction(result: AttemptResult, finalStep: boolean) {
@@ -129,12 +147,21 @@ export function AttemptFeedback({
           <h4 className="font-semibold">Criteria</h4>
           <ul className="space-y-2">
             {evaluation.criteria.map((criterion) => (
-              <li key={criterion.id}>
-                <p>
-                  {criterion.status === "met" ? "✓ Met" : "✗ Not met"} —{" "}
+              <li key={criterion.id} className="space-y-1">
+                <p className="flex flex-wrap items-center gap-2">
+                  <Badge
+                    size="sm"
+                    variant={
+                      criterion.status === "met" ? "success" : "destructive"
+                    }
+                  >
+                    {criterion.status === "met" ? "✓ Met" : "✗ Not met"}
+                  </Badge>
                   {descriptions.get(criterion.id) ?? criterion.id}
                 </p>
-                <p className="text-sm">{criterion.feedback}</p>
+                <p className="text-sm text-muted-foreground">
+                  {criterion.feedback}
+                </p>
               </li>
             ))}
           </ul>
@@ -160,7 +187,7 @@ export function AttemptFeedback({
             <GradualHints hints={evaluation.hints} />
           )}
 
-          <p className="text-xs">
+          <p className="text-xs text-muted-foreground">
             This is a static review of your code, not proof that the program
             runs correctly.
           </p>

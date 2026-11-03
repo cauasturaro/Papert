@@ -1,23 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { SyntaxDiagnostics } from "./attempt-feedback";
-import { executionRequest as request } from "./execution-api";
-import { isRunning, newerSnapshot } from "./execution-state";
-import type { Execution } from "./execution-state";
-import type { SyntaxReport } from "./study-api";
+import { executionRequest as request } from "../execution-api";
+import { isRunning, newerSnapshot } from "../execution-state";
+import type { Execution } from "../execution-state";
+import type { SyntaxReport } from "../study-api";
 
 type SyntaxRejection = { status: "syntax_error"; syntax: SyntaxReport };
 
-export function AnalysisPanel({
+/**
+ * Saves the draft, runs the syntax gate and follows the Seymour analysis job
+ * until it settles. Settling refreshes the workspace so progress updates.
+ */
+export function useAnalysis({
   workspaceId,
-  disabled,
   prepare,
   onSettled,
 }: {
   workspaceId: string;
-  disabled: boolean;
   prepare: () => Promise<number | null>;
   onSettled: () => Promise<void>;
 }) {
@@ -122,46 +122,5 @@ export function AnalysisPanel({
     }
   }
 
-  return (
-    <section
-      className="space-y-3 rounded-xl border border-current/15 p-4"
-      aria-label="Analysis"
-    >
-      <h2 className="text-xl font-semibold">Analyze your attempt</h2>
-      <p className="text-sm">
-        Papert first checks syntax for TypeScript, JavaScript, Python, YAML,
-        Dockerfile, SQL (PostgreSQL) and JSON files. Syntax errors are shown
-        without calling Seymour and use no tokens. Valid code is then reviewed
-        by Seymour against the step criteria; Papert decides approval.
-      </p>
-
-      <Button
-        type="button"
-        disabled={disabled || busy || running}
-        onClick={() => void analyze()}
-      >
-        {running ? "Analysis running…" : "Save and analyze"}
-      </Button>
-
-      <p role="status">{message}</p>
-
-      {syntax && (
-        <div role="alert" className="space-y-2">
-          <p className="font-semibold">
-            Fix these syntax errors before Seymour analyzes your code:
-          </p>
-          <SyntaxDiagnostics syntax={syntax} />
-        </div>
-      )}
-
-      {execution && (
-        <div className="space-y-2">
-          <p role="status">Analysis: {execution.status}</p>
-          <p className="whitespace-pre-wrap text-sm" aria-live="polite">
-            {execution.text}
-          </p>
-        </div>
-      )}
-    </section>
-  );
+  return { execution, syntax, message, busy, running, analyze };
 }

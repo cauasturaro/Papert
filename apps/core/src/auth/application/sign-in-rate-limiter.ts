@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { AuthError } from '../domain/auth.js';
 import type { AttemptStore, SignInLimiter } from '../domain/auth.js';
 
+const RETRY_AFTER_SECONDS = 15 * 60;
+
 export class SignInRateLimiter implements SignInLimiter {
   constructor(private readonly attempts: AttemptStore) {}
 
@@ -16,8 +18,9 @@ export class SignInRateLimiter implements SignInLimiter {
 
       if (!allowed) {
         throw new AuthError(
-          429,
+          'rate_limited',
           'Too many attempts. Please try again in 15 minutes.',
+          RETRY_AFTER_SECONDS,
         );
       }
     }

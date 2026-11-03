@@ -163,12 +163,12 @@ export class PrismaStudyRepository implements StudyRepository {
         include: { roadmap: true },
       });
       if (!row) {
-        throw new StudyError(404, 'Workspace not found.');
+        throw new StudyError('not_found', 'Workspace not found.');
       }
 
       if (row.revision !== revision) {
         throw new StudyError(
-          409,
+          'conflict',
           'Save or reload the current workspace before recording an attempt.',
         );
       }
@@ -177,7 +177,10 @@ export class PrismaStudyRepository implements StudyRepository {
         row.currentStep
       ];
       if (!step || step.id !== stepId) {
-        throw new StudyError(403, 'Only the current step accepts attempts.');
+        throw new StudyError(
+          'forbidden',
+          'Only the current step accepts attempts.',
+        );
       }
 
       const saved = await tx.studyAttempt.upsert({

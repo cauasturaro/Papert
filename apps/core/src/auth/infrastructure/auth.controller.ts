@@ -1,6 +1,5 @@
 import {
   Body,
-  Catch,
   Controller,
   Get,
   HttpCode,
@@ -10,44 +9,24 @@ import {
   Req,
   Res,
   UseFilters,
+  UseGuards,
 } from '@nestjs/common';
-import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { DomainExceptionFilter } from '../../common/http/domain-exception.filter.js';
 import { AuthService, TOKEN_SECONDS } from '../application/auth.service.js';
-import { AuthError } from '../domain/auth.js';
-import { COOKIE_NAME, prepareRequest, sessionToken } from './auth-http.js';
+import type { Principal } from '../domain/auth.js';
+import { AUTH_ORIGIN, COOKIE_NAME, prepareRequest } from './auth-http.js';
+import { CurrentPrincipal, SessionGuard } from './session.guard.js';
 
-export const AUTH_ORIGIN = Symbol('AUTH_ORIGIN');
-export { COOKIE_NAME } from './auth-http.js';
-
-@Catch(AuthError)
-export class AuthExceptionFilter implements ExceptionFilter {
-  catch(error: AuthError, host: ArgumentsHost) {
-    const response = host.switchToHttp().getResponse<Response>();
-
-    if (error.status === 429) {
-      response.setHeader('Retry-After', '900');
-    }
-
-    response.status(error.status).json({ message: error.message });
-  }
-}
+export { AUTH_ORIGIN, COOKIE_NAME } from './auth-http.js';
 
 @Controller('auth')
-@UseFilters(AuthExceptionFilter)
+@UseFilters(DomainExceptionFilter)
 export class AuthController {
   constructor(
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(AUTH_ORIGIN) private readonly origin: string,
   ) {}
-
-  private prepare(req: Request, res: Response, mutation = false) {
-    prepareRequest(req, res, this.origin, mutation);
-  }
-
-  private principal(req: Request) {
-    return this.auth.authenticate(sessionToken(req));
-  }
 
   private sendGrant(
     res: Response,
@@ -75,7 +54,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() body: unknown,
   ) {
-    this.prepare(req, res, true);
+    prepareRequest(req, res, this.origin, true);
 
     const grant = await this.auth.register(body, req.ip ?? 'unknown');
 
@@ -89,7 +68,7 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
     @Body() body: unknown,
   ) {
-    this.prepare(req, res, true);
+    prepareRequest(req, res, this.origin, true);
 
     const grant = await this.auth.login(body, req.ip ?? 'unknown');
 
@@ -97,10 +76,9 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.prepare(req, res);
-
-    const { user, session } = await this.principal(req);
+  @UseGuards(SessionGuard)
+  me(@CurrentPrincipal() principal: Principal) {
+    const { user, session } = principal;
 
     return {
       user: { id: user.id, email: user.email },
@@ -110,27 +88,18 @@ export class AuthController {
   }
 
   @Get('sessions/:id')
-  async session(
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-    @Param('id') id: string,
-  ) {
-    this.prepare(req, res);
-
-    const principal = await this.principal(req);
-
+  @UseGuards(SessionGuard)
+  session(@CurrentPrincipal() principal: Principal, @Param('id') id: string) {
     return this.auth.ownedSession(principal, id);
   }
 
   @Post('refresh')
   @HttpCode(200)
+  @UseGuards(SessionGuard)
   async refresh(
-    @Req() req: Request,
+    @CurrentPrincipal() principal: Principal,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.prepare(req, res, true);
-
-    const principal = await this.principal(req);
     const grant = await this.auth.refresh(principal);
 
     return this.sendGrant(res, grant);
@@ -138,10 +107,11 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(204)
-  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.prepare(req, res, true);
-
-    const principal = await this.principal(req);
+  @UseGuards(SessionGuard)
+  async logout(
+    @CurrentPrincipal() principal: Principal,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     await this.auth.logout(principal);
 
     res.clearCookie(COOKIE_NAME, {

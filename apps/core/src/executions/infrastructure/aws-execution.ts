@@ -14,8 +14,8 @@ import {
 } from '@aws-sdk/client-apigatewaymanagementapi';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { Principal } from '../../auth/domain/auth.js';
-import { StudyError } from '../../study/domain/study.js';
 import { ExecutionService } from '../application/execution.service.js';
+import { ExecutionError } from '../domain/execution.js';
 import type { ExecutionQueue } from '../domain/execution.js';
 
 const awsOptions = () => ({
@@ -125,7 +125,7 @@ export class ExecutionStream {
       origin !== (process.env.WEB_ORIGIN ?? 'http://localhost:3000') ||
       !/^[A-Za-z0-9_-]{43}$/.test(ticket)
     ) {
-      throw new StudyError(403, 'Invalid stream handshake.');
+      throw new ExecutionError('forbidden', 'Invalid stream handshake.');
     }
 
     const tickets = await this.db.$queryRaw<
@@ -139,7 +139,10 @@ export class ExecutionStream {
       RETURNING execution_id, auth_session_id, token_id`;
     const grant = tickets[0];
     if (!grant) {
-      throw new StudyError(403, 'Stream ticket expired or already used.');
+      throw new ExecutionError(
+        'forbidden',
+        'Stream ticket expired or already used.',
+      );
     }
 
     const job = await this.db.execution.findUniqueOrThrow({
@@ -156,7 +159,10 @@ export class ExecutionStream {
       expires: String(Math.floor(Date.now() / 1000) + 900),
     };
     if (!(await this.authorized(connection))) {
-      throw new StudyError(403, 'Stream session is no longer active.');
+      throw new ExecutionError(
+        'forbidden',
+        'Stream session is no longer active.',
+      );
     }
 
     const item: Record<string, AttributeValue> = Object.fromEntries(
@@ -227,7 +233,7 @@ export class ExecutionStream {
       }),
     );
     if (!record.Item) {
-      throw new StudyError(403, 'Unknown stream connection.');
+      throw new ExecutionError('forbidden', 'Unknown stream connection.');
     }
 
     await this.send(this.decode(record.Item));

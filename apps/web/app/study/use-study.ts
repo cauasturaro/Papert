@@ -307,7 +307,7 @@ export function useStudy() {
         setWorkspace(updated);
       }
 
-      setMessage("Attempt saved. Use Save and analyze to evaluate it.");
+      setMessage("Attempt saved. Use Analyze to evaluate it.");
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -360,6 +360,10 @@ export function useStudy() {
     URL.revokeObjectURL(url);
   }
 
+  const signedOut = [roadmapQuery.error, startMutation.error].some(
+    (error) => error instanceof StudyRequestError && error.status === 401,
+  );
+
   return {
     roadmap: roadmapQuery.data,
     workspace,
@@ -376,6 +380,7 @@ export function useStudy() {
     conflict,
     online,
     dirty,
+    signedOut,
     start: () => startMutation.mutate(),
     retryLoad: () => void roadmapQuery.refetch(),
     save,

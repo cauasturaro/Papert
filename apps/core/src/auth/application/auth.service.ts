@@ -14,7 +14,10 @@ export const TOKEN_SECONDS = 15 * 60;
 export const SESSION_SECONDS = 7 * 24 * 60 * 60;
 
 const unauthorized = () =>
-  new AuthError(401, 'Your session has expired. Please sign in again.');
+  new AuthError(
+    'unauthenticated',
+    'Your session has expired. Please sign in again.',
+  );
 
 export class AuthService {
   private readonly dummyHash: Promise<string>;
@@ -39,7 +42,7 @@ export class AuthService {
       !/\p{Nd}/u.test(password)
     ) {
       throw new AuthError(
-        400,
+        'invalid',
         'Use at least 8 characters, including at least one letter and one number (maximum 128 bytes).',
       );
     }
@@ -48,7 +51,7 @@ export class AuthService {
     const user = await this.repo.createUser(email, passwordHash);
     if (!user) {
       throw new AuthError(
-        409,
+        'conflict',
         'Unable to create an account with these details. Try signing in.',
       );
     }
@@ -66,7 +69,7 @@ export class AuthService {
       password,
     );
     if (!user || !valid) {
-      throw new AuthError(401, 'Email or password is incorrect.');
+      throw new AuthError('unauthenticated', 'Email or password is incorrect.');
     }
 
     return this.startSession(user);
@@ -118,7 +121,7 @@ export class AuthService {
   async ownedSession(principal: Principal, id: string) {
     const session = await this.repo.findSession(id);
     if (!session || session.userId !== principal.user.id) {
-      throw new AuthError(404, 'Session not found.');
+      throw new AuthError('not_found', 'Session not found.');
     }
 
     return {
