@@ -5,6 +5,7 @@ import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
+import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
 import { ExecutionStream } from '../src/executions/infrastructure/aws-execution.js';
 import { configureHttp } from '../src/http.js';
@@ -98,6 +99,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
           new ExecutionService(
             new PrismaExecutionRepository(database, () => now),
             queue,
+            new ParserSyntaxChecker(),
           ),
       })
       .compile();
@@ -291,6 +293,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
     const restarted = new ExecutionService(
       new PrismaExecutionRepository(db, () => now),
       queue,
+      new ParserSyntaxChecker(),
     );
     expect(
       restarted.snapshot(await restarted.owned(alice.userId, created.id)),

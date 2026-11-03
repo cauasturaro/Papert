@@ -73,7 +73,7 @@ export class ExecutionController {
   ) {
     const principal = await this.principal(req, res, id);
 
-    return this.executions.create(principal.user.id, id, body);
+    return this.executions.submit(principal.user.id, id, body);
   }
 
   @Get(':id')

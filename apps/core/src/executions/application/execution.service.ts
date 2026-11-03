@@ -1,6 +1,12 @@
-import { parse } from '../../study/domain/study.js';
+import { lintWorkspace } from '../../analysis/domain/syntax.js';
+import type {
+  SyntaxChecker,
+  SyntaxReport,
+} from '../../analysis/domain/syntax.js';
+import { parse, StudyError } from '../../study/domain/study.js';
 import { executionRequest, workerEvent } from '../domain/execution.js';
 import type {
+  ExecutionRequest,
   ExecutionQueue,
   ExecutionRepository,
   ExecutionRecord,
@@ -10,15 +16,72 @@ export class ExecutionService {
   constructor(
     private readonly repo: ExecutionRepository,
     private readonly queue: ExecutionQueue,
+    private readonly syntax: SyntaxChecker,
   ) {}
 
   quota(userId: string) {
     return this.repo.quota(userId);
   }
 
+  // HTTP entry point: analysis may end in a syntax rejection instead of an execution.
+  async submit(userId: string, workspaceId: string, body: unknown) {
+    const input = parse(executionRequest, body);
+    if (input.kind === 'analysis') {
+      return this.analyze(userId, workspaceId, input);
+    }
+
+    return this.start(userId, workspaceId, input);
+  }
+
   async create(userId: string, workspaceId: string, body: unknown) {
     const input = parse(executionRequest, body);
-    const execution = await this.repo.create(userId, workspaceId, input);
+    if (input.kind === 'analysis') {
+      throw new StudyError(400, 'Submit analysis through its own request.');
+    }
+
+    return this.start(userId, workspaceId, input);
+  }
+
+  async analyze(userId: string, workspaceId: string, input: ExecutionRequest) {
+    const files = await this.repo.analysisFiles(
+      userId,
+      workspaceId,
+      input.revision,
+    );
+
+    // A stale revision has no files to lint; creation then resolves the request key or rejects it.
+    let syntax: SyntaxReport | undefined;
+    if (files) {
+      syntax = await lintWorkspace(files, this.syntax);
+    }
+
+    // Syntax errors stop here: no execution, quota reservation or model call.
+    if (syntax?.status === 'failed') {
+      const attempt = await this.repo.rejectSyntax(
+        userId,
+        workspaceId,
+        input.revision,
+        syntax,
+      );
+
+      return { status: 'syntax_error' as const, attempt, syntax };
+    }
+
+    return this.start(userId, workspaceId, input, syntax);
+  }
+
+  private async start(
+    userId: string,
+    workspaceId: string,
+    input: ExecutionRequest,
+    syntax?: SyntaxReport,
+  ) {
+    const execution = await this.repo.create(
+      userId,
+      workspaceId,
+      input,
+      syntax,
+    );
 
     try {
       await this.publish(execution);
@@ -30,9 +93,12 @@ export class ExecutionService {
   }
 
   snapshot(job: ExecutionRecord) {
+    const input = job.input as { kind?: string };
+
     return {
       id: job.id,
       workspaceId: job.workspaceId,
+      kind: input.kind ?? 'chat',
       status: job.status,
       text: job.text,
       sequence: job.sequence,

@@ -31,12 +31,12 @@ class TutorTrace:
         )
 
     @contextmanager
-    def execution(self, execution_id, session_id):
+    def execution(self, execution_id, session_id, name="seymour-tutor"):
         trace_id = self.client.create_trace_id(seed=execution_id)
         try:
             with (
                 self.client.start_as_current_observation(
-                    name="seymour-tutor", as_type="agent", trace_context={"trace_id": trace_id}
+                    name=name, as_type="agent", trace_context={"trace_id": trace_id}
                 ) as span,
                 propagate_attributes(
                     session_id=session_id, metadata={"execution_id": execution_id}

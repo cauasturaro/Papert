@@ -1,6 +1,7 @@
 export type Execution = {
   id: string;
   workspaceId: string;
+  kind: "chat" | "analysis";
   status: string;
   text: string;
   sequence: number;

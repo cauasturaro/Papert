@@ -2,7 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from src.tutor.application.tools import call_tool, tool_definitions
-from src.tutor.domain.context import TutorContext
+from src.tutor.domain.context import RecentResult, TutorContext
 
 
 @pytest.fixture
@@ -144,3 +144,32 @@ def test_context_summarizes_large_workspaces_and_utf16_selections(context):
     assert working["selectionTruncated"] is True
     assert working["selectedCode"].startswith("😀x")
     assert len(working["selectedCode"]) == 256
+
+
+def test_test_evidence_summarizes_recorded_evaluations_without_full_payloads(context):
+    evaluation = {
+        "summary": "x" * 5000,
+        "criteria": [
+            {"id": "name", "status": "not_met", "feedback": "Reject empty names."},
+            {"id": "other", "status": "met", "feedback": "Fine."},
+        ],
+        "hints": ["Check the boundary."],
+    }
+    evaluated = context.model_copy(
+        update={
+            "recentResults": [
+                RecentResult(revision=3, result={"status": "needs_work", "evaluation": evaluation})
+            ]
+        }
+    )
+
+    tests = call_tool(evaluated, "read_test_evidence", {"stepId": context.stepId})
+
+    assert tests.data["recentResults"] == [
+        {
+            "revision": 3,
+            "status": "needs_work",
+            "unmetCriteria": [{"id": "name", "feedback": "Reject empty names."}],
+            "hints": ["Check the boundary."],
+        }
+    ]

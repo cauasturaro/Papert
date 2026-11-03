@@ -1,4 +1,4 @@
-type Challenge = {
+export type Challenge = {
   instructions: string;
   criteria: { id: string; description: string }[];
 };
@@ -18,6 +18,47 @@ type Roadmap = {
   };
 };
 
+export type SyntaxDiagnostic = {
+  path: string;
+  language: string;
+  line: number;
+  column: number;
+  message: string;
+};
+
+export type SyntaxReport = {
+  status: "passed" | "failed";
+  coverage: "complete" | "partial" | "none";
+  checked: { path: string; language: string }[];
+  unchecked: string[];
+  diagnostics: SyntaxDiagnostic[];
+};
+
+export type Evaluation = {
+  summary: string;
+  criteria: { id: string; status: "met" | "not_met"; feedback: string }[];
+  findings: {
+    category: "logic" | "contract" | "structure" | "security";
+    severity: "info" | "warning" | "error";
+    path: string | null;
+    message: string;
+  }[];
+  hints: string[];
+};
+
+export type AttemptResult = {
+  status:
+    | "not_evaluated"
+    | "syntax_error"
+    | "evaluating"
+    | "needs_work"
+    | "approved"
+    | "analysis_failed";
+  syntax?: SyntaxReport;
+  evaluation?: Evaluation;
+  reason?: string;
+};
+
 export type Workspace = {
   id: string;
   roadmap: Roadmap;
@@ -32,7 +73,7 @@ export type Workspace = {
     revision: number;
     files: Record<string, string>;
     challenge: Challenge;
-    result: { status: string };
+    result: AttemptResult;
     createdAt: string;
   }[];
 };

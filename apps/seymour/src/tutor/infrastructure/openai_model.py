@@ -19,13 +19,22 @@ MODEL_PRICES = {
 
 
 class OpenAIModel:
-    def __init__(self, api_key: str, model: str, generation_observer):
+    def __init__(
+        self,
+        api_key: str,
+        model: str,
+        generation_observer,
+        response_name: str = "tutor_guidance",
+        response_schema: dict | None = None,
+    ):
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY is required")
 
         self.api_key = api_key
         self.model = model
         self.generation_observer = generation_observer
+        self.response_name = response_name
+        self.response_schema = response_schema or Guidance.model_json_schema()
 
     def complete(self, messages: list[BaseMessage], tools, effort, remaining, deadline, active):
         maximum_output = {"low": 2048, "medium": 3072, "high": 4096}[effort]
@@ -61,8 +70,8 @@ class OpenAIModel:
                     "text": {
                         "format": {
                             "type": "json_schema",
-                            "name": "tutor_guidance",
-                            "schema": Guidance.model_json_schema(),
+                            "name": self.response_name,
+                            "schema": self.response_schema,
                             "strict": True,
                         }
                     }

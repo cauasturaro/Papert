@@ -48,10 +48,30 @@ class State(TypedDict):
     stopped: bool
 
 
+def final_text(response: AIMessage) -> str:
+    """Use only the last final-answer message when the Responses API returns several phases."""
+    final_blocks = [
+        block
+        for block in response.content
+        if isinstance(block, dict) and block.get("phase") == "final_answer"
+    ]
+    if not final_blocks:
+        return response.text
+
+    final_message_id = final_blocks[-1].get("id")
+
+    return "".join(
+        block["text"]
+        for block in final_blocks
+        if block.get("type") == "text"
+        and (not final_message_id or block.get("id") == final_message_id)
+    )
+
+
 def run_tutor(
     context: TutorContext,
     prompt: str,
-    mode: Literal["doubt", "teaching", "solution"],
+    mode: Literal["doubt", "teaching", "solution", "review"],
     effort: Literal["low", "medium", "high"],
     solution_allowed: bool,
     budget: int,
@@ -60,7 +80,11 @@ def run_tutor(
     progress: Callable[[str, int], None],
     observe_tool: Callable[[str, Callable[[], ToolResult]], ToolResult],
 ) -> State:
-    if mode not in {"doubt", "teaching", "solution"} or effort not in {"low", "medium", "high"}:
+    if mode not in {"doubt", "teaching", "solution", "review"} or effort not in {
+        "low",
+        "medium",
+        "high",
+    }:
         raise ValueError("Unsupported tutor settings")
     if mode == "solution" and not solution_allowed:
         raise ValueError("Solution guidance is not authorized")
@@ -72,6 +96,7 @@ def run_tutor(
     policies = {
         "doubt": "Answer the specific question concisely. Give a hint and a checking question.",
         "teaching": "Teach step by step. Explain the concept, connect it to the file, then ask the learner to try one small change.",
+        "review": "Review the saved code across files for logic, contracts, structure and security against the criteria. Use read_test_evidence for the latest recorded analysis. Name specific files and lines, give hints from general to specific, and never state that the step is approved.",
         "solution": "The server authorized solution guidance. Explain a structured plan to unblock the learner; use a small illustrative fragment only when needed, and ask them to implement and explain it.",
     }
     system = (
@@ -83,7 +108,7 @@ def run_tutor(
         "Do not invent requirements or test results. Use read_criteria when comparing code to challenge requirements. "
         "Absence of test evidence means no recorded evidence, not proof that tests ran or failed. "
         "Use only the provided read tools and current stepId. Ask to narrow the question if context is insufficient. "
-        "Do not provide a complete challenge solution in doubt or teaching mode. "
+        "Do not provide a complete challenge solution in doubt, teaching or review mode. "
         f"Mode: {mode}. {policies[mode]} "
         "When finished, return ONLY a JSON object with string fields explanation, next_step, question. "
         "Keep explanation under 100 words; next_step and question each use one sentence."
@@ -130,20 +155,7 @@ def run_tutor(
         if response.tool_calls:
             return {"messages": updated, "tokens": tokens, "calls": state["calls"] + 1}
 
-        final_blocks = [
-            block
-            for block in response.content
-            if isinstance(block, dict) and block.get("phase") == "final_answer"
-        ]
-        guidance_text = response.text
-        if final_blocks:
-            final_message_id = final_blocks[-1].get("id")
-            guidance_text = "".join(
-                block["text"]
-                for block in final_blocks
-                if block.get("type") == "text"
-                and (not final_message_id or block.get("id") == final_message_id)
-            )
+        guidance_text = final_text(response)
 
         try:
             guidance = Guidance.model_validate_json(guidance_text)

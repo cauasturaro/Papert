@@ -307,12 +307,43 @@ export function useStudy() {
         setWorkspace(updated);
       }
 
-      setMessage("Attempt saved. Evaluation is not available yet.");
+      setMessage("Attempt saved. Use Save and analyze to evaluate it.");
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
           : "Unable to record the attempt.",
+      );
+    }
+  }
+
+  // Analysis always targets an acknowledged revision, never unsaved editor text.
+  async function prepareAnalysis() {
+    setMessage("");
+
+    const saved = await flush();
+
+    return saved ? saved.revision : null;
+  }
+
+  // Results and progression change attempts and the current step, not the saved revision.
+  async function refresh() {
+    const saved = current.current.workspace;
+    if (!saved) {
+      return;
+    }
+
+    try {
+      const result = await studyRequest<Workspace>(`workspaces/${saved.id}`);
+
+      if (current.current.workspace?.revision === result.revision) {
+        current.current.workspace = result;
+        setWorkspace(result);
+        queryClient.setQueryData(["study", result.id], result);
+      }
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Unable to refresh results.",
       );
     }
   }
@@ -350,5 +381,7 @@ export function useStudy() {
     save,
     reload,
     download,
+    prepareAnalysis,
+    refresh,
   };
 }

@@ -1,5 +1,6 @@
 import { PrismaExecutionRepository } from './infrastructure/prisma-execution.repository.js';
 import { Module } from '@nestjs/common';
+import { ParserSyntaxChecker } from '../analysis/infrastructure/parser-syntax-checker.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { PrismaService } from '../infrastructure/database/prisma.service.js';
 import { ExecutionService } from './application/execution.service.js';
@@ -20,6 +21,7 @@ import {
         new ExecutionService(
           new PrismaExecutionRepository(db),
           new SqsExecutionQueue(),
+          new ParserSyntaxChecker(),
         ),
     },
     {

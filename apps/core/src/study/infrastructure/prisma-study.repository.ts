@@ -176,7 +176,7 @@ export class PrismaStudyRepository implements StudyRepository {
       const step = roadmapSchema.parse(row.roadmap.definition).steps[
         row.currentStep
       ];
-      if (step.id !== stepId) {
+      if (!step || step.id !== stepId) {
         throw new StudyError(403, 'Only the current step accepts attempts.');
       }
 

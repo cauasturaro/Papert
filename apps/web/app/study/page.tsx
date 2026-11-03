@@ -5,6 +5,8 @@ import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useStudy } from "./use-study";
+import { AnalysisPanel } from "./analysis-panel";
+import { AttemptFeedback, statusLabel } from "./attempt-feedback";
 import { ExecutionPanel } from "./execution-panel";
 import { WorkspaceEditor } from "./workspace-editor";
 
@@ -36,9 +38,13 @@ function StudySpace() {
     save,
     reload,
     download,
+    prepareAnalysis,
+    refresh,
   } = useStudy();
 
-  const step = workspace?.roadmap.definition.steps[workspace.currentStep];
+  const steps = workspace?.roadmap.definition.steps ?? [];
+  const step = steps[workspace?.currentStep ?? 0];
+  const completed = !!workspace && workspace.currentStep >= steps.length;
 
   return (
     <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-6 px-4 py-8 lg:px-8">
@@ -151,6 +157,14 @@ function StudySpace() {
             )}
           </section>
 
+          <AnalysisPanel
+            key={workspace.id}
+            workspaceId={workspace.id}
+            disabled={conflict || !online}
+            prepare={prepareAnalysis}
+            onSettled={refresh}
+          />
+
           <WorkspaceEditor
             workspaceId={workspace.id}
             files={files}
@@ -208,11 +222,26 @@ function StudySpace() {
             </div>
 
             <p className="text-sm">
-              Recording an attempt preserves the saved files and criteria.
-              Evaluation is not available yet; the next step stays locked.
+              Recording an attempt preserves the saved files and criteria
+              without analyzing them. Only an approved analysis unlocks the next
+              step.
             </p>
           </form>
+        </>
+      )}
 
+      {completed && (
+        <section aria-label="Roadmap completed" className="space-y-2">
+          <h2 className="text-2xl font-semibold">Roadmap completed</h2>
+          <p>
+            Every step of this roadmap was approved. Your workspace and attempt
+            history remain available below.
+          </p>
+        </section>
+      )}
+
+      {workspace && (
+        <>
           <section className="flex flex-col gap-3" aria-label="Attempt history">
             <h2 className="text-xl font-semibold">Attempt history</h2>
 
@@ -220,14 +249,24 @@ function StudySpace() {
               <p>No attempts recorded yet.</p>
             )}
 
-            {workspace.attempts.map((attempt) => (
-              <details key={attempt.id} className="rounded border p-4">
+            {workspace.attempts.map((attempt, index) => (
+              <details
+                key={attempt.id}
+                className="rounded border p-4"
+                open={index === 0}
+              >
                 <summary className="cursor-pointer">
                   {attempt.stepId} · revision {attempt.revision} ·{" "}
-                  {attempt.result.status === "not_evaluated"
-                    ? "Not evaluated"
-                    : attempt.result.status}
+                  {statusLabel(attempt.result)}
                 </summary>
+
+                <div className="my-3">
+                  <AttemptFeedback
+                    result={attempt.result}
+                    challenge={attempt.challenge}
+                    finalStep={attempt.stepId === steps[steps.length - 1]?.id}
+                  />
+                </div>
 
                 <p className="my-3">{attempt.challenge.instructions}</p>
 

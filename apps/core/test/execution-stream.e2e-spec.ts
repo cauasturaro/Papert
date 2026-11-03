@@ -16,6 +16,7 @@ import {
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { PrismaStudyRepository } from '../src/study/infrastructure/prisma-study.repository.js';
 import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
+import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
 import {
   ExecutionStream,
@@ -125,6 +126,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
       service = new ExecutionService(
         new PrismaExecutionRepository(db),
         new SqsExecutionQueue(),
+        new ParserSyntaxChecker(),
       );
       stream = new ExecutionStream(db, service);
     });
@@ -252,7 +254,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
       deliveryStatus = 200;
       const job = await service.create(principal.user.id, workspaceId, {
         requestKey: randomUUID(),
-        kind: 'analysis',
+        kind: 'chat',
         revision: 0,
         prompt: 'Review',
       });

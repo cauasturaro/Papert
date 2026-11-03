@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 
 export const DAILY_LIMIT = 30000;
 export const ATTEMPT_BUDGET = 1000;
@@ -17,8 +18,8 @@ export const executionRequest = z
     requestKey: z.string().uuid(),
     revision: z.number().int().nonnegative(),
     kind: z.enum(['chat', 'analysis']),
-    prompt: z.string().trim().min(1).max(2000),
-    mode: z.enum(['doubt', 'teaching', 'solution']).optional(),
+    prompt: z.string().trim().min(1).max(2000).optional(),
+    mode: z.enum(['doubt', 'teaching', 'solution', 'review']).optional(),
     effort: z.enum(['low', 'medium', 'high']).optional(),
     activeFile: z.string().min(1).max(200).optional(),
     selection: z
@@ -31,10 +32,26 @@ export const executionRequest = z
   })
   .strict()
   .refine((input) => !input.mode || input.kind === 'chat')
+  .refine((input) => input.kind === 'analysis' || !!input.prompt)
+  // Analysis evaluates the saved attempt; it accepts no free-form instructions.
   .refine(
     (input) =>
-      input.mode || (!input.effort && !input.activeFile && !input.selection),
+      input.kind === 'chat' ||
+      (!input.prompt && !input.activeFile && !input.selection),
+  )
+  .refine(
+    (input) =>
+      input.kind === 'analysis' ||
+      input.mode ||
+      (!input.effort && !input.activeFile && !input.selection),
   );
+
+// Tutor and analysis snapshots carry a mode or an attempt; older transport jobs carry neither.
+export function usesModel(input: unknown) {
+  const snapshot = input as Record<string, unknown>;
+
+  return !!snapshot.mode || !!snapshot.attemptId;
+}
 
 export const workerEvent = z
   .object({
@@ -45,10 +62,90 @@ export const workerEvent = z
     status: z.enum(['running', 'completed', 'failed']),
     text: z.string().max(4000),
     tokens: z.number().int().min(0).max(TUTOR_ATTEMPT_BUDGET),
+    // Validated against the attempt by Core; malformed content is recorded, never trusted.
+    evaluation: z.unknown().optional(),
+  })
+  .strict()
+  .refine(
+    (event) => event.evaluation === undefined || event.status === 'completed',
+  );
+
+export type WorkerEvent = z.infer<typeof workerEvent>;
+
+export const evaluationSchema = z
+  .object({
+    attemptId: z.string().uuid(),
+    revision: z.number().int().nonnegative(),
+    stepId: z.string().min(1).max(100),
+    summary: z.string().min(1).max(800),
+    criteria: z
+      .array(
+        z
+          .object({
+            id: z.string().min(1).max(200),
+            status: z.enum(['met', 'not_met']),
+            feedback: z.string().min(1).max(600),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(20),
+    findings: z
+      .array(
+        z
+          .object({
+            category: z.enum(['logic', 'contract', 'structure', 'security']),
+            severity: z.enum(['info', 'warning', 'error']),
+            path: z.string().max(200).nullable(),
+            message: z.string().min(1).max(400),
+          })
+          .strict(),
+      )
+      .max(10),
+    hints: z.array(z.string().min(1).max(300)).min(1).max(3),
   })
   .strict();
 
-export type WorkerEvent = z.infer<typeof workerEvent>;
+export type Evaluation = z.infer<typeof evaluationSchema>;
+
+export type AttemptSnapshot = {
+  id: string;
+  revision: number;
+  stepId: string;
+  criteria: string[];
+};
+
+// Core, not the model, decides approval: every criterion of this exact attempt must be met.
+export function assessEvaluation(value: unknown, attempt: AttemptSnapshot) {
+  const parsed = evaluationSchema.safeParse(value);
+  if (!parsed.success) {
+    return { valid: false as const, reason: 'invalid_output' };
+  }
+
+  const evaluation = parsed.data;
+  if (
+    evaluation.attemptId !== attempt.id ||
+    evaluation.revision !== attempt.revision ||
+    evaluation.stepId !== attempt.stepId
+  ) {
+    return { valid: false as const, reason: 'other_attempt' };
+  }
+
+  const reported = evaluation.criteria.map((criterion) => criterion.id);
+  const expected = [...attempt.criteria].sort();
+  if (
+    reported.length !== expected.length ||
+    [...reported].sort().some((id, index) => id !== expected[index])
+  ) {
+    return { valid: false as const, reason: 'criteria_mismatch' };
+  }
+
+  const approved = evaluation.criteria.every(
+    (criterion) => criterion.status === 'met',
+  );
+
+  return { valid: true as const, approved, evaluation };
+}
 
 export interface ExecutionQueue {
   publish(id: string): Promise<void>;
@@ -59,6 +156,7 @@ export type ExecutionRequest = z.infer<typeof executionRequest>;
 export type ExecutionRecord = {
   id: string;
   workspaceId: string;
+  input: unknown;
   status: string;
   text: string;
   sequence: number;
@@ -86,7 +184,20 @@ export interface ExecutionRepository {
     userId: string,
     workspaceId: string,
     input: ExecutionRequest,
+    syntax?: SyntaxReport,
   ): Promise<ExecutionRecord>;
+  // Returns null when the revision is no longer current, so a retried request key can still resolve.
+  analysisFiles(
+    userId: string,
+    workspaceId: string,
+    revision: number,
+  ): Promise<Record<string, string> | null>;
+  rejectSyntax(
+    userId: string,
+    workspaceId: string,
+    revision: number,
+    syntax: SyntaxReport,
+  ): Promise<{ id: string; revision: number; stepId: string; result: unknown }>;
   owned(userId: string, id: string): Promise<ExecutionRecord>;
   list(userId: string, workspaceId: string): Promise<ExecutionRecord[]>;
   cancel(userId: string, id: string): Promise<ExecutionRecord>;

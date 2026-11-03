@@ -129,6 +129,18 @@ def test_teaching_and_effort_reach_the_model(context, effort):
     assert model.complete.call_args.args[2] == effort
 
 
+def test_review_mode_checks_recorded_analysis_without_approving(context):
+    model = MagicMock()
+    model.complete.return_value = response()
+
+    run(context, model, mode="review")
+
+    system = model.complete.call_args.args[0][0].content
+    assert "Mode: review" in system
+    assert "read_test_evidence" in system
+    assert "never state that the step is approved" in system
+
+
 def test_cancelled_job_does_not_call_model(context):
     model = MagicMock()
 

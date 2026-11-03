@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import type { Execution, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
-import { StudyError, roadmapSchema } from '../../study/domain/study.js';
+import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import {
+  StudyError,
+  roadmapSchema,
+  stepSchema,
+} from '../../study/domain/study.js';
+import type { Step } from '../../study/domain/study.js';
+import {
+  assessEvaluation,
   ATTEMPT_BUDGET,
   DAILY_LIMIT,
   DEADLINE_MS,
@@ -12,6 +19,7 @@ import {
   period,
   terminal,
   TUTOR_ATTEMPT_BUDGET,
+  usesModel,
 } from '../domain/execution.js';
 import type {
   ExecutionRequest,
@@ -22,9 +30,43 @@ import type {
 type Transaction = Prisma.TransactionClient;
 
 function attemptBudget(input: Prisma.JsonValue) {
-  const snapshot = input as Record<string, unknown>;
+  return usesModel(input) ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
+}
 
-  return snapshot.mode ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
+type AttemptState = { status?: string; executionId?: string };
+
+async function lockWorkspace(tx: Transaction, id: string, userId?: string) {
+  const records = userId
+    ? await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM core.workspace WHERE id = ${id}::uuid
+        AND user_id = ${userId}::uuid FOR UPDATE`
+    : await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM core.workspace WHERE id = ${id}::uuid FOR UPDATE`;
+
+  return records.length > 0;
+}
+
+// The caller holds the workspace lock, which serializes every attempt result change.
+function snapshotAttempt(
+  tx: Transaction,
+  workspaceId: string,
+  revision: number,
+  step: Step,
+  files: Prisma.JsonValue,
+) {
+  return tx.studyAttempt.upsert({
+    where: {
+      workspaceId_revision_stepId: { workspaceId, revision, stepId: step.id },
+    },
+    create: {
+      workspaceId,
+      stepId: step.id,
+      revision,
+      files: files as Prisma.InputJsonValue,
+      challenge: step.challenge,
+    },
+    update: {},
+  });
 }
 
 export class PrismaExecutionRepository implements ExecutionRepository {
@@ -50,9 +92,15 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     };
   }
 
-  async create(userId: string, workspaceId: string, input: ExecutionRequest) {
+  async create(
+    userId: string,
+    workspaceId: string,
+    input: ExecutionRequest,
+    syntax?: SyntaxReport,
+  ) {
     const now = this.now();
-    const budget = input.mode ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
+    const tracked = !!input.mode || input.kind === 'analysis';
+    const budget = tracked ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
     const reservation = budget * MAX_ATTEMPTS;
 
     const execution = await this.db.$transaction(async (tx) => {
@@ -93,10 +141,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         return previous;
       }
 
-      const records = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM core.workspace WHERE id = ${workspaceId}::uuid
-        AND user_id = ${userId}::uuid FOR UPDATE`;
-      if (!records.length) {
+      if (!(await lockWorkspace(tx, workspaceId, userId))) {
         throw new StudyError(404, 'Workspace not found.');
       }
       const workspace = await tx.workspace.findUniqueOrThrow({
@@ -110,22 +155,6 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         throw new StudyError(
           409,
           'Save and reload the workspace before starting an execution.',
-        );
-      }
-
-      const recent = await tx.execution.count({
-        where: { userId, createdAt: { gte: new Date(now.getTime() - 60000) } },
-      });
-      if (recent >= RATE_LIMIT) {
-        throw new StudyError(
-          429,
-          'Execution rate limit reached. Retry in one minute.',
-        );
-      }
-      if (quota.used + quota.reserved + reservation > DAILY_LIMIT) {
-        throw new StudyError(
-          429,
-          'Daily token quota exhausted. It resets at 00:00 UTC.',
         );
       }
 
@@ -170,12 +199,68 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         );
       }
 
+      let attemptId: string | undefined;
+      if (input.kind === 'analysis') {
+        // The service linted this revision's files; the workspace lock keeps them unchanged.
+        if (!syntax) {
+          throw new StudyError(
+            409,
+            'Save and reload the workspace before starting an execution.',
+          );
+        }
+
+        const attempt = await snapshotAttempt(
+          tx,
+          workspaceId,
+          input.revision,
+          step,
+          workspace.files,
+        );
+        const state = attempt.result as AttemptState;
+        if (state.status === 'approved' || state.status === 'needs_work') {
+          throw new StudyError(
+            409,
+            'This revision was already analyzed. Save a change before analyzing again.',
+          );
+        }
+
+        if (state.status === 'evaluating' && state.executionId) {
+          const running = await tx.execution.findUnique({
+            where: { id: state.executionId },
+          });
+          if (running && !terminal(running.status)) {
+            throw new StudyError(
+              409,
+              'An analysis of this revision is already running.',
+            );
+          }
+        }
+
+        attemptId = attempt.id;
+      }
+
+      const recent = await tx.execution.count({
+        where: { userId, createdAt: { gte: new Date(now.getTime() - 60000) } },
+      });
+      if (recent >= RATE_LIMIT) {
+        throw new StudyError(
+          429,
+          'Execution rate limit reached. Retry in one minute.',
+        );
+      }
+      if (quota.used + quota.reserved + reservation > DAILY_LIMIT) {
+        throw new StudyError(
+          429,
+          'Daily token quota exhausted. It resets at 00:00 UTC.',
+        );
+      }
+
       await tx.executionQuota.update({
         where: { id: quota.id },
         data: { reserved: { increment: reservation } },
       });
 
-      return tx.execution.create({
+      const created = await tx.execution.create({
         data: {
           userId,
           workspaceId,
@@ -198,12 +283,95 @@ export class PrismaExecutionRepository implements ExecutionRepository {
                   recentResults,
                 }
               : {}),
+            ...(attemptId && syntax
+              ? {
+                  attemptId,
+                  objective: definition.description,
+                  stepTitle: step.title,
+                  syntax: {
+                    coverage: syntax.coverage,
+                    checked: syntax.checked,
+                    unchecked: syntax.unchecked,
+                  },
+                }
+              : {}),
           },
         },
       });
+
+      if (attemptId) {
+        await tx.studyAttempt.update({
+          where: { id: attemptId },
+          data: { result: { status: 'evaluating', executionId: created.id } },
+        });
+      }
+
+      return created;
     });
 
     return execution;
+  }
+
+  async analysisFiles(userId: string, workspaceId: string, revision: number) {
+    const workspace = await this.db.workspace.findFirst({
+      where: { id: workspaceId, userId },
+    });
+    if (!workspace) {
+      throw new StudyError(404, 'Workspace not found.');
+    }
+
+    if (workspace.revision !== revision) {
+      return null;
+    }
+
+    return workspace.files as Record<string, string>;
+  }
+
+  async rejectSyntax(
+    userId: string,
+    workspaceId: string,
+    revision: number,
+    syntax: SyntaxReport,
+  ) {
+    return this.db.$transaction(async (tx) => {
+      if (!(await lockWorkspace(tx, workspaceId, userId))) {
+        throw new StudyError(404, 'Workspace not found.');
+      }
+
+      const workspace = await tx.workspace.findUniqueOrThrow({
+        where: { id: workspaceId },
+        include: { roadmap: true },
+      });
+      if (workspace.revision !== revision) {
+        throw new StudyError(
+          409,
+          'Save and reload the workspace before starting an execution.',
+        );
+      }
+
+      const definition = roadmapSchema.parse(workspace.roadmap.definition);
+      const step = definition.steps[workspace.currentStep];
+      if (!step) {
+        throw new StudyError(409, 'No active study step.');
+      }
+
+      const attempt = await snapshotAttempt(
+        tx,
+        workspaceId,
+        revision,
+        step,
+        workspace.files,
+      );
+      const state = attempt.result as AttemptState;
+      if (state.status !== 'not_evaluated') {
+        return attempt;
+      }
+
+      return tx.studyAttempt.update({
+        where: { id: attempt.id },
+        data: { result: { status: 'syntax_error', syntax } },
+      });
+    });
   }
 
   async owned(userId: string, id: string) {
@@ -249,12 +417,105 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     });
   }
 
+  // Records an analysis outcome in the same transaction that finishes its execution.
+  private async recordOutcome(
+    tx: Transaction,
+    job: Execution,
+    status: string,
+    evaluation: unknown,
+  ) {
+    const input = job.input as { attemptId?: string };
+    if (!input.attemptId) {
+      return;
+    }
+
+    // Lock order matches creation and saves: workspace before attempt.
+    await lockWorkspace(tx, job.workspaceId);
+
+    const attempt = await tx.studyAttempt.findUnique({
+      where: { id: input.attemptId },
+      include: { workspace: { include: { roadmap: true } } },
+    });
+    const state = attempt?.result as AttemptState | undefined;
+    if (
+      !attempt ||
+      attempt.workspaceId !== job.workspaceId ||
+      state?.status !== 'evaluating' ||
+      state.executionId !== job.id
+    ) {
+      return;
+    }
+
+    const challenge = stepSchema.shape.challenge.parse(attempt.challenge);
+    const snapshot = {
+      id: attempt.id,
+      revision: attempt.revision,
+      stepId: attempt.stepId,
+      criteria: challenge.criteria.map((criterion) => criterion.id),
+    };
+    const finishedAt = this.now().toISOString();
+
+    let assessment: ReturnType<typeof assessEvaluation> = {
+      valid: false,
+      reason: status === 'completed' ? 'no_evaluation' : status,
+    };
+    if (status === 'completed' && evaluation !== undefined) {
+      assessment = assessEvaluation(evaluation, snapshot);
+    }
+
+    if (!assessment.valid) {
+      await tx.studyAttempt.update({
+        where: { id: attempt.id },
+        data: {
+          result: {
+            status: 'analysis_failed',
+            executionId: job.id,
+            reason: assessment.reason,
+            finishedAt,
+          },
+        },
+      });
+
+      return;
+    }
+
+    await tx.studyAttempt.update({
+      where: { id: attempt.id },
+      data: {
+        result: {
+          status: assessment.approved ? 'approved' : 'needs_work',
+          executionId: job.id,
+          evaluatedAt: finishedAt,
+          evaluation: assessment.evaluation,
+        },
+      },
+    });
+
+    if (!assessment.approved) {
+      return;
+    }
+
+    const steps = roadmapSchema.parse(
+      attempt.workspace.roadmap.definition,
+    ).steps;
+    const index = steps.findIndex((step) => step.id === attempt.stepId);
+
+    // Conditional increment: redelivered or concurrent approvals unlock the next step once.
+    await tx.workspace.updateMany({
+      where: { id: job.workspaceId, currentStep: index },
+      data: { currentStep: { increment: 1 } },
+    });
+  }
+
   private async finish(
     tx: Transaction,
     job: Execution,
     status: string,
     text = job.text,
+    evaluation?: unknown,
   ) {
+    await this.recordOutcome(tx, job, status, evaluation);
+
     await tx.executionQuota.update({
       where: { id: job.quotaId },
       data: {
@@ -428,7 +689,13 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         },
       });
       if (event.status !== 'running') {
-        return this.finish(tx, current, event.status, event.text);
+        return this.finish(
+          tx,
+          current,
+          event.status,
+          event.text,
+          event.evaluation,
+        );
       }
 
       return tx.execution.update({

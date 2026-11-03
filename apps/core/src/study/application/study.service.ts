@@ -78,7 +78,7 @@ export class StudyService {
 
     const current = workspace.roadmap.definition.steps[workspace.currentStep];
 
-    if (stepId !== current.id) {
+    if (!current || stepId !== current.id) {
       throw new StudyError(403, 'Only the current step accepts attempts.');
     }
 

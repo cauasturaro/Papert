@@ -2,32 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { executionRequest as request } from "./execution-api";
+import type { Quota } from "./execution-api";
 import { newerSnapshot, isRunning } from "./execution-state";
 import type { Execution } from "./execution-state";
-
-type Quota = {
-  limit: number;
-  used: number;
-  reserved: number;
-  reservation: number;
-  period: string;
-  resetsAt: number;
-};
-
-async function request<T>(path: string, body?: unknown): Promise<T> {
-  const response = await fetch(`/api/executions/${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    cache: "no-store",
-  });
-  const result = await response.json();
-  if (!response.ok) {
-    throw new Error(result.message ?? "Execution service unavailable.");
-  }
-
-  return result;
-}
 
 export function ExecutionPanel({
   workspaceId,
@@ -68,7 +46,7 @@ export function ExecutionPanel({
     ])
       .then(([jobs, currentQuota]) => {
         if (!disposed) {
-          setExecution(jobs[0] ?? null);
+          setExecution(jobs.find((job) => job.kind === "chat") ?? null);
           setQuota(currentQuota);
           setMessage("");
         }
@@ -282,6 +260,9 @@ export function ExecutionPanel({
         >
           <option value="doubt">Doubt — a focused hint</option>
           <option value="teaching">Teaching — step by step</option>
+          <option value="review">
+            Review — logic, contracts, structure and security
+          </option>
           <option value="solution">
             Solution guidance — after three saved attempts
           </option>

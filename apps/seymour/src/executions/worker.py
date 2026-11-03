@@ -26,9 +26,19 @@ def run_job(
     lease = claim["lease"]
     context = claim["input"]
     tutor = "mode" in context
-    expected_budget = 8000 if tutor else 1000
+    analysis = context.get("kind") == "analysis" and "attemptId" in context
+    expected_budget = 8000 if tutor or analysis else 1000
     if claim["budget"] != expected_budget or context["kind"] not in {"chat", "analysis"}:
         raise ValueError("Invalid authorized execution context")
+
+    if analysis:
+        try:
+            run_analysis_job(execution_id, lease, context, claim["budget"], control, publish)
+        except Exception:
+            control({"action": "failed", "executionId": execution_id, "lease": lease})
+            raise
+
+        return
 
     if tutor:
         try:
@@ -150,3 +160,85 @@ def run_tutor_job(execution_id, lease, context, budget, control, publish):
                 "tokens": result["tokens"],
             }
         )
+
+
+ANALYSIS_MESSAGES = {
+    "budget": "The saved files exceed this analysis budget. Reduce the workspace and analyze again.",
+    "invalid": "Seymour could not produce a valid evaluation. Your progress did not change; analyze again.",
+    "deadline": "The analysis time limit was reached. Your progress did not change; analyze again.",
+    "cancelled": "",
+}
+
+
+def run_analysis_job(execution_id, lease, context, budget, control, publish):
+    import os
+
+    from src.evaluation.application.evaluator import run_analysis, summary_text
+    from src.evaluation.domain.evaluation import AnalysisContext, ModelEvaluation
+    from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.tutor.infrastructure.tracing import TutorTrace
+
+    snapshot = AnalysisContext.model_validate(
+        {key: context[key] for key in AnalysisContext.model_fields if key in context}
+    )
+    trace = TutorTrace()
+    model = OpenAIModel(
+        os.environ["OPENAI_API_KEY"],
+        os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
+        trace.generation,
+        "attempt_evaluation",
+        ModelEvaluation.model_json_schema(),
+    )
+    index = 0
+
+    def active():
+        state = control({"action": "active", "executionId": execution_id, "lease": lease})
+
+        return state["active"]
+
+    def progress(text, tokens):
+        nonlocal index
+        index += 1
+        publish(
+            {
+                "version": 1,
+                "executionId": execution_id,
+                "lease": lease,
+                "index": index,
+                "status": "running",
+                "text": text,
+                "tokens": tokens,
+            }
+        )
+
+    with trace.execution(execution_id, snapshot.sessionId, "seymour-evaluation") as span:
+        result = run_analysis(
+            snapshot,
+            context.get("effort", "medium"),
+            budget,
+            model,
+            active,
+            progress,
+        )
+        span.update(
+            metadata={
+                "calls": result["calls"],
+                "tokens": result["tokens"],
+                "reason": result["reason"],
+            }
+        )
+
+        event = {
+            "version": 1,
+            "executionId": execution_id,
+            "lease": lease,
+            "index": 100,
+            "status": "completed",
+            "text": ANALYSIS_MESSAGES.get(result["reason"], ""),
+            "tokens": result["tokens"],
+        }
+        if result["evaluation"] is not None:
+            event["text"] = summary_text(result["evaluation"])
+            event["evaluation"] = result["evaluation"].model_dump()
+
+        publish(event)
