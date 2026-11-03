@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { DomainError } from '../../common/domain/domain-error.js';
+import { validate } from '../../common/domain/validation.js';
 
 export class StudyError extends DomainError {}
 
@@ -115,15 +116,15 @@ export const attemptSchema = z
   .strict();
 
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {
-  const result = schema.safeParse(value);
-  if (!result.success) {
-    throw new StudyError(
-      'invalid',
-      'Invalid study request. Check the fields and limits.',
-    );
-  }
-
-  return result.data;
+  return validate(
+    schema,
+    value,
+    () =>
+      new StudyError(
+        'invalid',
+        'Invalid study request. Check the fields and limits.',
+      ),
+  );
 }
 
 export type RoadmapDefinition = z.infer<typeof roadmapSchema>;

@@ -1,6 +1,6 @@
 "use client";
 
-import type { KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert/alert";
 import { Button } from "@/components/ui/button/button";
 import { Progress } from "@/components/ui/progress/progress";
@@ -8,11 +8,15 @@ import { Select, SelectItem } from "@/components/ui/select/select";
 import { Tooltip, TooltipTrigger } from "@/components/ui/tooltip/tooltip";
 import {
   ArrowUpIcon,
+  BookIcon,
   FileIcon,
   SelectionIcon,
   StopIcon,
 } from "@/components/icons";
 import type { useSeymour, CodeSelection } from "./use-seymour";
+import type { MentionTarget } from "./mentions";
+import { useMentionPicker } from "./use-mention-picker";
+import { MentionMenu } from "./mention-menu";
 import {
   describe,
   reasoningEfforts,
@@ -25,6 +29,7 @@ type SeymourComposerProps = {
   revision: number;
   activeFile?: string;
   selection?: CodeSelection;
+  sources: MentionTarget[];
 };
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
@@ -43,7 +48,16 @@ export function SeymourComposer({
   revision,
   activeFile,
   selection,
+  sources,
 }: SeymourComposerProps) {
+  const textarea = useRef<HTMLTextAreaElement>(null);
+  const picker = useMentionPicker(
+    seymour.prompt,
+    seymour.setPrompt,
+    sources,
+    textarea,
+  );
+
   const locked = seymour.busy || seymour.running || seymour.pending;
   const canSend =
     !seymour.busy &&
@@ -54,6 +68,10 @@ export function SeymourComposer({
 
   // Enter sends, Shift+Enter adds a line; IME composition never sends.
   function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (picker.handleKey(event)) {
+      return;
+    }
+
     if (
       event.key !== "Enter" ||
       event.shiftKey ||
@@ -82,111 +100,147 @@ export function SeymourComposer({
         </Alert>
       )}
 
-      <form
-        aria-label="Message Seymour"
-        className="@container overflow-hidden rounded-lg border border-border bg-background transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/15"
-        onSubmit={(event) => {
-          event.preventDefault();
+      <div className="relative">
+        {picker.open && (
+          <MentionMenu
+            options={picker.options}
+            highlighted={picker.highlighted}
+            hasSources={sources.length > 0}
+            onChoose={picker.choose}
+          />
+        )}
 
-          void seymour.submit();
-        }}
-      >
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
-          <ContextChip icon={<FileIcon />} label={activeFile ?? "No file"} />
-          {selection && (
-            <ContextChip
-              icon={<SelectionIcon />}
-              label={`Selection ${selection.start}–${selection.end}`}
-            />
-          )}
-        </div>
+        <form
+          aria-label="Message Seymour"
+          className="@container overflow-hidden rounded-lg border border-border bg-background transition-colors focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/15"
+          onSubmit={(event) => {
+            event.preventDefault();
 
-        <label htmlFor="execution-prompt" className="sr-only">
-          Message about your saved revision {revision}
-        </label>
-        <textarea
-          id="execution-prompt"
-          rows={3}
-          maxLength={2000}
-          placeholder={`Ask about saved revision ${revision}…`}
-          value={seymour.prompt}
-          disabled={locked}
-          onChange={(event) => seymour.setPrompt(event.target.value)}
-          onKeyDown={sendOnEnter}
-          aria-describedby="composer-help"
-          className="block max-h-48 min-h-16 w-full resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-60"
-        />
-
-        <div className="flex items-center gap-1 border-t border-border px-1.5 py-1.5">
-          {/* Pills may truncate; the send button must always stay visible. */}
-          <div className="flex min-w-0 items-center gap-0.5">
-            <PillSelect
-              label="Tutor mode"
-              value={seymour.mode}
-              options={tutorModes}
-              disabled={locked}
-              onValueChange={seymour.setMode}
-            />
-            <PillSelect
-              label="Reasoning effort"
-              value={seymour.effort}
-              options={reasoningEfforts}
-              disabled={locked}
-              onValueChange={seymour.setEffort}
-            />
+            void seymour.submit();
+          }}
+        >
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-2 py-1.5">
+            <ContextChip icon={<FileIcon />} label={activeFile ?? "No file"} />
+            {selection && (
+              <ContextChip
+                icon={<SelectionIcon />}
+                label={`Selection ${selection.start}–${selection.end}`}
+              />
+            )}
+            {picker.mentioned.map((source) => (
+              <ContextChip
+                key={source.id}
+                icon={<BookIcon />}
+                label={source.filename}
+              />
+            ))}
           </div>
 
-          <div className="ml-auto flex shrink-0 items-center gap-1">
-            {seymour.quota && <QuotaMeter quota={seymour.quota} />}
+          <label htmlFor="execution-prompt" className="sr-only">
+            Message about your saved revision {revision}
+          </label>
+          <textarea
+            ref={textarea}
+            id="execution-prompt"
+            rows={3}
+            maxLength={2000}
+            placeholder={`Ask about saved revision ${revision}… Type @ to cite a source.`}
+            value={seymour.prompt}
+            disabled={locked}
+            onChange={(event) => {
+              const field = event.target;
 
-            {seymour.pending && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-xs"
-                disabled={seymour.busy}
-                onClick={seymour.discardPending}
-              >
-                Edit request
-              </Button>
-            )}
+              seymour.setPrompt(field.value);
+              picker.track(field.value, field.selectionStart);
+            }}
+            onSelect={(event) => {
+              const field = event.currentTarget;
 
-            {seymour.running ? (
-              <Button
-                size="sm"
-                variant="outline"
-                iconOnly
-                className="rounded-full"
-                aria-label="Cancel"
-                disabled={seymour.busy}
-                onClick={() => void seymour.cancel()}
-              >
-                <StopIcon />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                size="sm"
-                iconOnly
-                className="rounded-full"
-                aria-label={
-                  seymour.pending ? "Retry request" : "Send saved revision"
-                }
-                disabled={!canSend}
-              >
-                <ArrowUpIcon />
-              </Button>
-            )}
+              picker.track(field.value, field.selectionStart);
+            }}
+            onBlur={picker.close}
+            onKeyDown={sendOnEnter}
+            role="combobox"
+            aria-expanded={picker.open}
+            aria-controls="source-mentions"
+            aria-autocomplete="list"
+            aria-activedescendant={picker.activeOptionId}
+            aria-describedby="composer-help"
+            className="block max-h-48 min-h-16 w-full resize-none bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none disabled:opacity-60"
+          />
+
+          <div className="flex items-center gap-1 border-t border-border px-1.5 py-1.5">
+            {/* Pills may truncate; the send button must always stay visible. */}
+            <div className="flex min-w-0 items-center gap-0.5">
+              <PillSelect
+                label="Tutor mode"
+                value={seymour.mode}
+                options={tutorModes}
+                disabled={locked}
+                onValueChange={seymour.setMode}
+              />
+              <PillSelect
+                label="Reasoning effort"
+                value={seymour.effort}
+                options={reasoningEfforts}
+                disabled={locked}
+                onValueChange={seymour.setEffort}
+              />
+            </div>
+
+            <div className="ml-auto flex shrink-0 items-center gap-1">
+              {seymour.quota && <QuotaMeter quota={seymour.quota} />}
+
+              {seymour.pending && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-xs"
+                  disabled={seymour.busy}
+                  onClick={seymour.discardPending}
+                >
+                  Edit request
+                </Button>
+              )}
+
+              {seymour.running ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  iconOnly
+                  className="rounded-full"
+                  aria-label="Cancel"
+                  disabled={seymour.busy}
+                  onClick={() => void seymour.cancel()}
+                >
+                  <StopIcon />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  size="sm"
+                  iconOnly
+                  className="rounded-full"
+                  aria-label={
+                    seymour.pending ? "Retry request" : "Send saved revision"
+                  }
+                  disabled={!canSend}
+                >
+                  <ArrowUpIcon />
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      </form>
+        </form>
+      </div>
 
       {/* Visually hidden; still describes the message field to screen readers. */}
       <p id="composer-help" className="sr-only">
         {describe(tutorModes, seymour.mode)} ·{" "}
         {describe(reasoningEfforts, seymour.effort)}. Enter to send, Shift+Enter
-        for a new line. Solution guidance requires attempts on three different
-        saved revisions of this step.
+        for a new line. Type @ to cite one of your workspace sources. Solution
+        guidance requires attempts on three different saved revisions of this
+        step.
       </p>
     </div>
   );

@@ -13,6 +13,7 @@ import { CollapsePanelButton } from "../side-panel-controls";
 import { SeymourComposer } from "./seymour-composer";
 import type { Execution } from "../execution-state";
 import { useSeymour, type CodeSelection } from "./use-seymour";
+import { useReadySources } from "../sources/use-ready-sources";
 
 type SeymourPanelProps = {
   workspaceId: string;
@@ -23,7 +24,8 @@ type SeymourPanelProps = {
 };
 
 export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
-  const seymour = useSeymour(props);
+  const sources = useReadySources(props.workspaceId);
+  const seymour = useSeymour({ ...props, sources });
   const hasConversation = seymour.history.length > 0 || !!seymour.execution;
 
   return (
@@ -81,6 +83,7 @@ export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
         revision={props.revision}
         activeFile={props.activeFile}
         selection={props.selection}
+        sources={sources}
       />
     </section>
   );

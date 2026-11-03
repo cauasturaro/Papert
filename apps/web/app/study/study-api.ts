@@ -98,6 +98,11 @@ export async function studyRequest<T>(
     headers: body === undefined ? {} : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   const data = await response.json();
   if (!response.ok) {
     throw new StudyRequestError(

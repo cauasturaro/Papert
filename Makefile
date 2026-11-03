@@ -5,7 +5,7 @@ AWS_LOCAL := docker run --rm --network papert-local \
 	-v "$(CURDIR)/infra/shared:/templates:ro" \
 	amazon/aws-cli:2.31.18 --endpoint-url=http://floci:4566 --region us-east-1 --no-cli-pager
 
-.PHONY: up infra check check-infra check-isolation setup-db smoke-queue migrate-core migrate-seymour up-apps smoke-apps db down logs check-serverless
+.PHONY: up infra check check-infra check-isolation setup-db smoke-queue ingestion-redrive ingestion-reindex migrate-core migrate-seymour up-apps smoke-apps db down logs check-serverless
 
 up:
 	@if [ ! -f .env ]; then \
@@ -58,6 +58,8 @@ check-infra:
 	$(AWS_LOCAL) sqs get-queue-url --queue-name papert-results-dlq
 	@echo "--- Checking S3 ---"
 	$(AWS_LOCAL) s3api head-bucket --bucket papert-sources
+	$(AWS_LOCAL) s3api get-bucket-notification-configuration --bucket papert-sources
+	$(AWS_LOCAL) s3api get-bucket-cors --bucket papert-sources
 	@echo "--- Checking DynamoDB ---"
 	$(AWS_LOCAL) dynamodb describe-table --table-name papert-sessions --query "Table.TableStatus"
 	@echo "check-infra: all resources available."
@@ -84,6 +86,47 @@ check-isolation:
 
 smoke-queue:
 	@python3 infra/shared/smoke-queue.py
+
+# Preserve body newlines while removing the CLI text output newline.
+ingestion-redrive:
+	@set -eu; \
+	queue=http://floci:4566/000000000000/papert-ingestion; \
+	dlq=http://floci:4566/000000000000/papert-ingestion-dlq; \
+	tab=$$(printf '\t'); \
+	\
+	while :; do \
+		message=$$($(AWS_LOCAL) sqs receive-message --queue-url "$$dlq" \
+			--max-number-of-messages 1 --wait-time-seconds 2 \
+			--query 'Messages[0].[ReceiptHandle,Body]' --output text && printf '.'); \
+		message=$${message%.}; \
+		message=$${message%?}; \
+		if [ "$$message" = "None" ] || [ -z "$$message" ]; then \
+			break; \
+		fi; \
+		\
+		receipt=$${message%%"$$tab"*}; \
+		body=$${message#*"$$tab"}; \
+		\
+		$(AWS_LOCAL) sqs send-message --queue-url "$$queue" --message-body "$$body"; \
+		$(AWS_LOCAL) sqs delete-message --queue-url "$$dlq" --receipt-handle "$$receipt"; \
+	done
+
+# Re-extract every finished source after an extraction or chunking change. Core skips
+# documents that are still processing, deleted or rejected as uploads.
+ingestion-reindex:
+	@set -eu; \
+	queue=http://floci:4566/000000000000/papert-ingestion; \
+	ids=$$(docker compose run --rm -T db -tAc \
+		"SELECT id FROM core.source_document WHERE status IN ('ready', 'failed') AND object_version_id IS NOT NULL"); \
+	count=0; \
+	\
+	for id in $$ids; do \
+		$(AWS_LOCAL) sqs send-message --queue-url "$$queue" \
+			--message-body "{\"PapertReindex\":{\"documentId\":\"$$id\"}}" > /dev/null; \
+		count=$$((count + 1)); \
+	done; \
+	\
+	echo "Queued $$count source(s) for reindexing."
 
 migrate-core:
 	cd apps/core && npx prisma migrate deploy

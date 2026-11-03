@@ -29,6 +29,7 @@ model User {
   workspaces   Workspace[]
   quotas       ExecutionQuota[]
   executions   Execution[]
+  sources      SourceDocument[]
 
   @@map("app_user")
   @@schema("core")
@@ -84,6 +85,7 @@ model Workspace {
   session     StudySession?
   attempts    StudyAttempt[]
   executions  Execution[]
+  sources     SourceDocument[]
 
   @@unique([userId, roadmapId])
   @@map("workspace")
@@ -175,5 +177,42 @@ model StreamTicket {
 
   @@index([expiresAt])
   @@map("stream_ticket")
+  @@schema("core")
+}
+
+// Core owns registration, authorization and state; chunks/vectors live in Seymour's schema.
+model SourceDocument {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  uploadedByUserId String    @map("uploaded_by_user_id") @db.Uuid
+  uploadedBy       User      @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bucket           String
+  objectKey        String    @unique @map("object_key")
+  filename         String
+  format           String
+  contentType      String    @map("content_type")
+  sizeBytes        Int       @map("size_bytes")
+  status           String    @default("awaiting_upload")
+  objectVersionId  String?   @map("object_version_id")
+  sequencer        String?
+  errorCode        String?   @map("error_code")
+  errorMessage     String?   @map("error_message")
+  chunkCount       Int?      @map("chunk_count")
+  characterCount   Int?      @map("character_count")
+  pageCount        Int?      @map("page_count")
+  embeddingTokens  Int?      @map("embedding_tokens")
+  warnings         Json      @default("[]")
+  uploadExpiresAt  DateTime  @map("upload_expires_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  readyAt          DateTime? @map("ready_at") @db.Timestamptz(3)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
+  purgedAt         DateTime? @map("purged_at") @db.Timestamptz(3)
+
+  @@index([workspaceId, status])
+  @@index([uploadedByUserId, createdAt])
+  @@index([status, uploadExpiresAt])
+  @@map("source_document")
   @@schema("core")
 }

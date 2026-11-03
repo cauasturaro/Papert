@@ -14,6 +14,9 @@ import {
   RESERVATION,
 } from '../src/executions/domain/execution.js';
 
+// These suites do not exercise workspace sources.
+const noSources = { ready: async () => [] };
+
 const enabled = !!process.env.AUTH_TEST_DATABASE_URL;
 
 describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
@@ -104,6 +107,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
             new PrismaExecutionRepository(database, () => now),
             queue,
             new ParserSyntaxChecker(),
+            noSources,
           ),
       })
       .compile();
@@ -304,6 +308,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
       new PrismaExecutionRepository(db, () => now),
       queue,
       new ParserSyntaxChecker(),
+      noSources,
     );
     expect(
       restarted.snapshot(await restarted.owned(alice.userId, created.id)),

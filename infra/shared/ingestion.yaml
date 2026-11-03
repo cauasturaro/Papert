@@ -1,20 +1,44 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Papert document ingestion queues
 
-
-Resources: 
-  IngestionQueue: 
+Resources:
+  IngestionQueue:
     Type: AWS::SQS::Queue
-    Properties: 
-      QueueName: "papert-ingestion"
-      RedrivePolicy: 
-        deadLetterTargetArn: 
-          Fn::GetAtt: 
-            - "IngestionDeadLetterQueue"
-            - "Arn"
+    Properties:
+      QueueName: papert-ingestion
+      VisibilityTimeout: 720
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt IngestionDeadLetterQueue.Arn
         maxReceiveCount: 3
+
   IngestionDeadLetterQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: papert-ingestion-dlq
+      MessageRetentionPeriod: 1209600
 
+  IngestionQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref IngestionQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: s3.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !GetAtt IngestionQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: arn:aws:s3:::papert-sources
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+
+Outputs:
+  QueueArn:
+    Value: !GetAtt IngestionQueue.Arn
+    Export:
+      Name: papert-ingestion-QueueArn

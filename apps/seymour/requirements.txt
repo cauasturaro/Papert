@@ -83,3 +83,6 @@ langgraph==1.2.19
 langsmith==0.14.17
 langfuse==5.1.0
 mangum==0.22.0
+
+# Source retrieval over pgvector
+psycopg[binary]==3.3.7

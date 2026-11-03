@@ -24,6 +24,8 @@ import type {
   WorkerEvent,
   ExecutionRepository,
 } from '../domain/execution.js';
+import { assertMentionsReady, recentTurns } from '../domain/tutor-context.js';
+import type { TutorSource } from '../domain/tutor-context.js';
 
 type Transaction = Prisma.TransactionClient;
 
@@ -102,8 +104,9 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     userId: string,
     workspaceId: string,
     input: ExecutionRequest,
-    syntax?: SyntaxReport,
+    context: { syntax?: SyntaxReport; sources: TutorSource[] },
   ) {
+    const { syntax, sources } = context;
     const now = this.now();
     const tracked = !!input.mode || input.kind === 'analysis';
     const budget = tracked ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
@@ -135,7 +138,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           old.mode !== input.mode ||
           old.effort !== input.effort ||
           old.activeFile !== input.activeFile ||
-          JSON.stringify(old.selection) !== JSON.stringify(input.selection)
+          JSON.stringify(old.selection) !== JSON.stringify(input.selection) ||
+          JSON.stringify(old.sourceIds) !== JSON.stringify(input.sourceIds)
         ) {
           throw new ExecutionError(
             'conflict',
@@ -203,6 +207,20 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           })
         : [];
       const solutionAllowed = recentResults.length >= 3;
+
+      // Short-term conversation memory: the last completed exchanges of this chat.
+      const completed = input.mode
+        ? await tx.execution.findMany({
+            where: { workspaceId, userId, status: 'completed' },
+            select: { input: true, text: true },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          })
+        : [];
+      const turns = recentTurns(completed);
+
+      assertMentionsReady(input.sourceIds, sources);
+
       if (input.mode === 'solution' && !solutionAllowed) {
         throw new ExecutionError(
           'forbidden',
@@ -301,6 +319,9 @@ export class PrismaExecutionRepository implements ExecutionRepository {
                   stepTitle: step.title,
                   solutionAllowed,
                   recentResults,
+                  workspaceId,
+                  sources,
+                  recentTurns: turns,
                 }
               : {}),
             ...(attemptId && syntax

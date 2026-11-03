@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import { DomainError } from '../../common/domain/domain-error.js';
+import type { TutorSource } from './tutor-context.js';
+import { nextUtcDayStart, utcDayKey } from '../../common/domain/utc-day.js';
 
 export class ExecutionError extends DomainError {}
 
@@ -15,9 +17,8 @@ export const DEADLINE_MS = 15 * 60 * 1000;
 export const LEASE_MS = 60 * 1000;
 export const terminal = (status: string) =>
   !['queued', 'running'].includes(status);
-export const period = (now: Date) => now.toISOString().slice(0, 10);
-export const resetsAt = (now: Date) =>
-  new Date(`${period(now)}T00:00:00Z`).getTime() + 86400000;
+export const period = (now: Date) => utcDayKey(now);
+export const resetsAt = (now: Date) => nextUtcDayStart(now).getTime();
 
 export const executionRequest = z
   .object({
@@ -35,9 +36,12 @@ export const executionRequest = z
       })
       .strict()
       .optional(),
+    // Sources the learner mentioned with @; Core checks they are ready in this workspace.
+    sourceIds: z.array(z.string().uuid()).max(5).optional(),
   })
   .strict()
   .refine((input) => !input.mode || input.kind === 'chat')
+  .refine((input) => !input.sourceIds || !!input.mode)
   .refine((input) => input.kind === 'analysis' || !!input.prompt)
   // Analysis evaluates the saved attempt; it accepts no free-form instructions.
   .refine(
@@ -190,7 +194,7 @@ export interface ExecutionRepository {
     userId: string,
     workspaceId: string,
     input: ExecutionRequest,
-    syntax?: SyntaxReport,
+    context: { syntax?: SyntaxReport; sources: TutorSource[] },
   ): Promise<ExecutionRecord>;
   // Returns null when the revision is no longer current, so a retried request key can still resolve.
   analysisFiles(

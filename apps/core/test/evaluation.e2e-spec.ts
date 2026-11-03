@@ -10,6 +10,9 @@ import { PrismaExecutionRepository } from '../src/executions/infrastructure/pris
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { configureHttp } from '../src/http.js';
 
+// These suites do not exercise workspace sources.
+const noSources = { ready: async () => [] };
+
 const enabled = !!process.env.AUTH_TEST_DATABASE_URL;
 
 const FIRST_CRITERIA = ['valid-name', 'http-errors', 'greeting'];
@@ -154,6 +157,7 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
             new PrismaExecutionRepository(database),
             queue,
             new ParserSyntaxChecker(),
+            noSources,
           ),
       })
       .compile();

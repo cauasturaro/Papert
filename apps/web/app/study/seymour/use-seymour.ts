@@ -5,6 +5,7 @@ import { executionRequest as request } from "../execution-api";
 import type { Quota } from "../execution-api";
 import { newerSnapshot, isRunning } from "../execution-state";
 import type { Execution } from "../execution-state";
+import { mentionedTargets, type MentionTarget } from "./mentions";
 
 export type CodeSelection = { start: number; end: number };
 
@@ -17,6 +18,7 @@ type SeymourRequest = {
   effort: string;
   activeFile?: string;
   selection?: CodeSelection;
+  sourceIds?: string[];
 };
 
 /**
@@ -28,11 +30,13 @@ export function useSeymour({
   revision,
   activeFile,
   selection,
+  sources,
 }: {
   workspaceId: string;
   revision: number;
   activeFile?: string;
   selection?: CodeSelection;
+  sources: MentionTarget[];
 }) {
   const [execution, setExecution] = useState<Execution | null>(null);
   const [history, setHistory] = useState<Execution[]>([]);
@@ -177,6 +181,9 @@ export function useSeymour({
   }, [executionId, running]);
 
   async function submit() {
+    const mentioned = mentionedTargets(prompt, sources);
+    const sourceIds = mentioned.map((source) => source.id);
+
     const payload = pending ?? {
       requestKey: crypto.randomUUID(),
       prompt,
@@ -186,6 +193,7 @@ export function useSeymour({
       effort,
       activeFile,
       selection,
+      sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
     };
     setPending(payload);
     setBusy(true);

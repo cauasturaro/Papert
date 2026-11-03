@@ -5,7 +5,7 @@
 
 service: papert-core
 
-frameworkVersion: ">=4"
+frameworkVersion: '>=4'
 
 provider:
   name: aws
@@ -16,10 +16,12 @@ provider:
   timeout: 29 # API Gateway HTTP max
   environment:
     NODE_ENV: production
-    CHAT_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/papert-chat"
+    CHAT_QUEUE_URL: !Sub 'https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/papert-chat'
     SESSIONS_TABLE: papert-sessions
-    WEBSOCKET_URL: !Sub "wss://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}"
-    WEBSOCKET_MANAGEMENT_URL: !Sub "https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}"
+    SOURCES_BUCKET: papert-sources
+    # SOURCES_PUBLIC_S3_ENDPOINT is local-only; leave it unset in AWS.
+    WEBSOCKET_URL: !Sub 'wss://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
+    WEBSOCKET_MANAGEMENT_URL: !Sub 'https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
     WEB_ORIGIN: ${ssm:/papert/${self:provider.stage}/web/origin}
     AUTH_JWE_ACTIVE_KID: ${ssm:/papert/${self:provider.stage}/core/jwe-active-kid}
     AUTH_JWE_KEYS: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/core/jwe-keys}
@@ -31,22 +33,39 @@ provider:
         - Effect: Allow
           Action:
             - sqs:SendMessage
-          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"
+          Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat'
         - Effect: Allow
-          Action: [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
-          Resource: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+          Action:
+            [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+          Resource: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results'
         - Effect: Allow
-          Action: [dynamodb:PutItem, dynamodb:GetItem, dynamodb:Query, dynamodb:DeleteItem]
-          Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/papert-sessions"
+          Action:
+            [
+              dynamodb:PutItem,
+              dynamodb:GetItem,
+              dynamodb:Query,
+              dynamodb:DeleteItem,
+            ]
+          Resource: !Sub 'arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/papert-sessions'
         - Effect: Allow
           Action: execute-api:ManageConnections
-          Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/POST/@connections/*"
+          Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/POST/@connections/*'
+
+        - Effect: Allow
+          Action: [s3:PutObject, s3:DeleteObject, s3:DeleteObjectVersion]
+          Resource: arn:aws:s3:::papert-sources/documents/*
+        - Effect: Allow
+          Action: s3:ListBucketVersions
+          Resource: arn:aws:s3:::papert-sources
+          Condition:
+            StringLike:
+              s3:prefix: documents/*
 
 package:
   individually: true
   patterns:
-    - "!node_modules/.prisma/client/libquery_engine-*"
-    - "node_modules/.prisma/client/libquery_engine-rhel-*"
+    - '!node_modules/.prisma/client/libquery_engine-*'
+    - 'node_modules/.prisma/client/libquery_engine-rhel-*'
 
 functions:
   api:
@@ -73,7 +92,7 @@ functions:
     handler: dist/executions/infrastructure/handlers.results
     events:
       - sqs:
-          arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results"
+          arn: !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-results'
           batchSize: 1
           functionResponseType: ReportBatchItemFailures
 
@@ -84,6 +103,15 @@ functions:
     handler: dist/executions/infrastructure/handlers.maintenance
     events:
       - schedule: rate(1 minute)
+
+  # Only the ingestion role may invoke this function via IAM.
+  sourceControl:
+    handler: dist/sources/infrastructure/handlers.sourceControl
+
+  sourceMaintenance:
+    handler: dist/sources/infrastructure/handlers.maintenance
+    events:
+      - schedule: rate(5 minutes)
 
   stream:
     handler: dist/executions/infrastructure/handlers.websocket

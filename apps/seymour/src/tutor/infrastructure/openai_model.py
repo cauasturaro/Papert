@@ -6,7 +6,8 @@ from httpx import Client
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 
-from src.tutor.application.tutor import BudgetExceeded, Guidance, TutorCancelled
+from src.tutor.application.guidance import Guidance
+from src.tutor.application.tutor import BudgetExceeded, TutorCancelled
 
 DEFAULT_MODEL = "gpt-5.4-nano-2026-03-17"
 # Standard USD per million tokens: uncached input, cached input, output.
@@ -34,7 +35,7 @@ class OpenAIModel:
         self.model = model
         self.generation_observer = generation_observer
         self.response_name = response_name
-        self.response_schema = response_schema or Guidance.model_json_schema()
+        self.response_schema = response_schema or Guidance.model_json_schema(mode="serialization")
 
     def complete(self, messages: list[BaseMessage], tools, effort, remaining, deadline, active):
         maximum_output = {"low": 2048, "medium": 3072, "high": 4096}[effort]

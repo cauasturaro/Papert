@@ -11,9 +11,13 @@ WORKDIR /workspace
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 COPY apps/seymour/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+COPY apps/ingestion/requirements.txt ./apps/ingestion/requirements.txt
+RUN pip install --no-cache-dir -r apps/ingestion/requirements.txt
 COPY --from=core /usr/local/bin/node /usr/local/bin/node
 COPY --from=core /workspace/apps/core ./apps/core
 COPY apps/seymour/src ./apps/seymour/src
+COPY apps/ingestion/src ./apps/ingestion/src
+ENV INGESTION_PYTHON=/usr/local/bin/python
 ENV NODE_ENV=development
 ENV SEYMOUR_PYTHON=/usr/local/bin/python
 CMD ["node", "apps/core/dist/executions/infrastructure/local.js"]

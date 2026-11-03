@@ -74,6 +74,8 @@ services:
       CHAT_QUEUE_URL: http://floci:4566/000000000000/papert-chat
       RESULTS_QUEUE_URL: http://floci:4566/000000000000/papert-results
       SESSIONS_TABLE: papert-sessions
+      SOURCES_BUCKET: papert-sources
+      SOURCES_PUBLIC_S3_ENDPOINT: http://localhost:4566
     depends_on:
       floci:
         condition: service_healthy
@@ -126,6 +128,8 @@ services:
       SESSIONS_TABLE: papert-sessions
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-nano-2026-03-17}
+      SEYMOUR_DATABASE_URL: postgresql://seymour_user:${SEYMOUR_DB_PASSWORD:?Run make up}@localhost:7001/papert
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       LANGFUSE_BASE_URL: http://langfuse-web:3000
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
@@ -133,6 +137,36 @@ services:
       core:
         condition: service_healthy
       seymour:
+        condition: service_healthy
+      floci:
+        condition: service_healthy
+
+  ingestion-runner:
+    profiles: [apps]
+    build:
+      context: .
+      dockerfile: infra/runner/Dockerfile
+    network_mode: service:floci
+    command: ["node", "apps/core/dist/sources/infrastructure/local.js"]
+    environment:
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD:?Run make up}@localhost:7001/papert?schema=core
+      # Core's application module validates its configuration at startup.
+      AUTH_JWE_ACTIVE_KID: ${AUTH_JWE_ACTIVE_KID:-}
+      AUTH_JWE_KEYS: ${AUTH_JWE_KEYS:-}
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      INGESTION_QUEUE_URL: http://localhost:4566/000000000000/papert-ingestion
+      SOURCES_BUCKET: papert-sources
+      SEYMOUR_DATABASE_URL: postgresql://seymour_user:${SEYMOUR_DB_PASSWORD:?Run make up}@localhost:7001/papert
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      LANGFUSE_BASE_URL: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    depends_on:
+      core:
         condition: service_healthy
       floci:
         condition: service_healthy

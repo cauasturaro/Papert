@@ -1,5 +1,6 @@
 import { ExecutionModule } from './executions/execution.module.js';
 import { StudyModule } from './study/study.module.js';
+import { SourceModule } from './sources/source.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -16,6 +17,7 @@ import { AppService } from './app.service.js';
     AuthModule,
     StudyModule,
     ExecutionModule,
+    SourceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

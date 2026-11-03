@@ -107,6 +107,24 @@ def run_tutor_job(execution_id, lease, context, budget, control, publish):
         {key: context[key] for key in TutorContext.model_fields if key in context}
     )
     trace = TutorTrace()
+    search = None
+
+    if snapshot.sources:
+        from src.retrieval.application.grounding import SEARCH_LIMIT
+        from src.retrieval.application.search import SourceSearch
+        from src.retrieval.infrastructure.openai_embedder import OpenAIQueryEmbedder
+        from src.retrieval.infrastructure.pgvector_index import PgvectorPassageIndex
+
+        searcher = SourceSearch(
+            snapshot.workspaceId,
+            [source.id for source in snapshot.sources],
+            OpenAIQueryEmbedder(),
+            PgvectorPassageIndex(),
+        )
+
+        def search(query, document_ids):
+            return searcher.search(query, document_ids, SEARCH_LIMIT)
+
     model = OpenAIModel(
         os.environ["OPENAI_API_KEY"],
         os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
@@ -146,6 +164,7 @@ def run_tutor_job(execution_id, lease, context, budget, control, publish):
             active,
             progress,
             trace.tool,
+            search,
         )
         span.update(metadata={"calls": result["calls"], "tokens": result["tokens"]})
 

@@ -109,12 +109,6 @@ export function ExplorerPanel({
       aria-label="Files"
       className="flex h-full min-h-0 flex-col bg-card"
     >
-      <header className="flex h-10 shrink-0 items-center border-b border-border px-3">
-        <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          Explorer
-        </h2>
-      </header>
-
       <div className="min-h-0 flex-1 overflow-auto p-3">
         <TreeEditor<{ kind: "file" | "directory" }>
           size="sm"

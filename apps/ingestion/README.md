@@ -1,10 +1,23 @@
 # Ingestion
 
-The planned document-processing worker for Papert's source search.
+The document-processing worker for Papert's workspace sources.
 
-It will receive upload events through SQS, extract text, split it into chunks,
-generate embeddings and store searchable content in PostgreSQL with pgvector.
+Learners upload PDF, DOC, DOCX and Markdown files straight to S3 after Core
+registers them. S3 notifies the ingestion queue; this worker asks Core to
+confirm the object, extracts located text, splits it into passages, creates
+OpenAI embeddings and stores them in PostgreSQL with pgvector.
 
-Only the Serverless configuration exists. The worker is not implemented and has no startup command yet.
+Locally, `make up-all` starts it as the `ingestion-runner` service.
 
-See the [project README](../../README.md) for the services available today.
+Tests (from this folder, with a Python virtual environment):
+
+```sh
+python -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest
+```
+
+Set `INGESTION_TEST_DATABASE_URL` to a `seymour_user` connection to include
+the database tests.
+
+See the [project README](../../README.md) for running the services.

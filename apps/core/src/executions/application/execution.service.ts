@@ -1,9 +1,10 @@
+import type { z } from 'zod';
 import { lintWorkspace } from '../../analysis/domain/syntax.js';
 import type {
   SyntaxChecker,
   SyntaxReport,
 } from '../../analysis/domain/syntax.js';
-import { parse } from '../../study/domain/study.js';
+import { validate } from '../../common/domain/validation.js';
 import {
   ExecutionError,
   executionRequest,
@@ -15,12 +16,27 @@ import type {
   ExecutionRepository,
   ExecutionRecord,
 } from '../domain/execution.js';
+import type { TutorSourceCatalog } from '../domain/tutor-context.js';
+
+// Same response body executions have always returned for invalid input.
+function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {
+  return validate(
+    schema,
+    body,
+    () =>
+      new ExecutionError(
+        'invalid',
+        'Invalid study request. Check the fields and limits.',
+      ),
+  );
+}
 
 export class ExecutionService {
   constructor(
     private readonly repo: ExecutionRepository,
     private readonly queue: ExecutionQueue,
     private readonly syntax: SyntaxChecker,
+    private readonly sources: TutorSourceCatalog,
   ) {}
 
   quota(userId: string) {
@@ -29,7 +45,7 @@ export class ExecutionService {
 
   // HTTP entry point: analysis may end in a syntax rejection instead of an execution.
   async submit(userId: string, workspaceId: string, body: unknown) {
-    const input = parse(executionRequest, body);
+    const input = parseRequest(executionRequest, body);
     if (input.kind === 'analysis') {
       return this.analyze(userId, workspaceId, input);
     }
@@ -38,7 +54,7 @@ export class ExecutionService {
   }
 
   async create(userId: string, workspaceId: string, body: unknown) {
-    const input = parse(executionRequest, body);
+    const input = parseRequest(executionRequest, body);
     if (input.kind === 'analysis') {
       throw new ExecutionError(
         'invalid',
@@ -83,12 +99,15 @@ export class ExecutionService {
     input: ExecutionRequest,
     syntax?: SyntaxReport,
   ) {
-    const execution = await this.repo.create(
-      userId,
-      workspaceId,
-      input,
+    // Only tutor requests may search the learner's sources.
+    const sources = input.mode
+      ? await this.sources.ready(userId, workspaceId)
+      : [];
+
+    const execution = await this.repo.create(userId, workspaceId, input, {
       syntax,
-    );
+      sources,
+    });
 
     try {
       await this.publish(execution);
@@ -149,7 +168,7 @@ export class ExecutionService {
   }
 
   async accept(body: unknown) {
-    const event = parse(workerEvent, body);
+    const event = parseRequest(workerEvent, body);
     const job = await this.repo.accept(event);
 
     return this.snapshot(job);

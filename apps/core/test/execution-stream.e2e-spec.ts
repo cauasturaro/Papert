@@ -24,6 +24,9 @@ import {
 } from '../src/executions/infrastructure/aws-execution.js';
 import type { Principal } from '../src/auth/domain/auth.js';
 
+// These suites do not exercise workspace sources.
+const noSources = { ready: async () => [] };
+
 const endpoint = process.env.EXECUTION_TEST_AWS_ENDPOINT;
 
 describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
@@ -127,6 +130,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
         new PrismaExecutionRepository(db),
         new SqsExecutionQueue(),
         new ParserSyntaxChecker(),
+        noSources,
       );
       stream = new ExecutionStream(db, service);
     });

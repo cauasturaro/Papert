@@ -1,6 +1,6 @@
-# Ingestion Lambda — serverless.yml skeleton
+# Source ingestion Lambda
 # Deploy target: AWS Lambda (Python) triggered by papert-ingestion SQS queue
-# Local execution: not applicable — triggered by S3 ObjectCreated → SQS
+# Local execution: ingestion-runner bridges S3 notifications from SQS
 # Stage params: local | dev | prod
 
 service: papert-ingestion
@@ -12,12 +12,18 @@ provider:
   runtime: python3.12
   region: ${opt:region, 'us-east-1'}
   stage: ${opt:stage, 'local'}
-  memorySize: 512
-  timeout: 300
+  memorySize: 1024
+  timeout: 120
   environment:
     ENVIRONMENT: ${self:provider.stage}
     SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url, ''}
-    CORE_INTERNAL_URL: ${ssm:/papert/${self:provider.stage}/core/internal-url, ''}
+    SOURCES_BUCKET: papert-sources
+    SOURCE_CONTROL_FUNCTION: papert-core-${self:provider.stage}-sourceControl
+    OPENAI_API_KEY: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/openai/api-key}
+    EMBEDDING_MODEL: text-embedding-3-small
+    LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-url, ''}
+    LANGFUSE_PUBLIC_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-public-key, ''}
+    LANGFUSE_SECRET_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-secret-key, ''}
   iam:
     role:
       statements:
@@ -30,20 +36,26 @@ provider:
         - Effect: Allow
           Action:
             - s3:GetObject
-          Resource: !Sub "arn:aws:s3:::papert-sources/*"
+            - s3:GetObjectVersion
+          Resource: !Sub "arn:aws:s3:::papert-sources/documents/*"
+
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:papert-core-${self:provider.stage}-sourceControl"
 
 package:
   patterns:
     - "!.venv/**"
     - "!__pycache__/**"
     - "!*.pyc"
+    - "!tests/**"
 
 functions:
   ingest:
-    handler: handler.handle
+    handler: src.handler.handler
     events:
       - sqs:
           arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-ingestion"
           batchSize: 1
+          maximumConcurrency: 2
           functionResponseType: ReportBatchItemFailures
-    # TODO: implement handler.py — extract, chunk, embed, store

@@ -1,6 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Papert S3 bucket for uploaded source documents
 
+Parameters:
+  WebOrigin:
+    Type: String
+    Default: http://localhost:3000
+
 Resources:
   SourcesBucket:
     Type: AWS::S3::Bucket
@@ -8,3 +13,35 @@ Resources:
       BucketName: papert-sources
       VersioningConfiguration:
         Status: Enabled
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [PUT]
+            AllowedOrigins: [!Ref WebOrigin]
+            AllowedHeaders: [content-type, content-length]
+            ExposedHeaders: [ETag]
+            MaxAge: 600
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: s3:ObjectCreated:*
+            Queue: !ImportValue papert-ingestion-QueueArn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: documents/
+          - Event: s3:ObjectRemoved:*
+            Queue: !ImportValue papert-ingestion-QueueArn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: documents/

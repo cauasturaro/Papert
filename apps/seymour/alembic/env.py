@@ -59,9 +59,12 @@ def do_run_migrations(connection: AsyncConnection) -> None:
 async def run_migrations_online() -> None:
     """Run migrations against a live DB using asyncpg."""
     engine = create_async_engine(get_url(), echo=False)
-    async with engine.connect() as conn:
+
+    # begin() commits on exit; connect() would roll back the autobegun transaction.
+    async with engine.begin() as conn:
         await conn.execute(text("SET search_path TO seymour, public"))
         await conn.run_sync(do_run_migrations)
+
     await engine.dispose()
 
 

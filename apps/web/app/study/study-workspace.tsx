@@ -16,8 +16,10 @@ import { useOpenFiles } from "./editor/use-open-files";
 import { useCollapsedPanels } from "./use-collapsed-panels";
 import { ExplorerPanel } from "./explorer/explorer-panel";
 import { SeymourPanel } from "./seymour/seymour-panel";
+import { SourcesPanel } from "./sources/sources-panel";
 import { StudyLayout } from "./study-layout";
 import { StudyNavbar } from "./study-navbar";
+import { WorkspaceResources } from "./workspace-resources";
 import type { Workspace } from "./study-api";
 import type { useStudy } from "./use-study";
 
@@ -120,13 +122,18 @@ export function StudyWorkspace({ study, workspace }: StudyWorkspaceProps) {
           />
         }
         explorer={
-          <ExplorerPanel
-            files={files}
-            savedFiles={workspace.files}
-            activePath={active}
-            onFilesChange={study.setFiles}
-            onOpenFile={openFiles.open}
-            onPathMoved={openFiles.rename}
+          <WorkspaceResources
+            files={
+              <ExplorerPanel
+                files={files}
+                savedFiles={workspace.files}
+                activePath={active}
+                onFilesChange={study.setFiles}
+                onOpenFile={openFiles.open}
+                onPathMoved={openFiles.rename}
+              />
+            }
+            sources={<SourcesPanel workspaceId={workspace.id} />}
           />
         }
         editor={

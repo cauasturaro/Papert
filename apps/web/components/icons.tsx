@@ -180,3 +180,28 @@ export function FlagIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function UploadIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+    </Icon>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+    </Icon>
+  );
+}
+
+export function BookIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2V5Z" />
+      <path d="M4 19a2 2 0 0 1 2-2h13" />
+    </Icon>
+  );
+}
