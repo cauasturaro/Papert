@@ -74,3 +74,12 @@ ruff==0.11.11
 
 # AWS execution transport
 boto3==1.40.74
+
+# Tutor orchestration and self-hosted tracing
+langchain-core==1.7.4
+langchain-openai==1.7.3
+openai==3.42.1
+langgraph==1.2.19
+langsmith==0.14.17
+langfuse==5.1.0
+mangum==0.22.0

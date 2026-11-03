@@ -33,10 +33,14 @@ export class AuthService {
     const { email, password } = parseCredentials(body);
     await this.limiter.check(email, peer);
 
-    if (Array.from(password).length < 15) {
+    if (
+      Array.from(password).length < 8 ||
+      !/\p{L}/u.test(password) ||
+      !/\p{Nd}/u.test(password)
+    ) {
       throw new AuthError(
         400,
-        'Use at least 15 characters and no more than 128 bytes.',
+        'Use at least 8 characters, including at least one letter and one number (maximum 128 bytes).',
       );
     }
 

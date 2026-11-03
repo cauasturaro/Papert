@@ -32,14 +32,19 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 export function ExecutionPanel({
   workspaceId,
   revision,
+  activeFile,
+  selection,
 }: {
   workspaceId: string;
   revision: number;
+  activeFile?: string;
+  selection?: { start: number; end: number };
 }) {
   const [execution, setExecution] = useState<Execution | null>(null);
   const [quota, setQuota] = useState<Quota | null>(null);
   const [prompt, setPrompt] = useState("");
-  const [kind, setKind] = useState("chat");
+  const [mode, setMode] = useState("doubt");
+  const [effort, setEffort] = useState("low");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -48,6 +53,10 @@ export function ExecutionPanel({
     prompt: string;
     kind: string;
     revision: number;
+    mode: string;
+    effort: string;
+    activeFile?: string;
+    selection?: { start: number; end: number };
   } | null>(null);
 
   useEffect(() => {
@@ -181,8 +190,12 @@ export function ExecutionPanel({
     const payload = pending ?? {
       requestKey: crypto.randomUUID(),
       prompt,
-      kind,
+      kind: "chat",
       revision,
+      mode,
+      effort,
+      activeFile,
+      selection,
     };
     setPending(payload);
     setBusy(true);
@@ -232,8 +245,9 @@ export function ExecutionPanel({
     <section className="space-y-4" aria-label="Seymour execution">
       <h2 className="text-xl font-semibold">Seymour</h2>
       <p className="text-sm">
-        Deterministic transport preview. No AI or code execution; steps remain
-        locked.
+        Ask about your saved code or learn one step at a time. Seymour reads
+        your saved context without executing your code. Step approval is
+        separate.
       </p>
 
       {quota && (
@@ -257,18 +271,40 @@ export function ExecutionPanel({
         }}
       >
         <label className="block" htmlFor="execution-kind">
-          Request type
+          Tutor mode
         </label>
         <select
           id="execution-kind"
           className="auth-input"
-          value={kind}
+          value={mode}
           disabled={busy || running || !!pending}
-          onChange={(event) => setKind(event.target.value)}
+          onChange={(event) => setMode(event.target.value)}
         >
-          <option value="chat">Chat</option>
-          <option value="analysis">Analysis transport preview</option>
+          <option value="doubt">Doubt — a focused hint</option>
+          <option value="teaching">Teaching — step by step</option>
+          <option value="solution">
+            Solution guidance — after three saved attempts
+          </option>
         </select>
+
+        <label className="block" htmlFor="execution-effort">
+          Reasoning effort
+        </label>
+        <select
+          id="execution-effort"
+          className="auth-input"
+          value={effort}
+          disabled={busy || running || !!pending}
+          onChange={(event) => setEffort(event.target.value)}
+        >
+          <option value="low">Low — direct response</option>
+          <option value="medium">Medium — balanced reasoning</option>
+          <option value="high">High — thinking enabled</option>
+        </select>
+        <p className="text-sm">
+          Current file: {activeFile ?? "none"}. Solution guidance requires
+          attempts on three different saved revisions of this step.
+        </p>
 
         <label className="block" htmlFor="execution-prompt">
           Message about your saved revision {revision}

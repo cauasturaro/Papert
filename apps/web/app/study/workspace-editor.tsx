@@ -28,7 +28,10 @@ type Props = {
   savedFiles: Files;
   onChange: (files: Files) => void;
   workspaceId: string;
-  tutor: React.ReactNode;
+  tutor: (
+    activeFile: string | undefined,
+    selection: { start: number; end: number } | undefined,
+  ) => React.ReactNode;
 };
 
 export function WorkspaceEditor({
@@ -40,6 +43,11 @@ export function WorkspaceEditor({
 }: Props) {
   const [plainText, setPlainText] = useState(false);
   const [selection, setSelection] = useState("");
+  const [codeSelection, setCodeSelection] = useState<{
+    path: string;
+    start: number;
+    end: number;
+  } | null>(null);
   const [operation, setOperation] = useState<"file" | "directory" | "rename">(
     "file",
   );
@@ -252,6 +260,15 @@ export function WorkspaceEditor({
                 onChange={(event) =>
                   onChange({ ...files, [selected]: event.target.value })
                 }
+                onSelect={(event) => {
+                  const editor = event.currentTarget;
+
+                  setCodeSelection({
+                    path: selected,
+                    start: editor.selectionStart,
+                    end: editor.selectionEnd,
+                  });
+                }}
               />
             )}
 
@@ -262,6 +279,9 @@ export function WorkspaceEditor({
                 value={files[selected] ?? ""}
                 onChange={(content) =>
                   onChange({ ...files, [selected]: content })
+                }
+                onSelectionChange={(range) =>
+                  setCodeSelection({ path: selected, ...range })
                 }
               />
             )}
@@ -284,7 +304,13 @@ export function WorkspaceEditor({
           aria-label="Seymour tutor"
           className={`workspace-panel ${panel !== "tutor" ? "hidden lg:block" : ""}`}
         >
-          {tutor}
+          {tutor(
+            isFile ? selected : undefined,
+            codeSelection?.path === selected &&
+              files[selected] === savedFiles[selected]
+              ? { start: codeSelection.start, end: codeSelection.end }
+              : undefined,
+          )}
         </aside>
       </div>
     </section>

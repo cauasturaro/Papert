@@ -91,7 +91,7 @@ describe('Authentication policy', () => {
   let auth: AuthService;
   let tokens: JweTokens;
 
-  const password = 'a long safe passphrase';
+  const password = 'study123';
 
   beforeEach(() => {
     repo = new MemoryRepository();
@@ -154,18 +154,43 @@ describe('Authentication policy', () => {
     }
   });
 
-  it('rejects short registration passwords and malformed input', async () => {
+  it('rejects short passwords, missing letters or numbers, and malformed input', async () => {
     for (const body of [
       null,
       {},
       { email: 'bad', password },
       { email: 'a@b.com', password: 'short' },
+      { email: 'a@b.com', password: 'short12' },
+      { email: 'a@b.com', password: 'abcdefgh' },
+      { email: 'a@b.com', password: '12345678' },
       { email: 'a@b.com', password: 'é'.repeat(65) },
     ]) {
       await expect(auth.register(body, 'peer')).rejects.toMatchObject({
         status: 400,
       });
     }
+  });
+
+  it('accepts Unicode letters and numbers without requiring uppercase or symbols', async () => {
+    const credentials = { email: 'unicode@example.com', password: 'études١٢' };
+
+    const grant = await auth.register(credentials, 'peer');
+
+    expect(grant.user.email).toBe(credentials.email);
+  });
+
+  it('continues to accept existing passwords without numbers at login', async () => {
+    const credentials = {
+      email: 'existing@example.com',
+      password: 'a long existing passphrase',
+    };
+    const passwordHash = await new ArgonPasswords().hash(credentials.password);
+    await repo.createUser(credentials.email, passwordHash);
+
+    const grant = await auth.login(credentials, 'peer');
+
+    expect(grant.user.email).toBe(credentials.email);
+    expect(repo.users).toHaveLength(1);
   });
 
   it('prevents cross-user access to existing session resources', async () => {

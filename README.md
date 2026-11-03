@@ -2,62 +2,47 @@
 
 Software development learning platform with the Seymour AI tutor.
 
-**Stack:** Next.js · NestJS + Prisma + PostgreSQL · FastAPI · Docker Compose + Floci
+- [Web](apps/web/README.md): the interface for studying, editing code and chatting with Seymour.
+- [Core](apps/core/README.md): the API for authentication, workspaces and execution management.
+- [Seymour](apps/seymour/README.md): the AI tutor that reads saved code and provides guidance.
+- [Ingestion](apps/ingestion/README.md): document processing for source search; not implemented yet.
+- [Infrastructure](infra/README.md): database, queues, storage and local service setup.
+- **Floci**: emulates AWS services locally, including RDS, SQS, S3 and DynamoDB.
+- **Langfuse**: the separate self-hosted service for AI traces, token usage and costs.
 
-## Prerequisites
+Requires Docker Compose, Make, OpenSSL and Python 3.
+Run commands from the repository root.
 
-Docker with Compose, Make, OpenSSL.
-
-## Local infrastructure
-
-```sh
-make up     # start local infrastructure (emulated RDS, queues)
-make check  # verify SQL connectivity and pgvector
-make down   # stop without removing volumes
-```
-
-## Migrations
+## First setup
 
 ```sh
-set -a && . ./.env && set +a
-export DATABASE_URL="postgresql://core_user:${CORE_DB_PASSWORD}@localhost:7001/papert?schema=core"
-make migrate-core
+make up
 ```
 
-## Applications
+Add `OPENAI_API_KEY` to the generated `.env`.
 
-Run each in a separate terminal after infrastructure is up and migrations are applied.
+## Run everything
 
 ```sh
-# Web — port 3000
-cd apps/web && npm ci && npm run dev
+make up-all
 ```
+
+Builds the applications, applies migrations and starts Web, Core, Seymour,
+the execution runner, Floci and Langfuse in Docker.
+
+| Service  | URL                   |
+| -------- | --------------------- |
+| Web      | http://localhost:3000 |
+| Core     | http://localhost:3001 |
+| Seymour  | http://localhost:3002 |
+| Langfuse | http://localhost:3003 |
+
+Langfuse login: `LF_ADMIN_EMAIL` and `LF_ADMIN_PASSWORD` in `.env.langfuse`.
+
+## Stop everything
 
 ```sh
-# Core — port 3001
-cd apps/core && npm ci --legacy-peer-deps && npm run start:dev
+make down-all
 ```
 
-```sh
-# Seymour — port 3002
-cd apps/seymour
-python3.14 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn main:app --reload --port 3002
-```
-
-See `apps/core/AUTHENTICATION.md` for auth secrets and test setup.
-
-## Async execution runner
-
-Requires Core and Seymour dependencies, infrastructure up, and migrations applied.
-Set `CHAT_QUEUE_URL`, `RESULTS_QUEUE_URL`, `AWS_ENDPOINT_URL`, and `AWS_REGION` in
-the Core environment (see `.env.example`). Then, from `apps/core`:
-
-```sh
-npm run build
-npm run executions:local
-```
-
-Runs alongside Core and Web in a separate terminal. Does not start through the Compose `apps` profile.
-Override `SEYMOUR_PYTHON` with an absolute interpreter path if the default venv path does not apply.
+Database and trace volumes are preserved.

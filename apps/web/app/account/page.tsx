@@ -75,13 +75,19 @@ export default function Account() {
               type="password"
               autoComplete={register ? "new-password" : "current-password"}
               required
-              minLength={register ? 15 : 1}
+              minLength={register ? 8 : 1}
+              pattern={register ? "(?=.*\\p{L})(?=.*\\p{Nd}).*" : undefined}
+              title={
+                register
+                  ? "Include at least one letter and one number."
+                  : undefined
+              }
               maxLength={128}
               aria-describedby="password-help"
             />
             <p id="password-help" className="text-sm">
               {register
-                ? "Use at least 15 characters, up to 128 bytes. Spaces and password managers are welcome."
+                ? "Use at least 8 characters, including one letter and one number, up to 128 bytes. No symbols or uppercase letters required."
                 : "Enter the password you used to create your account."}
             </p>
             <button className="auth-button" type="submit" disabled={busy}>

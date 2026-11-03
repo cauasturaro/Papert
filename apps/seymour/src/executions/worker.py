@@ -1,4 +1,4 @@
-"""Deterministic worker; no student code or model is executed."""
+"""Execution worker. Legacy jobs keep their deterministic transport behavior."""
 
 import time
 from collections.abc import Callable
@@ -25,8 +25,19 @@ def run_job(
 
     lease = claim["lease"]
     context = claim["input"]
-    if claim["budget"] != 1000 or context["kind"] not in {"chat", "analysis"}:
+    tutor = "mode" in context
+    expected_budget = 8000 if tutor else 1000
+    if claim["budget"] != expected_budget or context["kind"] not in {"chat", "analysis"}:
         raise ValueError("Invalid authorized execution context")
+
+    if tutor:
+        try:
+            run_tutor_job(execution_id, lease, context, claim["budget"], control, publish)
+        except Exception:
+            control({"action": "failed", "executionId": execution_id, "lease": lease})
+            raise
+
+        return
 
     chunks = [
         "Your saved workspace was received. ",
@@ -72,3 +83,70 @@ def run_job(
     except Exception:
         control({"action": "failed", "executionId": execution_id, "lease": lease})
         raise
+
+
+def run_tutor_job(execution_id, lease, context, budget, control, publish):
+    import os
+
+    from src.tutor.application.tutor import run_tutor
+    from src.tutor.domain.context import TutorContext
+    from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.tutor.infrastructure.tracing import TutorTrace
+
+    snapshot = TutorContext.model_validate(
+        {key: context[key] for key in TutorContext.model_fields if key in context}
+    )
+    trace = TutorTrace()
+    model = OpenAIModel(
+        os.environ["OPENAI_API_KEY"],
+        os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
+        trace.generation,
+    )
+    index = 0
+
+    def active():
+        state = control({"action": "active", "executionId": execution_id, "lease": lease})
+
+        return state["active"]
+
+    def progress(text, tokens):
+        nonlocal index
+        index += 1
+        publish(
+            {
+                "version": 1,
+                "executionId": execution_id,
+                "lease": lease,
+                "index": index,
+                "status": "running",
+                "text": text,
+                "tokens": tokens,
+            }
+        )
+
+    with trace.execution(execution_id, snapshot.sessionId) as span:
+        result = run_tutor(
+            snapshot,
+            context["prompt"],
+            context["mode"],
+            context.get("effort", "low"),
+            context["solutionAllowed"],
+            budget,
+            model,
+            active,
+            progress,
+            trace.tool,
+        )
+        span.update(metadata={"calls": result["calls"], "tokens": result["tokens"]})
+
+        publish(
+            {
+                "version": 1,
+                "executionId": execution_id,
+                "lease": lease,
+                "index": 100,
+                "status": "completed",
+                "text": result["text"],
+                "tokens": result["tokens"],
+            }
+        )

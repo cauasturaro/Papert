@@ -1,0 +1,26 @@
+services:
+  web:
+    environment:
+      HOSTNAME: 0.0.0.0
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/public/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 36
+      start_period: 30s
+    networks:
+      default:
+      papert:
+        aliases:
+          - langfuse-web
+
+networks:
+  papert:
+    external: true
+    name: papert-local

@@ -1,16 +1,10 @@
-# Document ingestion
+# Ingestion
 
-This service will consume S3 object creation events through a dedicated SQS queue, extract document text, split it into chunks, generate embeddings, and store the results in PostgreSQL with pgvector.
+The planned document-processing worker for Papert's source search.
 
-Implementation is pending. No Lambda handler or application dependencies have been added.
+It will receive upload events through SQS, extract text, split it into chunks,
+generate embeddings and store searchable content in PostgreSQL with pgvector.
 
-## Python environment
+Only the Serverless configuration exists. The worker is not implemented and has no startup command yet.
 
-From this directory, using Python 3.14:
-
-```sh
-python3.14 -m venv .venv
-source .venv/bin/activate
-```
-
-The virtual environment is local and ignored by Git. Service dependencies will be recorded when implementation begins.
+See the [project README](../../README.md) for the services available today.

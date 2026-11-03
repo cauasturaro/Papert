@@ -59,10 +59,12 @@ export function CodeEditor({
   path,
   value,
   onChange,
+  onSelectionChange,
 }: {
   path: string;
   value: string;
   onChange: (value: string) => void;
+  onSelectionChange: (range: { start: number; end: number }) => void;
 }) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -121,6 +123,19 @@ export function CodeEditor({
       language={language}
       value={value}
       onChange={(content) => onChange(content ?? "")}
+      onMount={(editor) => {
+        editor.onDidChangeCursorSelection((event) => {
+          const model = editor.getModel();
+          if (!model) {
+            return;
+          }
+
+          const start = model.getOffsetAt(event.selection.getStartPosition());
+          const end = model.getOffsetAt(event.selection.getEndPosition());
+
+          onSelectionChange({ start, end });
+        });
+      }}
       loading={
         <p className="p-4" role="status">
           Loading editor…

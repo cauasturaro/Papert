@@ -25,7 +25,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
 
     const emails: string[] = [];
     const origin = 'http://localhost:3000';
-    const password = 'a long test passphrase';
+    const password = 'test1234';
     const tokens = new JweTokens(
       'test',
       JSON.stringify({ test: 'ab'.repeat(32) }),

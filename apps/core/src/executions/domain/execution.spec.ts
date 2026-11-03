@@ -2,6 +2,21 @@ import { randomUUID } from 'node:crypto';
 import { executionRequest, workerEvent, period } from './execution.js';
 
 describe('Execution trust boundaries', () => {
+  it.each(['low', 'medium', 'high'])('accepts tutor effort %s', (effort) => {
+    const input = {
+      requestKey: randomUUID(),
+      revision: 0,
+      kind: 'chat',
+      prompt: 'Help',
+      mode: 'doubt',
+      effort,
+    };
+
+    const result = executionRequest.safeParse(input);
+
+    expect(result.success).toBe(true);
+  });
+
   it('rejects client-controlled context, billing and progression', () => {
     const input = {
       requestKey: randomUUID(),
@@ -34,7 +49,7 @@ describe('Execution trust boundaries', () => {
 
     for (const changes of [
       { tokens: -1 },
-      { tokens: 1001 },
+      { tokens: 8001 },
       { index: 101 },
       { text: 'x'.repeat(4001) },
       { approved: true },

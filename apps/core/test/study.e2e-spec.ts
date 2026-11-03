@@ -44,7 +44,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
       const response = await api('post', '/auth/register')
         .send({
           email: `study-${randomUUID()}@example.com`,
-          password: 'a long study passphrase',
+          password: 'a long study passphrase 1',
         })
         .expect(201);
 

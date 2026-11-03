@@ -156,13 +156,15 @@ function StudySpace() {
             files={files}
             savedFiles={workspace.files}
             onChange={setFiles}
-            tutor={
+            tutor={(activeFile, selection) => (
               <ExecutionPanel
                 key={workspace.id}
                 workspaceId={workspace.id}
                 revision={workspace.revision}
+                activeFile={activeFile}
+                selection={selection}
               />
-            }
+            )}
           />
 
           <form

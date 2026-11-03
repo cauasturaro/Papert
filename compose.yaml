@@ -52,8 +52,7 @@ services:
     entrypoint: [psql, -v, ON_ERROR_STOP=1]
 
   # ── Application services (apps profile) ──────────────────────────────────────
-  # Start with: make up-apps  or  docker compose --profile apps up -d
-  # For development, prefer running each app individually — see README.md.
+  # Start the complete local stack with make up-all.
 
   core:
     profiles: [apps]
@@ -68,6 +67,13 @@ services:
       AUTH_JWE_ACTIVE_KID: ${AUTH_JWE_ACTIVE_KID:-}
       AUTH_JWE_KEYS: ${AUTH_JWE_KEYS:-}
       DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD:?Run make up}@floci:7001/papert?schema=core
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://floci:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      CHAT_QUEUE_URL: http://floci:4566/000000000000/papert-chat
+      RESULTS_QUEUE_URL: http://floci:4566/000000000000/papert-results
+      SESSIONS_TABLE: papert-sessions
     depends_on:
       floci:
         condition: service_healthy
@@ -89,10 +95,47 @@ services:
       floci:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3002/health', timeout=5).read()",
+        ]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  execution-runner:
+    profiles: [apps]
+    build:
+      context: .
+      dockerfile: infra/runner/Dockerfile
+    # Keep the runner's AWS and control endpoints on loopback inside Floci's network namespace.
+    network_mode: service:floci
+    environment:
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD:?Run make up}@localhost:7001/papert?schema=core
+      AUTH_JWE_ACTIVE_KID: ${AUTH_JWE_ACTIVE_KID:-}
+      AUTH_JWE_KEYS: ${AUTH_JWE_KEYS:-}
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://localhost:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      CHAT_QUEUE_URL: http://localhost:4566/000000000000/papert-chat
+      RESULTS_QUEUE_URL: http://localhost:4566/000000000000/papert-results
+      SESSIONS_TABLE: papert-sessions
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-nano-2026-03-17}
+      LANGFUSE_BASE_URL: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+    depends_on:
+      core:
+        condition: service_healthy
+      seymour:
+        condition: service_healthy
+      floci:
+        condition: service_healthy
 
   web:
     profiles: [apps]

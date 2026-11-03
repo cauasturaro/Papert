@@ -126,7 +126,7 @@ const sweep = setInterval(() => {
   );
 }, 60000);
 sweep.unref();
-console.info('Local deterministic execution runner ready.');
+console.info('Local execution runner ready.');
 
 await Promise.all([
   consume(
@@ -145,6 +145,11 @@ await Promise.all([
             RESULTS_QUEUE_URL: resultsUrl,
             LOCAL_CONTROL_URL: `http://127.0.0.1:${address.port}/control`,
             LOCAL_CONTROL_SECRET: secret,
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            OPENAI_MODEL: process.env.OPENAI_MODEL,
+            LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
+            LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
+            LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,
           },
           stdio: ['pipe', 'inherit', 'inherit'],
         });

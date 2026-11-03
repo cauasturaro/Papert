@@ -19,6 +19,11 @@ provider:
     CORE_EXECUTION_CONTROL_FUNCTION: papert-core-${self:provider.stage}-executionControl
     ENVIRONMENT: ${self:provider.stage}
     SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url, ''}
+    OPENAI_API_KEY: ${ssm:/papert/${self:provider.stage}/seymour/openai-api-key, ''}
+    OPENAI_MODEL: ${env:OPENAI_MODEL, 'gpt-5.4-nano-2026-03-17'}
+    LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-url, ''}
+    LANGFUSE_PUBLIC_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-public-key, ''}
+    LANGFUSE_SECRET_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-secret-key, ''}
   iam:
     role:
       statements:
@@ -42,6 +47,8 @@ package:
     - "!tests/**"
     - "!__pycache__/**"
     - "!*.pyc"
+    - "!.env*"
+    - "!evals/**"
 
 functions:
   api:

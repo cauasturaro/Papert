@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const DAILY_LIMIT = 30000;
 export const ATTEMPT_BUDGET = 1000;
+export const TUTOR_ATTEMPT_BUDGET = 8000;
 export const MAX_ATTEMPTS = 3;
 export const RESERVATION = ATTEMPT_BUDGET * MAX_ATTEMPTS;
 export const RATE_LIMIT = 10;
@@ -17,8 +18,23 @@ export const executionRequest = z
     revision: z.number().int().nonnegative(),
     kind: z.enum(['chat', 'analysis']),
     prompt: z.string().trim().min(1).max(2000),
+    mode: z.enum(['doubt', 'teaching', 'solution']).optional(),
+    effort: z.enum(['low', 'medium', 'high']).optional(),
+    activeFile: z.string().min(1).max(200).optional(),
+    selection: z
+      .object({
+        start: z.number().int().nonnegative(),
+        end: z.number().int().nonnegative(),
+      })
+      .strict()
+      .optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => !input.mode || input.kind === 'chat')
+  .refine(
+    (input) =>
+      input.mode || (!input.effort && !input.activeFile && !input.selection),
+  );
 
 export const workerEvent = z
   .object({
@@ -28,7 +44,7 @@ export const workerEvent = z
     index: z.number().int().min(1).max(100),
     status: z.enum(['running', 'completed', 'failed']),
     text: z.string().max(4000),
-    tokens: z.number().int().min(0).max(ATTEMPT_BUDGET),
+    tokens: z.number().int().min(0).max(TUTOR_ATTEMPT_BUDGET),
   })
   .strict();
 

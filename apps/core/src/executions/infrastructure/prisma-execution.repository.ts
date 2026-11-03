@@ -9,9 +9,9 @@ import {
   LEASE_MS,
   MAX_ATTEMPTS,
   RATE_LIMIT,
-  RESERVATION,
   period,
   terminal,
+  TUTOR_ATTEMPT_BUDGET,
 } from '../domain/execution.js';
 import type {
   ExecutionRequest,
@@ -20,6 +20,12 @@ import type {
 } from '../domain/execution.js';
 
 type Transaction = Prisma.TransactionClient;
+
+function attemptBudget(input: Prisma.JsonValue) {
+  const snapshot = input as Record<string, unknown>;
+
+  return snapshot.mode ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
+}
 
 export class PrismaExecutionRepository implements ExecutionRepository {
   constructor(
@@ -39,13 +45,15 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       limit: DAILY_LIMIT,
       used: quota?.used ?? 0,
       reserved: quota?.reserved ?? 0,
-      reservation: RESERVATION,
+      reservation: TUTOR_ATTEMPT_BUDGET * MAX_ATTEMPTS,
       resetsAt: new Date(`${today}T00:00:00Z`).getTime() + 86400000,
     };
   }
 
   async create(userId: string, workspaceId: string, input: ExecutionRequest) {
     const now = this.now();
+    const budget = input.mode ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
+    const reservation = budget * MAX_ATTEMPTS;
 
     const execution = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM core.app_user WHERE id = ${userId}::uuid FOR UPDATE`;
@@ -70,7 +78,11 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           previous.workspaceId !== workspaceId ||
           old.kind !== input.kind ||
           old.prompt !== input.prompt ||
-          old.revision !== input.revision
+          old.revision !== input.revision ||
+          old.mode !== input.mode ||
+          old.effort !== input.effort ||
+          old.activeFile !== input.activeFile ||
+          JSON.stringify(old.selection) !== JSON.stringify(input.selection)
         ) {
           throw new StudyError(
             409,
@@ -89,7 +101,10 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       }
       const workspace = await tx.workspace.findUniqueOrThrow({
         where: { id: workspaceId },
-        include: { roadmap: true, session: true },
+        include: {
+          roadmap: true,
+          session: true,
+        },
       });
       if (workspace.revision !== input.revision) {
         throw new StudyError(
@@ -107,7 +122,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           'Execution rate limit reached. Retry in one minute.',
         );
       }
-      if (quota.used + quota.reserved + RESERVATION > DAILY_LIMIT) {
+      if (quota.used + quota.reserved + reservation > DAILY_LIMIT) {
         throw new StudyError(
           429,
           'Daily token quota exhausted. It resets at 00:00 UTC.',
@@ -120,9 +135,44 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         throw new StudyError(409, 'No active study step.');
       }
 
+      const files = workspace.files as Record<string, string>;
+      if (
+        input.activeFile &&
+        (!Object.hasOwn(files, input.activeFile) ||
+          input.activeFile.endsWith('/'))
+      ) {
+        throw new StudyError(400, 'Select a file in the saved workspace.');
+      }
+      if (input.selection) {
+        const content = input.activeFile ? files[input.activeFile] : undefined;
+        if (
+          content === undefined ||
+          input.selection.start > input.selection.end ||
+          input.selection.end > content.length
+        ) {
+          throw new StudyError(400, 'Selection is outside the saved file.');
+        }
+      }
+
+      const recentResults = input.mode
+        ? await tx.studyAttempt.findMany({
+            where: { workspaceId, stepId: step.id },
+            select: { revision: true, result: true },
+            orderBy: { createdAt: 'desc' },
+            take: 3,
+          })
+        : [];
+      const solutionAllowed = recentResults.length >= 3;
+      if (input.mode === 'solution' && !solutionAllowed) {
+        throw new StudyError(
+          403,
+          'Solution guidance requires three saved attempts on different revisions of this step.',
+        );
+      }
+
       await tx.executionQuota.update({
         where: { id: quota.id },
-        data: { reserved: { increment: RESERVATION } },
+        data: { reserved: { increment: reservation } },
       });
 
       return tx.execution.create({
@@ -133,12 +183,21 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           requestKey: input.requestKey,
           createdAt: now,
           deadline: new Date(now.getTime() + DEADLINE_MS),
+          reserved: reservation,
           input: {
             ...input,
             sessionId: workspace.session.id,
             stepId: step.id,
             files: workspace.files,
             challenge: step.challenge,
+            ...(input.mode
+              ? {
+                  objective: definition.description,
+                  stepTitle: step.title,
+                  solutionAllowed,
+                  recentResults,
+                }
+              : {}),
           },
         },
       });
@@ -251,11 +310,12 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       }
 
       const lease = randomUUID();
+      const budget = attemptBudget(job.input);
       await tx.executionQuota.update({
         where: { id: job.quotaId },
         data: {
-          reserved: { decrement: ATTEMPT_BUDGET },
-          used: { increment: ATTEMPT_BUDGET },
+          reserved: { decrement: budget },
+          used: { increment: budget },
         },
       });
       await tx.execution.update({
@@ -266,8 +326,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           leases: { push: lease },
           leaseUntil: new Date(now.getTime() + LEASE_MS),
           attempts: { increment: 1 },
-          reserved: { decrement: ATTEMPT_BUDGET },
-          charged: { increment: ATTEMPT_BUDGET },
+          reserved: { decrement: budget },
+          charged: { increment: budget },
           text: '',
           eventIndex: 0,
           sequence: { increment: 1 },
@@ -278,7 +338,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         status: 'running',
         lease,
         input: job.input,
-        budget: ATTEMPT_BUDGET,
+        budget,
       };
     });
   }
@@ -319,6 +379,13 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   async accept(event: WorkerEvent) {
     const job = await this.locked(event.executionId, async (tx, record) => {
       let current = record;
+      const budget = attemptBudget(current.input);
+      if (event.tokens > budget) {
+        throw new StudyError(
+          400,
+          'Usage exceeds the authorized attempt budget.',
+        );
+      }
 
       // Each leased attempt settles once, even if its result arrives after retry or cancellation.
       if (
@@ -326,7 +393,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         current.leases.includes(event.lease) &&
         !current.settledLeases.includes(event.lease)
       ) {
-        const refund = ATTEMPT_BUDGET - event.tokens;
+        const refund = budget - event.tokens;
         await tx.executionQuota.update({
           where: { id: current.quotaId },
           data: { used: { decrement: refund } },

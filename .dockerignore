@@ -1,0 +1,15 @@
+.git/
+internal/
+Docs/
+**/AGENTS.md
+**/.env*
+**/node_modules/
+**/.venv/
+**/dist/
+**/.next/
+**/coverage/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.tsbuildinfo
+.DS_Store
