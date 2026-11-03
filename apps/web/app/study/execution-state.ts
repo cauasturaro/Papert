@@ -2,6 +2,7 @@ export type Execution = {
   id: string;
   workspaceId: string;
   kind: "chat" | "analysis";
+  prompt: string | null;
   status: string;
   text: string;
   sequence: number;

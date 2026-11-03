@@ -4,7 +4,8 @@ import { DomainError } from '../../common/domain/domain-error.js';
 
 export class ExecutionError extends DomainError {}
 
-export const DAILY_LIMIT = 30000;
+// The execution_quota_check database constraint enforces the same limit.
+export const DAILY_LIMIT = 100000;
 export const ATTEMPT_BUDGET = 1000;
 export const TUTOR_ATTEMPT_BUDGET = 8000;
 export const MAX_ATTEMPTS = 3;
@@ -15,6 +16,8 @@ export const LEASE_MS = 60 * 1000;
 export const terminal = (status: string) =>
   !['queued', 'running'].includes(status);
 export const period = (now: Date) => now.toISOString().slice(0, 10);
+export const resetsAt = (now: Date) =>
+  new Date(`${period(now)}T00:00:00Z`).getTime() + 86400000;
 
 export const executionRequest = z
   .object({

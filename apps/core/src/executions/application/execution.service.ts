@@ -100,12 +100,13 @@ export class ExecutionService {
   }
 
   snapshot(job: ExecutionRecord) {
-    const input = job.input as { kind?: string };
+    const input = job.input as { kind?: string; prompt?: string };
 
     return {
       id: job.id,
       workspaceId: job.workspaceId,
       kind: input.kind ?? 'chat',
+      prompt: input.prompt ?? null,
       status: job.status,
       text: job.text,
       sequence: job.sequence,

@@ -11,6 +11,7 @@ import {
 import { SparklesIcon } from "@/components/icons";
 import { CollapsePanelButton } from "../side-panel-controls";
 import { SeymourComposer } from "./seymour-composer";
+import type { Execution } from "../execution-state";
 import { useSeymour, type CodeSelection } from "./use-seymour";
 
 type SeymourPanelProps = {
@@ -23,7 +24,7 @@ type SeymourPanelProps = {
 
 export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
   const seymour = useSeymour(props);
-  const hasConversation = !!seymour.sentPrompt || !!seymour.execution;
+  const hasConversation = seymour.history.length > 0 || !!seymour.execution;
 
   return (
     <section
@@ -64,25 +65,11 @@ export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
           </EmptyState>
         )}
 
-        {seymour.sentPrompt && (
-          <p className="ml-8 rounded-lg rounded-br-sm bg-primary px-3 py-2 whitespace-pre-wrap text-primary-foreground">
-            {seymour.sentPrompt}
-          </p>
-        )}
+        {seymour.history.map((job) => (
+          <ChatTurn key={job.id} execution={job} live={false} />
+        ))}
 
-        {seymour.execution && (
-          <div className="mr-4 space-y-2 rounded-lg rounded-bl-sm border border-border bg-muted px-3 py-2">
-            <p role="status" className="flex items-center gap-2 text-xs">
-              <span className="sr-only">Execution:</span>
-              <Badge size="sm" variant="secondary">
-                {seymour.execution.status}
-              </Badge>
-            </p>
-            <p className="whitespace-pre-wrap" aria-live="polite">
-              {seymour.execution.text}
-            </p>
-          </div>
-        )}
+        {seymour.execution && <ChatTurn execution={seymour.execution} live />}
 
         <p role="status" className="text-muted-foreground">
           {seymour.message}
@@ -96,5 +83,42 @@ export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
         selection={props.selection}
       />
     </section>
+  );
+}
+
+// Only the followed job announces updates; past turns are static transcript.
+function ChatTurn({
+  execution,
+  live,
+}: {
+  execution: Execution;
+  live: boolean;
+}) {
+  return (
+    <>
+      {execution.prompt && (
+        <p className="ml-8 rounded-lg rounded-br-sm bg-primary px-3 py-2 whitespace-pre-wrap text-primary-foreground">
+          {execution.prompt}
+        </p>
+      )}
+
+      <div className="mr-4 space-y-2 rounded-lg rounded-bl-sm border border-border bg-muted px-3 py-2">
+        <p
+          role={live ? "status" : undefined}
+          className="flex items-center gap-2 text-xs"
+        >
+          <span className="sr-only">Execution:</span>
+          <Badge size="sm" variant="secondary">
+            {execution.status}
+          </Badge>
+        </p>
+        <p
+          className="whitespace-pre-wrap"
+          aria-live={live ? "polite" : undefined}
+        >
+          {execution.text}
+        </p>
+      </div>
+    </>
   );
 }

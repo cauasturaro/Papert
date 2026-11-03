@@ -35,6 +35,7 @@ export function useSeymour({
   selection?: CodeSelection;
 }) {
   const [execution, setExecution] = useState<Execution | null>(null);
+  const [history, setHistory] = useState<Execution[]>([]);
   const [quota, setQuota] = useState<Quota | null>(null);
   const [prompt, setPrompt] = useState("");
   const [mode, setMode] = useState("doubt");
@@ -43,7 +44,6 @@ export function useSeymour({
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
   const [pending, setPending] = useState<SeymourRequest | null>(null);
-  const [sentPrompt, setSentPrompt] = useState("");
 
   useEffect(() => {
     let disposed = false;
@@ -54,7 +54,11 @@ export function useSeymour({
     ])
       .then(([jobs, currentQuota]) => {
         if (!disposed) {
-          setExecution(jobs.find((job) => job.kind === "chat") ?? null);
+          // Jobs arrive newest first; only the latest one is followed live.
+          const chats = jobs.filter((job) => job.kind === "chat");
+
+          setExecution(chats[0] ?? null);
+          setHistory(chats.slice(1).reverse());
           setQuota(currentQuota);
           setMessage("");
         }
@@ -192,9 +196,13 @@ export function useSeymour({
         `workspaces/${workspaceId}`,
         payload,
       );
+      if (execution && execution.id !== created.id) {
+        setHistory((past) => [...past, execution]);
+      }
+
       setExecution(created);
       setPending(null);
-      setSentPrompt(payload.prompt);
+      setPrompt("");
 
       const currentQuota = await request<Quota>("quota");
       setQuota(currentQuota);
@@ -225,15 +233,18 @@ export function useSeymour({
     }
   }
 
+  // A running request holds its retry reservation until it settles, so only judge the quota while idle.
   const blocked =
-    !!quota && quota.used + quota.reserved + quota.reservation > quota.limit;
+    !running &&
+    !!quota &&
+    quota.used + quota.reserved + quota.reservation > quota.limit;
 
   return {
     execution,
+    history,
     quota,
     prompt,
     setPrompt,
-    sentPrompt,
     mode,
     setMode,
     effort,

@@ -29,6 +29,15 @@ type SeymourComposerProps = {
 
 const compact = new Intl.NumberFormat("en", { notation: "compact" });
 
+// The quota resets at 00:00 UTC; show that moment in the viewer's own time zone.
+const resetTime = new Intl.DateTimeFormat("en", {
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZoneName: "short",
+});
+
 export function SeymourComposer({
   seymour,
   revision,
@@ -67,8 +76,8 @@ export function SeymourComposer({
           <AlertDescription className="text-destructive">
             Not enough daily quota for another request (
             {compact.format(remainingTokens(seymour.quota))} left,{" "}
-            {compact.format(seymour.quota.reservation)} needed). Try again after
-            00:00 UTC.
+            {compact.format(seymour.quota.reservation)} needed). Resets{" "}
+            {resetTime.format(seymour.quota.resetsAt)}.
           </AlertDescription>
         </Alert>
       )}
@@ -238,7 +247,8 @@ function remainingTokens(quota: SeymourQuota) {
 function QuotaMeter({ quota }: { quota: SeymourQuota }) {
   const consumed = quota.used + quota.reserved;
   const remaining = remainingTokens(quota);
-  const details = `Tokens: ${remaining} left of ${quota.limit} (${quota.used} used + ${quota.reserved} reserved). Daily reset: 00:00 UTC. A request needs ${quota.reservation} free tokens and reserves up to three attempts; unused tokens are returned.`;
+  const reset = resetTime.format(quota.resetsAt);
+  const details = `Tokens: ${remaining} left of ${quota.limit} (${quota.used} used + ${quota.reserved} held). Resets ${reset}. Sending needs ${quota.reservation} free tokens. If Seymour fails mid-answer it retries, up to three tries of ${quota.reservation} each, so tokens for the retries are held while it runs; whatever isn't spent comes back when it finishes.`;
 
   return (
     <Tooltip content={details} side="top">

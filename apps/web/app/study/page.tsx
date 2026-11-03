@@ -21,7 +21,7 @@ function StudySpace() {
   const study = useStudy();
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
+    <div data-viewport-app className="flex h-dvh flex-col overflow-hidden">
       {study.workspace ? (
         <StudyWorkspace
           key={study.workspace.id}

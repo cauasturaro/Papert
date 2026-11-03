@@ -20,6 +20,14 @@
   }
 }
 
+/*
+ * The study IDE fills the viewport and scrolls inside its panels. Body-level
+ * nodes (editor overlays, portals) must not make the page itself scroll.
+ */
+html:has([data-viewport-app]) {
+  overflow: hidden;
+}
+
 /* Panel chrome for the study IDE; flat edge-to-edge panels on small screens. */
 .panel-surface {
   min-height: 0;

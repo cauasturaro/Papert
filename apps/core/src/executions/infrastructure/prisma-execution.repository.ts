@@ -14,6 +14,7 @@ import {
   MAX_ATTEMPTS,
   RATE_LIMIT,
   period,
+  resetsAt,
   terminal,
   TUTOR_ATTEMPT_BUDGET,
   usesModel,
@@ -80,7 +81,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   ) {}
 
   async quota(userId: string) {
-    const today = period(this.now());
+    const now = this.now();
+    const today = period(now);
     const quota = await this.db.executionQuota.findUnique({
       where: { userId_period: { userId, period: today } },
     });
@@ -92,7 +94,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       used: quota?.used ?? 0,
       reserved: quota?.reserved ?? 0,
       reservation: TUTOR_ATTEMPT_BUDGET,
-      resetsAt: new Date(`${today}T00:00:00Z`).getTime() + 86400000,
+      resetsAt: resetsAt(now),
     };
   }
 
@@ -262,9 +264,12 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       const remaining = DAILY_LIMIT - quota.used - quota.reserved;
       const attempts = Math.min(MAX_ATTEMPTS, Math.floor(remaining / budget));
       if (attempts < 1) {
+        const left = Math.max(0, remaining);
+        const reset = period(new Date(resetsAt(now)));
+
         throw new ExecutionError(
           'rate_limited',
-          'Daily token quota exhausted. It resets at 00:00 UTC.',
+          `Not enough daily token quota for this request (${left} left, ${budget} needed). It resets on ${reset} at 00:00 UTC.`,
         );
       }
 

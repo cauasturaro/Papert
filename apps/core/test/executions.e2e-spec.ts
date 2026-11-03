@@ -9,6 +9,10 @@ import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-synta
 import { ExecutionService } from '../src/executions/application/execution.service.js';
 import { ExecutionStream } from '../src/executions/infrastructure/aws-execution.js';
 import { configureHttp } from '../src/http.js';
+import {
+  DAILY_LIMIT,
+  RESERVATION,
+} from '../src/executions/domain/execution.js';
 
 const enabled = !!process.env.AUTH_TEST_DATABASE_URL;
 
@@ -201,11 +205,17 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
     ).toHaveLength(9);
     expect(await service.quota(alice.userId)).toMatchObject({
       used: 0,
-      reserved: 30000,
+      reserved: 10 * RESERVATION,
     });
     expect(await db.execution.count({ where: { userId: alice.userId } })).toBe(
       10,
     );
+
+    // The rate limit capped the burst; use up the rest of the day's quota directly.
+    await db.executionQuota.updateMany({
+      where: { userId: alice.userId },
+      data: { used: DAILY_LIMIT - 10 * RESERVATION },
+    });
 
     now = new Date('2026-11-02T12:01:01Z');
     const published = queue.publish.mock.calls.length;
@@ -386,9 +396,11 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
   it('reserves only the attempts that fit the remaining quota', async () => {
     const alice = await student();
     await service.create(alice.userId, alice.workspaceId, payload());
+
+    // With the first job's 3000 still reserved, 1500 remain: room for one 1000-token attempt.
     await db.executionQuota.updateMany({
       where: { userId: alice.userId },
-      data: { used: 25500 },
+      data: { used: DAILY_LIMIT - 4500 },
     });
 
     const job = await service.create(
@@ -413,7 +425,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
       reserved: 0,
     });
     expect(await service.quota(alice.userId)).toMatchObject({
-      used: 26500,
+      used: DAILY_LIMIT - 3500,
       reserved: 3000,
     });
   });

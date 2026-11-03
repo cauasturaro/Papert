@@ -147,6 +147,8 @@ export function CodeEditor({
         tabSize: 2,
         wordWrap: "on",
         fixedOverflowWidgets: true,
+        // The shadow-DOM context menu mounts outside .monaco-editor, so it misses the theme's CSS variables.
+        useShadowDOM: false,
       }}
     />
   );
