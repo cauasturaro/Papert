@@ -383,6 +383,41 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
     });
   });
 
+  it('reserves only the attempts that fit the remaining quota', async () => {
+    const alice = await student();
+    await service.create(alice.userId, alice.workspaceId, payload());
+    await db.executionQuota.updateMany({
+      where: { userId: alice.userId },
+      data: { used: 25500 },
+    });
+
+    const job = await service.create(
+      alice.userId,
+      alice.workspaceId,
+      payload(),
+    );
+
+    expect(job.reserved).toBe(1000);
+    expect((await service.quota(alice.userId)).reserved).toBe(4000);
+    await expect(
+      service.create(alice.userId, alice.workspaceId, payload()),
+    ).rejects.toThrow('quota');
+
+    const claim = await service.claim(job.id);
+    const retry = await service.failed(job.id, claim.lease!);
+
+    expect(retry.status).toBe('failed');
+    expect(await service.owned(alice.userId, job.id)).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      reserved: 0,
+    });
+    expect(await service.quota(alice.userId)).toMatchObject({
+      used: 26500,
+      reserved: 3000,
+    });
+  });
+
   it('authorizes tutor context, solution eligibility and per-execution token budgets', async () => {
     const alice = await student();
     const path = `workspaces/${alice.workspaceId}`;

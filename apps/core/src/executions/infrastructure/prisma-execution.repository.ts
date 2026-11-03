@@ -30,6 +30,13 @@ function attemptBudget(input: Prisma.JsonValue) {
   return usesModel(input) ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
 }
 
+// A job may hold fewer than MAX_ATTEMPTS when the quota only had room for some.
+function retriesExhausted(job: Execution) {
+  return (
+    job.attempts >= MAX_ATTEMPTS || job.reserved < attemptBudget(job.input)
+  );
+}
+
 type AttemptState = { status?: string; executionId?: string };
 
 async function lockWorkspace(tx: Transaction, id: string, userId?: string) {
@@ -84,7 +91,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       limit: DAILY_LIMIT,
       used: quota?.used ?? 0,
       reserved: quota?.reserved ?? 0,
-      reservation: TUTOR_ATTEMPT_BUDGET * MAX_ATTEMPTS,
+      reservation: TUTOR_ATTEMPT_BUDGET,
       resetsAt: new Date(`${today}T00:00:00Z`).getTime() + 86400000,
     };
   }
@@ -98,7 +105,6 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     const now = this.now();
     const tracked = !!input.mode || input.kind === 'analysis';
     const budget = tracked ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
-    const reservation = budget * MAX_ATTEMPTS;
 
     const execution = await this.db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM core.app_user WHERE id = ${userId}::uuid FOR UPDATE`;
@@ -251,12 +257,18 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           'Execution rate limit reached. Retry in one minute.',
         );
       }
-      if (quota.used + quota.reserved + reservation > DAILY_LIMIT) {
+
+      // Reserve as many attempts as the remaining quota allows; one is enough to start.
+      const remaining = DAILY_LIMIT - quota.used - quota.reserved;
+      const attempts = Math.min(MAX_ATTEMPTS, Math.floor(remaining / budget));
+      if (attempts < 1) {
         throw new ExecutionError(
           'rate_limited',
           'Daily token quota exhausted. It resets at 00:00 UTC.',
         );
       }
+
+      const reservation = budget * attempts;
 
       await tx.executionQuota.update({
         where: { id: quota.id },
@@ -567,7 +579,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       if (job.leaseUntil && job.leaseUntil > now) {
         return { status: 'busy' };
       }
-      if (job.attempts >= MAX_ATTEMPTS) {
+      if (retriesExhausted(job)) {
         await this.finish(tx, job, 'failed');
 
         return { status: 'failed' };
@@ -612,7 +624,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       if (terminal(job.status) || job.lease !== lease) {
         return { status: job.status };
       }
-      if (job.attempts >= MAX_ATTEMPTS) {
+      if (retriesExhausted(job)) {
         await this.finish(tx, job, 'failed');
 
         return { status: 'failed' };

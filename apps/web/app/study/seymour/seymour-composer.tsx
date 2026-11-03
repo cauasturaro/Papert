@@ -62,10 +62,13 @@ export function SeymourComposer({
 
   return (
     <div className="shrink-0 space-y-2 p-3">
-      {seymour.blocked && (
+      {seymour.blocked && seymour.quota && (
         <Alert variant="destructive" size="sm" role="alert">
           <AlertDescription className="text-destructive">
-            Daily quota exhausted. Try again after 00:00 UTC.
+            Not enough daily quota for another request (
+            {compact.format(remainingTokens(seymour.quota))} left,{" "}
+            {compact.format(seymour.quota.reservation)} needed). Try again after
+            00:00 UTC.
           </AlertDescription>
         </Alert>
       )}
@@ -226,13 +229,16 @@ function PillSelect({
   );
 }
 
-function QuotaMeter({
-  quota,
-}: {
-  quota: NonNullable<ReturnType<typeof useSeymour>["quota"]>;
-}) {
+type SeymourQuota = NonNullable<ReturnType<typeof useSeymour>["quota"]>;
+
+function remainingTokens(quota: SeymourQuota) {
+  return Math.max(0, quota.limit - quota.used - quota.reserved);
+}
+
+function QuotaMeter({ quota }: { quota: SeymourQuota }) {
   const consumed = quota.used + quota.reserved;
-  const details = `Tokens: ${quota.used} used + ${quota.reserved} reserved / ${quota.limit}. Daily reset: 00:00 UTC. Each request reserves ${quota.reservation} tokens for up to three attempts.`;
+  const remaining = remainingTokens(quota);
+  const details = `Tokens: ${remaining} left of ${quota.limit} (${quota.used} used + ${quota.reserved} reserved). Daily reset: 00:00 UTC. A request needs ${quota.reservation} free tokens and reserves up to three attempts; unused tokens are returned.`;
 
   return (
     <Tooltip content={details} side="top">
@@ -240,7 +246,7 @@ function QuotaMeter({
         variant="ghost"
         size="sm"
         className="h-7 shrink-0 gap-2 px-2 text-xs font-normal whitespace-nowrap text-muted-foreground"
-        aria-label={`Token quota: ${consumed} of ${quota.limit}`}
+        aria-label={`Token quota: ${remaining} of ${quota.limit} left`}
       >
         <Progress
           size="sm"
@@ -250,7 +256,7 @@ function QuotaMeter({
           aria-hidden="true"
         />
         <span className="@max-[18rem]:sr-only">
-          {compact.format(consumed)} / {compact.format(quota.limit)}
+          {compact.format(remaining)} left
         </span>
       </TooltipTrigger>
     </Tooltip>
