@@ -1,3 +1,4 @@
+import { assertAttemptEligible } from '../domain/attempt-eligibility.js';
 import { z } from 'zod';
 import {
   attemptSchema,
@@ -78,12 +79,7 @@ export class StudyService {
 
     const current = workspace.roadmap.definition.steps[workspace.currentStep];
 
-    if (!current || stepId !== current.id) {
-      throw new StudyError(
-        'forbidden',
-        'Only the current step accepts attempts.',
-      );
-    }
+    assertAttemptEligible(current, stepId);
 
     return this.repo.recordAttempt(userId, id, revision, stepId);
   }

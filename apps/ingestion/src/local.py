@@ -7,8 +7,8 @@ from urllib.parse import urlparse
 
 import httpx
 
-from src.application.pipeline import process_batch
 from src.infrastructure.composition import build_ports
+from src.infrastructure.events import process_batch
 from src.infrastructure.store import connect
 
 

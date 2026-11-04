@@ -5,8 +5,9 @@ DDL and DML land in the correct schema regardless of the connection-string defau
 """
 
 from collections.abc import AsyncGenerator
+from functools import cache
 
-from sqlalchemy import event, text
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -31,23 +32,27 @@ def _create_engine():
     url = get_settings().seymour_database_url
     if not url:
         return None
+
     engine = create_async_engine(url, echo=False, pool_pre_ping=True)
     event.listen(engine.sync_engine, "connect", _set_search_path)
+
     return engine
 
 
-_engine = _create_engine()
+@cache
+def get_session_factory() -> async_sessionmaker[AsyncSession] | None:
+    engine = _create_engine()
+    if engine is None:
+        return None
 
-SessionLocal: async_sessionmaker[AsyncSession] | None = (
-    async_sessionmaker(_engine, expire_on_commit=False) if _engine else None
-)
+    return async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency: yields a scoped AsyncSession per request."""
-    if SessionLocal is None:
-        raise RuntimeError(
-            "Database not configured — set SEYMOUR_DATABASE_URL and restart."
-        )
-    async with SessionLocal() as session:
+    factory = get_session_factory()
+    if factory is None:
+        raise RuntimeError("Database not configured — set SEYMOUR_DATABASE_URL and restart.")
+
+    async with factory() as session:
         yield session

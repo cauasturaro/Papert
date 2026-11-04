@@ -3,11 +3,11 @@
 import time
 
 from httpx import Client
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
+from src.shared.inference import BudgetExceeded, Message, TutorCancelled
 from src.tutor.application.guidance import Guidance
-from src.tutor.application.tutor import BudgetExceeded, TutorCancelled
 
 DEFAULT_MODEL = "gpt-5.4-nano-2026-03-17"
 # Standard USD per million tokens: uncached input, cached input, output.
@@ -31,13 +31,21 @@ class OpenAIModel:
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY is required")
 
+        self._history: dict[int, tuple[Message, BaseMessage]] = {}
         self.api_key = api_key
         self.model = model
         self.generation_observer = generation_observer
         self.response_name = response_name
-        self.response_schema = response_schema or Guidance.model_json_schema(mode="serialization")
+        schema = Guidance.model_json_schema(mode="serialization")
+        schema["required"] = list(schema["properties"])
 
-    def complete(self, messages: list[BaseMessage], tools, effort, remaining, deadline, active):
+        self.response_schema = response_schema or schema
+
+    def complete(self, messages: list[Message], tools, effort, remaining, deadline, active):
+        message_ids = {id(message) for message in messages}
+        self._history = {key: entry for key, entry in self._history.items() if key in message_ids}
+        provider_messages = [self._to_langchain(message) for message in messages]
+
         maximum_output = {"low": 2048, "medium": 3072, "high": 4096}[effort]
         payload = {}
 
@@ -92,7 +100,7 @@ class OpenAIModel:
                 "parallel_tool_calls": False,
             }
             # shortcut: exact preflight needs the private serializer; check payload parity on upgrades.
-            request = model._get_request_payload(messages, **parameters)
+            request = model._get_request_payload(provider_messages, **parameters)
             count_request = {
                 key: value
                 for key, value in request.items()
@@ -118,7 +126,7 @@ class OpenAIModel:
                 self.model, effort, input_tokens, maximum_output
             ) as generation:
                 response = model.invoke(
-                    messages,
+                    provider_messages,
                     config={"callbacks": []},
                     **parameters,
                     timeout=max(0.1, deadline - time.monotonic()),
@@ -167,6 +175,60 @@ class OpenAIModel:
                     )
 
         if payload.get("status") != "completed":
-            return response.model_copy(update={"content": "", "tool_calls": []})
+            response = response.model_copy(update={"content": "", "tool_calls": []})
 
-        return response
+        result = from_langchain(response)
+        # Replay provider reasoning and call IDs unchanged across tool/repair turns.
+        self._history[id(result)] = (result, response)
+
+        return result
+
+    def _to_langchain(self, message: Message) -> BaseMessage:
+        previous = self._history.get(id(message))
+        if previous is not None:
+            return previous[1]
+
+        if message.role == "system":
+            return SystemMessage(content=message.content)
+        if message.role == "user":
+            return HumanMessage(content=message.content)
+        if message.role == "tool":
+            return ToolMessage(
+                content=message.content, tool_call_id=message.tool_call_id, name=message.name
+            )
+
+        return AIMessage(content=message.content, tool_calls=message.tool_calls)
+
+
+def from_langchain(response: AIMessage) -> Message:
+    """Select the last final answer while keeping Responses phases inside this adapter."""
+    final_blocks = [
+        block
+        for block in response.content
+        if isinstance(block, dict) and block.get("phase") == "final_answer"
+    ]
+    text = response.text
+
+    if final_blocks:
+        final_message_id = final_blocks[-1].get("id")
+        text = "".join(
+            block["text"]
+            for block in final_blocks
+            if block.get("type") == "text"
+            and (not final_message_id or block.get("id") == final_message_id)
+        )
+
+    usage = None
+    if response.usage_metadata:
+        usage = {
+            "input_tokens": response.usage_metadata["input_tokens"],
+            "output_tokens": response.usage_metadata["output_tokens"],
+            "total_tokens": response.usage_metadata["total_tokens"],
+        }
+
+    calls = [
+        {"id": call["id"], "name": call["name"], "args": call["args"]}
+        for call in response.tool_calls
+    ]
+
+    return Message(role="assistant", content=text, tool_calls=calls, usage=usage)

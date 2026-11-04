@@ -1,0 +1,123 @@
+"""Workflow execution and progress reporting with injected runtime resources."""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from src.executions.application.ports import Control, ExecutionResources, Publisher
+from src.executions.domain.execution import Result
+
+if TYPE_CHECKING:
+    from src.tutor.domain.context import TutorContext
+
+
+def run_tutor_job(
+    execution_id,
+    lease,
+    context,
+    budget,
+    control: Control,
+    publish: Publisher,
+    resources: Callable[[TutorContext], ExecutionResources],
+):
+    from src.tutor.application.tutor import run_tutor
+    from src.tutor.domain.context import TutorContext
+
+    snapshot = TutorContext.model_validate(
+        {key: context[key] for key in TutorContext.model_fields if key in context}
+    )
+
+    runtime = resources(snapshot)
+    index = 0
+
+    def active():
+        return control.active(execution_id, lease)
+
+    def progress(text, tokens):
+        nonlocal index
+        index += 1
+
+        publish(Result(execution_id, lease, index, "running", text, tokens))
+
+    with runtime.trace.execution(execution_id, snapshot.sessionId) as span:
+        result = run_tutor(
+            snapshot,
+            context["prompt"],
+            context["mode"],
+            context.get("effort", "low"),
+            context["solutionAllowed"],
+            budget,
+            runtime.model,
+            active,
+            progress,
+            runtime.trace.tool,
+            runtime.search,
+            clock=runtime.clock,
+        )
+        span.record_metadata({"calls": result["calls"], "tokens": result["tokens"]})
+
+        publish(Result(execution_id, lease, 100, "completed", result["text"], result["tokens"]))
+
+
+ANALYSIS_MESSAGES = {
+    "budget": "The saved files exceed this analysis budget. Reduce the workspace and analyze again.",
+    "invalid": "Seymour could not produce a valid evaluation. Your progress did not change; analyze again.",
+    "deadline": "The analysis time limit was reached. Your progress did not change; analyze again.",
+    "cancelled": "",
+}
+
+
+def run_analysis_job(
+    execution_id,
+    lease,
+    context,
+    budget,
+    control: Control,
+    publish: Publisher,
+    resources: Callable[[], ExecutionResources],
+):
+    from src.evaluation.application.evaluator import run_analysis, summary_text
+    from src.evaluation.domain.evaluation import AnalysisContext
+
+    snapshot = AnalysisContext.model_validate(
+        {key: context[key] for key in AnalysisContext.model_fields if key in context}
+    )
+
+    runtime = resources()
+    index = 0
+
+    def active():
+        return control.active(execution_id, lease)
+
+    def progress(text, tokens):
+        nonlocal index
+        index += 1
+
+        publish(Result(execution_id, lease, index, "running", text, tokens))
+
+    with runtime.trace.execution(execution_id, snapshot.sessionId, "seymour-evaluation") as span:
+        result = run_analysis(
+            snapshot,
+            context.get("effort", "medium"),
+            budget,
+            runtime.model,
+            active,
+            progress,
+            clock=runtime.clock,
+        )
+        span.record_metadata(
+            {
+                "calls": result["calls"],
+                "tokens": result["tokens"],
+                "reason": result["reason"],
+            }
+        )
+
+        text = ANALYSIS_MESSAGES.get(result["reason"], "")
+        evaluation = None
+        if result["evaluation"] is not None:
+            text = summary_text(result["evaluation"])
+            evaluation = result["evaluation"].model_dump()
+
+        publish(Result(execution_id, lease, 100, "completed", text, result["tokens"], evaluation))

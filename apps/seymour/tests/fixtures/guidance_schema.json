@@ -1,0 +1,53 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "explanation": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Explanation",
+      "type": "string"
+    },
+    "quote_from": {
+      "default": "",
+      "maxLength": 300,
+      "title": "Quote From",
+      "type": "string"
+    },
+    "quote_to": {
+      "default": "",
+      "maxLength": 300,
+      "title": "Quote To",
+      "type": "string"
+    },
+    "next_step": {
+      "maxLength": 800,
+      "minLength": 1,
+      "title": "Next Step",
+      "type": "string"
+    },
+    "question": {
+      "maxLength": 500,
+      "minLength": 1,
+      "title": "Question",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 5,
+      "title": "Sources",
+      "type": "array"
+    }
+  },
+  "required": [
+    "explanation",
+    "quote_from",
+    "quote_to",
+    "next_step",
+    "question",
+    "sources"
+  ],
+  "title": "Guidance",
+  "type": "object"
+}

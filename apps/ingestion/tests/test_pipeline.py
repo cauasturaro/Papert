@@ -4,8 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from src.application.pipeline import process_batch, process_record
 from src.application.ports import Embedded, Ports
+from src.infrastructure.control import RpcControl
+from src.infrastructure.events import decode_record, process_batch, process_record
+from src.infrastructure.extraction import DocumentExtractor
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DOCUMENT = "11111111-1111-4111-8111-111111111111"
@@ -119,11 +121,12 @@ class FakeTrace:
 
 def ports(control=None, store=None, objects=None):
     return Ports(
-        control=control or FakeControl(),
+        control=RpcControl(control or FakeControl()),
         objects=objects or FakeObjects(),
         store=store or FakeStore(),
         embeddings=FakeEmbeddings(),
         trace=FakeTrace(),
+        extractor=DocumentExtractor(),
     )
 
 
@@ -292,3 +295,37 @@ def test_reindex_skipped_by_core_does_nothing():
 
     assert control.actions() == ["reindex"]
     assert store.events == []
+
+
+@pytest.mark.parametrize(
+    ("event_name", "kind"),
+    [
+        ("ObjectCreated:CompleteMultipartUpload", "created"),
+        ("ObjectRemoved:DeleteMarkerCreated", "removed"),
+        ("ObjectRestore:Completed", "ignored"),
+    ],
+)
+def test_transport_maps_event_names_and_preserves_object_identity(event_name, kind):
+    record = s3_record(event=event_name, key="folder%2Fsource+notes.md")
+
+    decoded = decode_record(record)
+
+    assert len(decoded.notifications) == 1
+    notification = decoded.notifications[0]
+    assert notification.kind == kind
+    assert notification.bucket == "papert-sources"
+    assert notification.key == "folder/source notes.md"
+    assert notification.version_id == "v1"
+    assert notification.sequencer == "00A1"
+    assert notification.size == 10
+
+
+def test_unknown_events_keep_the_existing_silent_ignore_behavior(capsys):
+    control = FakeControl()
+    store = FakeStore()
+
+    process_record(ports(control, store), s3_record(event="ObjectRestore:Completed"))
+
+    assert control.calls == []
+    assert store.events == []
+    assert capsys.readouterr().out == ""

@@ -20,18 +20,20 @@ async def test_direct_http_call_cannot_forge_a_model_context():
     assert forged.status_code == 422
 
 
-def test_gateway_adapter_uses_the_leased_worker(monkeypatch):
+@pytest.mark.parametrize("fails", [False, True])
+def test_gateway_adapter_uses_the_leased_worker(monkeypatch, fails):
     import mangum_handler
-    from src.tutor.infrastructure import router
+    from src.executions.infrastructure import router
 
     calls = []
 
-    def worker(event, _context):
+    def worker(event):
         calls.append(event)
 
-        return {"batchItemFailures": []}
+        if fails:
+            raise RuntimeError("execution failed")
 
-    monkeypatch.setattr(router, "handler", worker)
+    monkeypatch.setattr(router, "run_single_execution", worker)
     execution_id = str(uuid4())
     event = {
         "version": "2.0",
@@ -54,5 +56,9 @@ def test_gateway_adapter_uses_the_leased_worker(monkeypatch):
 
     response = mangum_handler.handler(event, object())
 
-    assert response["statusCode"] == 200
-    assert calls[0]["Records"][0]["messageId"] == execution_id
+    assert response["statusCode"] == (503 if fails else 200)
+    if fails:
+        assert (
+            response["body"] == '{"detail":"Execution could not complete; retry its existing ID"}'
+        )
+    assert calls == [{"version": 1, "executionId": execution_id}]

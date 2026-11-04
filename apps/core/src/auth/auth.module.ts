@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { AuthService } from './application/auth.service.js';
 import { SignInRateLimiter } from './application/sign-in-rate-limiter.js';
@@ -45,7 +46,14 @@ import { PrismaService } from '../infrastructure/database/prisma.service.js';
 
         const limiter = new SignInRateLimiter(new PrismaAttemptStore(db));
 
-        return new AuthService(repository, passwords, tokens, limiter);
+        return new AuthService(
+          repository,
+          passwords,
+          tokens,
+          limiter,
+          () => new Date(),
+          randomUUID,
+        );
       },
     },
   ],

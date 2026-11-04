@@ -4,7 +4,18 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
+from src.application.control import (
+    Begin,
+    Complete,
+    Completion,
+    Document,
+    Fail,
+    Reindex,
+    Removal,
+    Removed,
+)
 from src.domain.chunking import Chunk
+from src.domain.extraction import Extracted
 
 
 @dataclass(frozen=True)
@@ -15,7 +26,15 @@ class Embedded:
 
 
 class Control(Protocol):
-    def __call__(self, payload: dict) -> dict: ...
+    def begin(self, request: Begin) -> Document: ...
+    def complete(self, request: Complete) -> Completion: ...
+    def fail(self, request: Fail) -> Completion: ...
+    def removal(self, request: Removal) -> Removed: ...
+    def reindex(self, request: Reindex) -> Document: ...
+
+
+class Extractor(Protocol):
+    def extract(self, declared_format: str, data: bytes) -> Extracted: ...
 
 
 class ObjectReader(Protocol):
@@ -65,3 +84,4 @@ class Ports:
     store: SourceIndex
     embeddings: Embedder
     trace: IngestionTracer
+    extractor: Extractor

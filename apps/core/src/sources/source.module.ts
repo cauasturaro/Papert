@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { PrismaService } from '../infrastructure/database/prisma.service.js';
@@ -17,7 +18,12 @@ import { SourceController } from './infrastructure/source.controller.js';
         const repository = new PrismaSourceRepository(db);
         const storage = new S3SourceStorage();
 
-        return new SourceService(repository, storage);
+        return new SourceService(
+          repository,
+          storage,
+          () => new Date(),
+          randomUUID,
+        );
       },
     },
   ],

@@ -3,17 +3,14 @@
 import json
 import posixpath
 import re
-import time
 from collections.abc import Callable
 from typing import Literal, TypedDict
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, START, StateGraph
-from langsmith import tracing_context
 from pydantic import ValidationError
 
 from src.evaluation.domain.evaluation import AnalysisContext, Evaluation, ModelEvaluation, bind
-from src.tutor.application.tutor import BudgetExceeded, TutorCancelled, TutorModel, final_text
+from src.shared.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
 
 MAX_MODEL_CALLS = 2
 DEADLINE_SECONDS = 45
@@ -46,7 +43,7 @@ SYSTEM = (
 
 
 class AnalysisState(TypedDict):
-    messages: list[BaseMessage]
+    messages: list[Message]
     tokens: int
     calls: int
     evaluation: Evaluation | None
@@ -128,16 +125,18 @@ def run_analysis(
     context: AnalysisContext,
     effort: Literal["low", "medium", "high"],
     budget: int,
-    model: TutorModel,
+    model: Model,
     active: Callable[[], bool],
     progress: Callable[[str, int], None],
+    *,
+    clock: Callable[[], float],
 ) -> dict:
     if effort not in {"low", "medium", "high"}:
         raise ValueError("Unsupported analysis effort")
     if type(budget) is not int or not 1 <= budget <= 8000:
         raise ValueError("Invalid analysis budget")
 
-    deadline = time.monotonic() + DEADLINE_SECONDS
+    deadline = clock() + DEADLINE_SECONDS
 
     def map_files(state: AnalysisState):
         progress("Seymour is mapping your files…", 0)
@@ -157,8 +156,8 @@ def run_analysis(
             },
         }
         messages = [
-            SystemMessage(content=SYSTEM),
-            HumanMessage(content=json.dumps(payload, ensure_ascii=False)),
+            Message(role="system", content=SYSTEM),
+            Message(role="user", content=json.dumps(payload, ensure_ascii=False)),
         ]
 
         return {"messages": messages}
@@ -166,7 +165,7 @@ def run_analysis(
     def evaluate(state: AnalysisState):
         if not active():
             return {"stopped": True, "reason": "cancelled"}
-        if time.monotonic() >= deadline:
+        if clock() >= deadline:
             return {"stopped": True, "reason": "deadline"}
 
         # A repair attempt uses low effort so its smaller output reservation can still fit.
@@ -186,7 +185,7 @@ def run_analysis(
         except BudgetExceeded:
             return {"stopped": True, "reason": "budget"}
 
-        usage = response.usage_metadata
+        usage = response.usage
         if not usage or usage["total_tokens"] > budget - state["tokens"]:
             raise RuntimeError("Model usage is missing or exceeds the admitted budget")
 
@@ -202,11 +201,12 @@ def run_analysis(
 
             # Only the validation category is echoed back, never learner content.
             problem = "schema" if isinstance(error, ValidationError) else "criteria"
-            repair = HumanMessage(
+            repair = Message(
+                role="user",
                 content=(
                     f"The previous answer failed {problem} validation. Return the JSON object "
                     "again with every criterion id exactly once."
-                )
+                ),
             )
 
             return {
@@ -230,15 +230,14 @@ def run_analysis(
     graph.add_edge("map", "evaluate")
     graph.add_conditional_edges("evaluate", lambda state: END if state["stopped"] else "evaluate")
 
-    with tracing_context(enabled=False):
-        return graph.compile().invoke(
-            {
-                "messages": [],
-                "tokens": 0,
-                "calls": 0,
-                "evaluation": None,
-                "reason": "",
-                "stopped": False,
-            },
-            {"recursion_limit": 6, "callbacks": []},
-        )
+    return graph.compile().invoke(
+        {
+            "messages": [],
+            "tokens": 0,
+            "calls": 0,
+            "evaluation": None,
+            "reason": "",
+            "stopped": False,
+        },
+        {"recursion_limit": 6, "callbacks": []},
+    )

@@ -5,9 +5,10 @@ import request from 'supertest';
 import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { AppModule } from '../src/app.module.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
-import { ExecutionStream } from '../src/executions/infrastructure/aws-execution.js';
+import { ExecutionStreamService } from '../src/executions/application/execution-stream.service.js';
 import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
+import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { configureHttp } from '../src/http.js';
 
 // These suites do not exercise workspace sources.
@@ -154,7 +155,11 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
         inject: [PrismaService],
         factory: (database: PrismaService) =>
           new ExecutionService(
-            new PrismaExecutionRepository(database),
+            new PrismaExecutionRepository(
+              database,
+              undefined,
+              new PrismaAttemptProgression(),
+            ),
             queue,
             new ParserSyntaxChecker(),
             noSources,
@@ -167,7 +172,7 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
 
     db = module.get(PrismaService);
     service = module.get(ExecutionService);
-    vi.spyOn(module.get(ExecutionStream), 'broadcast').mockResolvedValue(
+    vi.spyOn(module.get(ExecutionStreamService), 'broadcast').mockResolvedValue(
       undefined,
     );
   });
@@ -346,6 +351,79 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
     )
       .send({ revision: finalRevision, stepId: 'separate-rules' })
       .expect(403);
+  });
+
+  it('rolls back usage, attempt outcome and progression together when the study adapter fails', async () => {
+    const alice = await student();
+    const revision = await save(alice.cookie, alice.workspaceId, {
+      'main.ts': 'export const value = 1;',
+    });
+    const admitted = await analyze(
+      alice.cookie,
+      alice.workspaceId,
+      revision,
+    ).expect(201);
+    const claim = await service.claim(admitted.body.id);
+    const before = await db.execution.findUniqueOrThrow({
+      where: { id: admitted.body.id },
+    });
+    const input = before.input as { attemptId: string };
+    const quotaBefore = await db.executionQuota.findUniqueOrThrow({
+      where: { id: before.quotaId },
+    });
+    const payload = evaluation(
+      input.attemptId,
+      revision,
+      'validate-input',
+      met(FIRST_CRITERIA),
+    );
+    const event = {
+      version: 1 as const,
+      executionId: before.id,
+      lease: claim.lease!,
+      index: 100,
+      status: 'completed' as const,
+      text: 'Analysis finished.',
+      tokens: 900,
+      evaluation: payload,
+    };
+    const progression = new PrismaAttemptProgression();
+    const recordOutcome = progression.recordOutcome.bind(progression);
+    vi.spyOn(progression, 'recordOutcome').mockImplementation(
+      async (tx, execution, assess) => {
+        await recordOutcome(tx, execution, assess);
+
+        throw new Error('Study write interrupted');
+      },
+    );
+    const failing = new PrismaExecutionRepository(db, undefined, progression);
+
+    await expect(failing.accept(event)).rejects.toThrow(
+      'Study write interrupted',
+    );
+
+    const unchangedExecution = await db.execution.findUniqueOrThrow({
+      where: { id: before.id },
+    });
+    const unchangedQuota = await db.executionQuota.findUniqueOrThrow({
+      where: { id: before.quotaId },
+    });
+    const unchangedWorkspace = await workspace(alice.cookie, alice.workspaceId);
+
+    expect(unchangedExecution).toEqual(before);
+    expect(unchangedQuota).toEqual(quotaBefore);
+    expect(unchangedWorkspace.currentStep).toBe(0);
+    expect(unchangedWorkspace.attempts[0].result).toMatchObject({
+      status: 'evaluating',
+      executionId: before.id,
+    });
+
+    await service.accept(event);
+
+    const completed = await workspace(alice.cookie, alice.workspaceId);
+
+    expect(completed.currentStep).toBe(1);
+    expect(completed.attempts[0].result.status).toBe('approved');
   });
 
   describe('untrusted results', () => {

@@ -66,6 +66,8 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
               new ArgonPasswords(),
               tokens,
               new SignInRateLimiter(new PrismaAttemptStore(db)),
+              () => new Date(),
+              randomUUID,
             ),
           },
         ],
@@ -177,7 +179,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
       try {
         const attempts = await Promise.all(
           Array.from({ length: 20 }, () =>
-            attemptsStore.consumeAttempt(key, 10),
+            attemptsStore.consumeAttempt(key, 10, 900),
           ),
         );
         expect(attempts.filter(Boolean)).toHaveLength(10);
@@ -186,7 +188,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
           where: { key },
           data: { resetsAt: new Date(Date.now() - 1000) },
         });
-        expect(await attemptsStore.consumeAttempt(key, 10)).toBe(true);
+        expect(await attemptsStore.consumeAttempt(key, 10, 900)).toBe(true);
       } finally {
         await db.authAttempt.delete({ where: { key } });
       }

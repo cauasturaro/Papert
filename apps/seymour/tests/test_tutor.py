@@ -1,17 +1,21 @@
 import json
 import time
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import httpx
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage
 from openai import APIStatusError
 
+from src.executions.application.ports import ExecutionResources
+from src.executions.application.workflows import run_tutor_job
+from src.shared.inference import Message
 from src.tutor.application.tools import tool_definitions
 from src.tutor.application.tutor import BudgetExceeded, TutorCancelled, run_tutor
 from src.tutor.domain.context import TutorContext
-from src.tutor.infrastructure.openai_model import OpenAIModel
+from src.tutor.infrastructure.openai_model import OpenAIModel, from_langchain
 from src.tutor.infrastructure.tracing import mask
 
 
@@ -32,7 +36,8 @@ def context():
 
 
 def response(content=None, calls=None):
-    return AIMessage(
+    return Message(
+        role="assistant",
         content=content
         or json.dumps(
             {
@@ -42,13 +47,14 @@ def response(content=None, calls=None):
             }
         ),
         tool_calls=calls or [],
-        usage_metadata={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+        usage={"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
     )
 
 
 def run(context, model, **options):
     arguments = dict(
         context=context,
+        clock=time.monotonic,
         prompt="Help me understand input validation.",
         mode="doubt",
         effort="low",
@@ -178,12 +184,20 @@ def test_guidance_uses_last_final_message_without_concatenating_other_messages(
     model = MagicMock()
     message = response()
     final_text = message.content
-    message.content = [
-        {"type": "text", "id": "msg_1", "phase": earlier_phase, "text": '{"status":"approved"}'},
-        {"type": "text", "id": "msg_2", "phase": "final_answer", "text": final_text[:20]},
-        {"type": "text", "id": "msg_2", "phase": "final_answer", "text": final_text[20:]},
-    ]
-    model.complete.return_value = message
+    provider_message = AIMessage(
+        content=[
+            {
+                "type": "text",
+                "id": "msg_1",
+                "phase": earlier_phase,
+                "text": '{"status":"approved"}',
+            },
+            {"type": "text", "id": "msg_2", "phase": "final_answer", "text": final_text[:20]},
+            {"type": "text", "id": "msg_2", "phase": "final_answer", "text": final_text[20:]},
+        ],
+        usage_metadata=message.usage,
+    )
+    model.complete.return_value = from_langchain(provider_message)
 
     result = run(context, model)
 
@@ -194,7 +208,7 @@ def test_guidance_uses_last_final_message_without_concatenating_other_messages(
 
 def test_missing_usage_is_an_error_and_keeps_the_conservative_charge(context):
     model = MagicMock()
-    model.complete.return_value = AIMessage(content="Unaccounted response")
+    model.complete.return_value = Message(role="assistant", content="Unaccounted response")
 
     with pytest.raises(RuntimeError, match="usage"):
         run(context, model)
@@ -249,7 +263,10 @@ def test_openai_preflight_admits_input_and_output_before_generation(
     mock_openai_transport(monkeypatch, handler)
     model = OpenAIModel("test-key", "gpt-5-nano-2025-08-07", generation)
 
-    messages = [SystemMessage(content="Tutor policy"), HumanMessage(content="Help")]
+    messages = [
+        Message(role="system", content="Tutor policy"),
+        Message(role="user", content="Help"),
+    ]
 
     result = model.complete(
         messages, tool_definitions(), effort, 8000, time.monotonic() + 10, lambda: True
@@ -272,7 +289,7 @@ def test_openai_preflight_admits_input_and_output_before_generation(
     assert {tool["name"] for tool in counted_fields["tools"]} == {
         tool["name"] for tool in tool_definitions()
     }
-    assert result.usage_metadata["total_tokens"] == 6
+    assert result.usage["total_tokens"] == 6
 
 
 def test_langchain_preserves_encrypted_reasoning_and_tool_results(context, monkeypatch):
@@ -475,6 +492,93 @@ def test_openai_cost_separates_cached_input_from_uncached_input(monkeypatch):
     result = model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
     cost = span.update.call_args.kwargs["cost_details"]
 
-    assert result.usage_metadata["total_tokens"] == 110
+    assert result.usage["total_tokens"] == 110
     assert cost["input"] == pytest.approx(0.0000164)
     assert cost["output"] == pytest.approx(0.0000125)
+
+
+def test_tutor_deadline_uses_the_injected_clock(context):
+    model = MagicMock()
+    moments = iter([100.0, 120.0])
+
+    result = run(context, model, clock=lambda: next(moments))
+
+    assert result["calls"] == 0
+    assert result["tokens"] == 0
+    assert "limit reached" in result["text"]
+    model.complete.assert_not_called()
+
+
+def test_tutor_workflow_accepts_provider_free_resources(context, noop_trace):
+    model = MagicMock()
+    model.complete.return_value = response()
+    runtime = ExecutionResources(model, noop_trace, lambda: 100.0)
+    control = MagicMock()
+    control.active.return_value = True
+    published = []
+    request = {
+        **context.model_dump(),
+        "prompt": "Help with validation",
+        "mode": "doubt",
+        "solutionAllowed": False,
+    }
+
+    run_tutor_job("execution", "lease", request, 8000, control, published.append, lambda _: runtime)
+
+    assert published[-1].status == "completed"
+    assert published[-1].tokens == 150
+    assert "HTTP boundary" in published[-1].text
+
+
+def test_openai_schema_preserves_the_previous_strict_guidance_schema(monkeypatch):
+    expected = json.loads((Path(__file__).parent / "fixtures/guidance_schema.json").read_text())
+    emitted = []
+    model = OpenAIModel("test-key", "gpt-5-nano", lambda *_: None)
+
+    def capture(**kwargs):
+        emitted.append(kwargs["model_kwargs"]["text"]["format"]["schema"])
+        raise RuntimeError("schema captured before any request")
+
+    monkeypatch.setattr("src.tutor.infrastructure.openai_model.ChatOpenAI", capture)
+
+    with pytest.raises(RuntimeError, match="schema captured"):
+        model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
+
+    assert emitted == [expected]
+
+
+def test_openai_schema_preserves_evaluation_overrides():
+    from src.evaluation.domain.evaluation import ModelEvaluation
+
+    schema = ModelEvaluation.model_json_schema()
+    model = OpenAIModel("test-key", "gpt-5-nano", lambda *_: None, "attempt_evaluation", schema)
+
+    assert model.response_schema == schema
+    assert model.response_name == "attempt_evaluation"
+
+
+@pytest.mark.parametrize("name", ["seymour-tutor", "seymour-evaluation"])
+def test_execution_adapter_suppresses_langsmith_and_hides_sdk_spans(monkeypatch, name):
+    from langsmith import tracing_context
+    from langsmith.run_helpers import get_tracing_context
+
+    from src.tutor.infrastructure.tracing import TutorTrace
+
+    client = MagicMock()
+    sdk_span = client.start_as_current_observation.return_value.__enter__.return_value
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "http://localhost")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr("src.tutor.infrastructure.tracing.Langfuse", lambda **_: client)
+    trace = TutorTrace()
+    measurements = {"calls": 1, "tokens": 150}
+
+    with tracing_context(enabled=True), trace.execution("execution", "session", name) as scope:
+        enabled = get_tracing_context()["enabled"]
+
+        scope.record_metadata(measurements)
+
+    assert enabled is False
+    assert scope is not sdk_span
+    sdk_span.update.assert_called_once_with(metadata=measurements)
+    client.flush.assert_called_once()

@@ -35,12 +35,26 @@ export class SourceController {
   }
 
   @Post()
-  register(
+  async register(
     @CurrentPrincipal() principal: Principal,
     @Param('workspaceId', ResourceIdPipe) workspaceId: string,
     @Body() body: unknown,
   ) {
-    return this.sources.register(principal.user.id, workspaceId, body);
+    const grant = await this.sources.register(
+      principal.user.id,
+      workspaceId,
+      body,
+    );
+
+    return {
+      source: grant.source,
+      upload: {
+        method: 'PUT' as const,
+        url: grant.upload.url,
+        headers: { 'Content-Type': grant.upload.contentType },
+        expiresAt: grant.upload.expiresAt,
+      },
+    };
   }
 
   @Delete(':sourceId')

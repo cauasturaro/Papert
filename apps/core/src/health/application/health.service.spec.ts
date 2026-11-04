@@ -1,24 +1,27 @@
 import { HealthService } from './health.service.js';
-import type { PrismaService } from '../../infrastructure/database/prisma.service.js';
 
 describe('HealthService', () => {
   let healthService: HealthService;
-  let prisma: { $queryRaw: ReturnType<typeof vi.fn> };
+  let probe: { check: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    prisma = { $queryRaw: vi.fn() };
-    healthService = new HealthService(prisma as unknown as PrismaService);
+    probe = { check: vi.fn() };
+    healthService = new HealthService(probe);
   });
 
   it('returns ok when DB query succeeds', async () => {
-    prisma.$queryRaw.mockResolvedValueOnce([{ '?column?': 1 }]);
+    probe.check.mockResolvedValueOnce(undefined);
+
     const result = await healthService.check();
+
     expect(result).toEqual({ status: 'ok', db: 'connected' });
   });
 
   it('returns degraded when DB query throws', async () => {
-    prisma.$queryRaw.mockRejectedValueOnce(new Error('connection refused'));
+    probe.check.mockRejectedValueOnce(new Error('connection refused'));
+
     const result = await healthService.check();
+
     expect(result).toEqual({ status: 'degraded', db: 'unreachable' });
   });
 });

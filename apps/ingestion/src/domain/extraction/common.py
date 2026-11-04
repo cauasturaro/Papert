@@ -2,7 +2,6 @@
 
 import re
 import textwrap
-import time
 from dataclasses import dataclass, field
 
 from src.domain.errors import IngestionFailure
@@ -10,7 +9,6 @@ from src.domain.errors import IngestionFailure
 MAX_PAGES = 300
 MAX_CHARACTERS = 600_000
 MAX_ZIP_UNCOMPRESSED = 100 * 1024 * 1024
-EXTRACTION_SECONDS = 60
 MAX_INDENT = 16
 
 
@@ -36,11 +34,6 @@ def _check_text_limit(blocks):
 
     if total > MAX_CHARACTERS:
         raise IngestionFailure("too_much_text")
-
-
-def _check_deadline(started):
-    if time.monotonic() - started > EXTRACTION_SECONDS:
-        raise IngestionFailure("too_large")
 
 
 def _clean(text):

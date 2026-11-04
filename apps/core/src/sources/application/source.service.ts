@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import type { Clock, IdGenerator } from '../../common/domain/runtime.js';
 import type { z } from 'zod';
 import { utcDayStart } from '../../common/domain/utc-day.js';
 import { validate } from '../../common/domain/validation.js';
@@ -29,13 +29,15 @@ export class SourceService {
   constructor(
     private readonly repo: SourceRepository,
     private readonly storage: SourceStorage,
+    private readonly now: Clock,
+    private readonly generateId: IdGenerator,
   ) {}
 
   async register(userId: string, workspaceId: string, body: unknown) {
     const declared = registration(parse(registerSchema, body));
 
-    const now = new Date();
-    const id = randomUUID();
+    const now = this.now();
+    const id = this.generateId();
     const key = objectKey(id, declared.format);
     const uploadExpiresAt = new Date(now.getTime() + UPLOAD_URL_SECONDS * 1000);
 
@@ -81,9 +83,8 @@ export class SourceService {
     return {
       source: presentSource(outcome.source, now),
       upload: {
-        method: 'PUT' as const,
         url,
-        headers: { 'Content-Type': declared.contentType },
+        contentType: declared.contentType,
         expiresAt: uploadExpiresAt,
       },
     };
@@ -95,7 +96,7 @@ export class SourceService {
       throw new SourceError('not_found', 'Workspace not found.');
     }
 
-    const now = new Date();
+    const now = this.now();
 
     return sources.map((source) => presentSource(source, now));
   }
@@ -148,7 +149,7 @@ export class SourceService {
   }
 
   async maintenance() {
-    const { expired, timedOut } = await this.repo.expire(new Date());
+    const { expired, timedOut } = await this.repo.expire(this.now());
 
     const pending = await this.repo.unpurged(20);
     let purged = 0;

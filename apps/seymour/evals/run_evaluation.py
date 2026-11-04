@@ -60,7 +60,13 @@ def main():
 
         with trace.execution(execution_id, context.sessionId, "seymour-evaluation-eval"):
             outcome = run_analysis(
-                context, effort, 8000, model, lambda: True, lambda _text, _tokens: None
+                context,
+                effort,
+                8000,
+                model,
+                lambda: True,
+                lambda _text, _tokens: None,
+                clock=time.monotonic,
             )
 
         evaluation = outcome["evaluation"]

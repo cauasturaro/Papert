@@ -9,10 +9,10 @@ from src.domain.extraction.common import (
     MAX_ZIP_UNCOMPRESSED,
     Block,
     Extracted,
-    _check_deadline,
     _check_text_limit,
     _clean,
 )
+from src.infrastructure.extraction.support import _check_deadline
 
 
 def _docx_heading(paragraph):

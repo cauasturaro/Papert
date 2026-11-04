@@ -1,5 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { useSessionContext } from "@/components/app/session-provider";
+import {
+  AuthRequestError,
+  submitCredentials as authenticate,
+} from "@/lib/auth/auth-api";
 
 export function useAccount() {
   const session = useSessionContext();
@@ -17,30 +21,18 @@ export function useAccount() {
     session.setMessage("");
 
     try {
-      const response = await fetch(
-        `/api/auth/${register ? "register" : "login"}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: fields.get("email"),
-            password: fields.get("password"),
-          }),
-        },
-      );
-      const data = await response.json();
+      const data = await authenticate(register, {
+        email: fields.get("email"),
+        password: fields.get("password"),
+      });
 
-      if (response.ok) {
-        session.setUser(data.user);
-        form.reset();
-      } else {
-        session.setMessage(
-          data.message ?? "Unable to sign in. Please try again.",
-        );
-      }
-    } catch {
+      session.setUser(data.user);
+      form.reset();
+    } catch (error) {
       session.setMessage(
-        "The service is unavailable. Your form is still here; please try again.",
+        error instanceof AuthRequestError
+          ? error.message
+          : "The service is unavailable. Your form is still here; please try again.",
       );
     } finally {
       session.beginAuthChange();

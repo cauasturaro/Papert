@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { AuthError } from '../domain/auth.js';
 import type { AttemptStore, SignInLimiter } from '../domain/auth.js';
 
@@ -13,13 +12,22 @@ export class SignInRateLimiter implements SignInLimiter {
       [`peer:${peer}`, 300],
       [`email:${email}`, 10],
     ] as const) {
-      const attemptKey = createHash('sha256').update(key).digest('hex');
-      const allowed = await this.attempts.consumeAttempt(attemptKey, limit);
+      const digest = await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(key),
+      );
+      const attemptKey = Buffer.from(digest).toString('hex');
+
+      const allowed = await this.attempts.consumeAttempt(
+        attemptKey,
+        limit,
+        RETRY_AFTER_SECONDS,
+      );
 
       if (!allowed) {
         throw new AuthError(
           'rate_limited',
-          'Too many attempts. Please try again in 15 minutes.',
+          `Too many attempts. Please try again in ${RETRY_AFTER_SECONDS / 60} minutes.`,
           RETRY_AFTER_SECONDS,
         );
       }

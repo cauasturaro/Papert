@@ -1,3 +1,10 @@
+import { ExecutionStreamService } from '../src/executions/application/execution-stream.service.js';
+import { createExecutionStream } from '../src/executions/infrastructure/stream-composition.js';
+import {
+  issueStreamTicket,
+  connectStream,
+} from '../src/executions/infrastructure/stream-handshake.js';
+import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
@@ -18,10 +25,7 @@ import { PrismaStudyRepository } from '../src/study/infrastructure/prisma-study.
 import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
 import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
-import {
-  ExecutionStream,
-  SqsExecutionQueue,
-} from '../src/executions/infrastructure/aws-execution.js';
+import { SqsExecutionQueue } from '../src/executions/infrastructure/aws-execution.js';
 import type { Principal } from '../src/auth/domain/auth.js';
 
 // These suites do not exercise workspace sources.
@@ -34,7 +38,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
   () => {
     let db: PrismaService;
     let service: ExecutionService;
-    let stream: ExecutionStream;
+    let stream: ExecutionStreamService;
     let principal: Principal;
     let workspaceId: string;
     let queueUrl: string;
@@ -127,12 +131,16 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
       const workspace = await studies.start(user.id, fixture.id);
       workspaceId = workspace!.id;
       service = new ExecutionService(
-        new PrismaExecutionRepository(db),
+        new PrismaExecutionRepository(
+          db,
+          undefined,
+          new PrismaAttemptProgression(),
+        ),
         new SqsExecutionQueue(),
         new ParserSyntaxChecker(),
         noSources,
       );
-      stream = new ExecutionStream(db, service);
+      stream = createExecutionStream(db, service);
     });
 
     afterAll(async () => {
@@ -173,15 +181,15 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
         executionId: job.id,
       });
 
-      const ticket = await stream.ticket(principal, job.id);
+      const ticket = await issueStreamTicket(stream, principal, job.id);
       const secret = new URL(ticket.url!).searchParams.get('ticket')!;
       await expect(
-        stream.connect('bad', secret, 'https://attacker.example'),
+        connectStream(stream, 'bad', secret, 'https://attacker.example'),
       ).rejects.toThrow('handshake');
 
-      await stream.connect('first', secret, 'http://localhost:3000');
+      await connectStream(stream, 'first', secret, 'http://localhost:3000');
       await expect(
-        stream.connect('replayed', secret, 'http://localhost:3000'),
+        connectStream(stream, 'replayed', secret, 'http://localhost:3000'),
       ).rejects.toThrow('already used');
       await stream.resume('first');
       expect(frames.at(-1)!.authorization).toContain('AWS4-HMAC-SHA256');
@@ -214,8 +222,9 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
       expect(frames.at(-1)!.body.status).toBe('running');
 
       await stream.disconnect('first');
-      const renewed = await stream.ticket(principal, job.id);
-      await stream.connect(
+      const renewed = await issueStreamTicket(stream, principal, job.id);
+      await connectStream(
+        stream,
         'second',
         new URL(renewed.url!).searchParams.get('ticket')!,
         'http://localhost:3000',
@@ -262,21 +271,23 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
         revision: 0,
         prompt: 'Review',
       });
-      const expired = await stream.ticket(principal, job.id);
+      const expired = await issueStreamTicket(stream, principal, job.id);
       await db.streamTicket.updateMany({
         where: { executionId: job.id },
         data: { expiresAt: new Date(0) },
       });
       await expect(
-        stream.connect(
+        connectStream(
+          stream,
           'expired',
           new URL(expired.url!).searchParams.get('ticket')!,
           'http://localhost:3000',
         ),
       ).rejects.toThrow('expired');
 
-      const ticket = await stream.ticket(principal, job.id);
-      await stream.connect(
+      const ticket = await issueStreamTicket(stream, principal, job.id);
+      await connectStream(
+        stream,
         'logout',
         new URL(ticket.url!).searchParams.get('ticket')!,
         'http://localhost:3000',

@@ -65,6 +65,7 @@ def main():
                     lambda: True,
                     lambda _text, _tokens: None,
                     tool,
+                    clock=time.monotonic,
                 )
 
             passed = (

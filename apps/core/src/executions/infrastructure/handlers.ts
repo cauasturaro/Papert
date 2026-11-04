@@ -1,9 +1,10 @@
+import { connectStream } from './stream-handshake.js';
 import { NestFactory } from '@nestjs/core';
 import type { INestApplicationContext } from '@nestjs/common';
 import { z } from 'zod';
 import { AppModule } from '../../app.module.js';
 import { ExecutionService } from '../application/execution.service.js';
-import { ExecutionStream } from './aws-execution.js';
+import { ExecutionStreamService } from '../application/execution-stream.service.js';
 
 let context: Promise<INestApplicationContext> | undefined;
 
@@ -13,7 +14,7 @@ async function services() {
 
   return {
     executions: app.get(ExecutionService),
-    stream: app.get(ExecutionStream),
+    stream: app.get(ExecutionStreamService),
   };
 }
 
@@ -130,7 +131,8 @@ export async function websocket(event: WebsocketEvent) {
 
   try {
     if (routeKey === '$connect') {
-      await stream.connect(
+      await connectStream(
+        stream,
         connectionId,
         event.queryStringParameters?.ticket ?? '',
         event.headers?.origin ?? event.headers?.Origin ?? '',

@@ -50,6 +50,7 @@ export interface SourceRepository {
   unpurged(limit: number): Promise<StoredSource[]>;
 }
 
+// Intentionally storage-specific: bucket, key, presigning and versions follow ADR-005.
 export interface SourceStorage {
   readonly bucket: string;
   presignUpload(

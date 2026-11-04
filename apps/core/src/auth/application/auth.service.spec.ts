@@ -1,14 +1,51 @@
 import { randomUUID } from 'node:crypto';
-import { EncryptJWT } from 'jose';
-import { AuthService } from './auth.service.js';
+import { SESSION_SECONDS, TOKEN_SECONDS, AuthService } from './auth.service.js';
 import { SignInRateLimiter } from './sign-in-rate-limiter.js';
-import { ArgonPasswords, JweTokens } from '../infrastructure/crypto.js';
 import type {
+  Passwords,
+  Tokens,
   AttemptStore,
   AuthRepository,
   User,
   Session,
 } from '../domain/auth.js';
+
+class FakePasswords implements Passwords {
+  async hash(password: string) {
+    return `hashed:${password}`;
+  }
+
+  async verify(hash: string, password: string) {
+    return hash === `hashed:${password}`;
+  }
+}
+
+class FakeTokens implements Tokens {
+  private readonly claims = new Map<
+    string,
+    {
+      userId: string;
+      sessionId: string;
+      tokenId: string;
+    }
+  >();
+
+  async issue(userId: string, sessionId: string, tokenId: string) {
+    const token = randomUUID();
+    this.claims.set(token, { userId, sessionId, tokenId });
+
+    return token;
+  }
+
+  async read(token: string) {
+    const claims = this.claims.get(token);
+    if (!claims) {
+      throw new Error('Invalid token.');
+    }
+
+    return claims;
+  }
+}
 
 class MemoryRepository implements AuthRepository, AttemptStore {
   users: User[] = [];
@@ -89,22 +126,28 @@ class MemoryRepository implements AuthRepository, AttemptStore {
 describe('Authentication policy', () => {
   let repo: MemoryRepository;
   let auth: AuthService;
-  let tokens: JweTokens;
+  let tokens: FakeTokens;
+  let now: Date;
 
   const password = 'study123';
 
   beforeEach(() => {
+    let generated = 0;
+    now = new Date('2026-11-03T23:59:59Z');
+
     repo = new MemoryRepository();
-    tokens = new JweTokens('test', JSON.stringify({ test: 'ab'.repeat(32) }));
+    tokens = new FakeTokens();
     auth = new AuthService(
       repo,
-      new ArgonPasswords(),
+      new FakePasswords(),
       tokens,
       new SignInRateLimiter(repo),
+      () => now,
+      () => `generated-${++generated}`,
     );
   });
 
-  it('registers normalized identities, salts passwords and never returns hashes', async () => {
+  it('registers normalized identities, hashes passwords and never returns hashes', async () => {
     const firstAccount = await auth.register(
       { email: 'Alice@EXAMPLE.com', password },
       'peer',
@@ -113,11 +156,39 @@ describe('Authentication policy', () => {
 
     expect(firstAccount.user.email).toBe('alice@example.com');
     expect(JSON.stringify(firstAccount)).not.toContain('password');
-    expect(repo.users[0].passwordHash).toMatch(/^\$argon2id\$/);
-    expect(repo.users[0].passwordHash).not.toBe(repo.users[1].passwordHash);
+    expect(repo.users[0].passwordHash).toBe(`hashed:${password}`);
     expect((await auth.authenticate(firstAccount.token)).user.id).toBe(
       firstAccount.user.id,
     );
+  });
+
+  it('uses injected IDs and exact clock boundaries for session and token expiry', async () => {
+    const registered = await auth.register(
+      { email: 'clock@example.com', password },
+      'peer',
+    );
+    const session = repo.sessions[0];
+
+    expect(session.tokenId).toBe('generated-2');
+    expect(session.expiresAt.getTime()).toBe(
+      now.getTime() + SESSION_SECONDS * 1000,
+    );
+    expect(registered.expiresAt.getTime()).toBe(
+      now.getTime() + TOKEN_SECONDS * 1000,
+    );
+
+    now = new Date(session.expiresAt.getTime() - 1000);
+    const principal = await auth.authenticate(registered.token);
+    const refreshed = await auth.refresh(principal);
+
+    expect(repo.sessions[0].tokenId).toBe('generated-3');
+    expect(refreshed.expiresAt).toEqual(session.expiresAt);
+
+    now = session.expiresAt;
+
+    await expect(auth.authenticate(refreshed.token)).rejects.toMatchObject({
+      kind: 'unauthenticated',
+    });
   });
 
   it('logs in to an existing account without creating another user', async () => {
@@ -184,7 +255,7 @@ describe('Authentication policy', () => {
       email: 'existing@example.com',
       password: 'a long existing passphrase',
     };
-    const passwordHash = await new ArgonPasswords().hash(credentials.password);
+    const passwordHash = await new FakePasswords().hash(credentials.password);
     await repo.createUser(credentials.email, passwordHash);
 
     const grant = await auth.login(credentials, 'peer');
@@ -235,71 +306,28 @@ describe('Authentication policy', () => {
     });
   });
 
-  it('rejects expired tokens, altered ciphertext and expired server sessions', async () => {
-    const firstAccount = await auth.register(
-      { email: 'a@example.com', password },
-      'peer',
-    );
-
-    const parts = firstAccount.token.split('.');
-    parts[3] = (parts[3][0] === 'A' ? 'B' : 'A') + parts[3].slice(1);
-    await expect(auth.authenticate(parts.join('.'))).rejects.toMatchObject({
-      kind: 'unauthenticated',
-    });
-
-    const expired = await tokens.issue(
-      firstAccount.user.id,
-      firstAccount.sessionId,
-      repo.sessions[0].tokenId,
-      new Date(Date.now() - 1000),
-    );
-    await expect(auth.authenticate(expired)).rejects.toMatchObject({
-      kind: 'unauthenticated',
-    });
-
-    repo.sessions[0].expiresAt = new Date(Date.now() - 1);
-    await expect(auth.authenticate(firstAccount.token)).rejects.toMatchObject({
-      kind: 'unauthenticated',
-    });
-  });
-
-  it('rejects wrong issuer, audience, missing identity and mismatched session owner', async () => {
+  it('rejects token codec failures and expired server sessions', async () => {
     const grant = await auth.register(
       { email: 'a@example.com', password },
       'peer',
     );
+
+    await expect(auth.authenticate('invalid')).rejects.toMatchObject({
+      kind: 'unauthenticated',
+    });
+
+    repo.sessions[0].expiresAt = new Date(now.getTime() - 1);
+
+    await expect(auth.authenticate(grant.token)).rejects.toMatchObject({
+      kind: 'unauthenticated',
+    });
+  });
+
+  it('rejects mismatched session owners', async () => {
+    await auth.register({ email: 'a@example.com', password }, 'peer');
     const session = repo.sessions[0];
+    const token = await tokens.issue(randomUUID(), session.id, session.tokenId);
 
-    for (const [issuer, audience, subject] of [
-      ['other-service', 'papert-web', grant.user.id],
-      ['papert-core', 'other-client', grant.user.id],
-      ['papert-core', 'papert-web', ''],
-    ]) {
-      const token = await new EncryptJWT({ sid: session.id })
-        .setProtectedHeader({
-          alg: 'dir',
-          enc: 'A256GCM',
-          kid: 'test',
-          typ: 'JWT',
-        })
-        .setSubject(subject)
-        .setJti(session.tokenId)
-        .setIssuer(issuer)
-        .setAudience(audience)
-        .setIssuedAt()
-        .setExpirationTime('15m')
-        .encrypt(Buffer.from('ab'.repeat(32), 'hex'));
-      await expect(auth.authenticate(token)).rejects.toMatchObject({
-        kind: 'unauthenticated',
-      });
-    }
-
-    const token = await tokens.issue(
-      randomUUID(),
-      session.id,
-      session.tokenId,
-      new Date(Date.now() + 60_000),
-    );
     await expect(auth.authenticate(token)).rejects.toMatchObject({
       kind: 'unauthenticated',
     });
@@ -315,31 +343,5 @@ describe('Authentication policy', () => {
     await expect(
       auth.login({ email: 'a@example.com', password: 'bad' }, 'new-peer'),
     ).rejects.toMatchObject({ kind: 'rate_limited' });
-  });
-
-  it('accepts retained keys during rotation and rejects retired or unknown keys', async () => {
-    const firstAccount = await auth.register(
-      { email: 'a@example.com', password },
-      'peer',
-    );
-
-    const rotated = new JweTokens(
-      'new',
-      JSON.stringify({ test: 'ab'.repeat(32), new: 'cd'.repeat(32) }),
-    );
-
-    expect((await rotated.read(firstAccount.token)).userId).toBe(
-      firstAccount.user.id,
-    );
-    await expect(
-      new JweTokens('new', JSON.stringify({ new: 'cd'.repeat(32) })).read(
-        firstAccount.token,
-      ),
-    ).rejects.toThrow();
-
-    expect(() => new JweTokens('bad', '{}')).toThrow();
-    expect(() => new JweTokens('bad', 'secret material, invalid JSON')).toThrow(
-      'AUTH_JWE_KEYS must be a valid JSON key map.',
-    );
   });
 });

@@ -1,21 +1,12 @@
 """Internal IAM-only invocation of the same leased execution worker used by SQS."""
 
-from typing import Literal
-from uuid import UUID
-
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict
 
-from worker_handler import handler
+from src.executions.infrastructure.contracts import execution_envelope_model
+from src.executions.infrastructure.entry import run_single_execution
 
+ExecutionEnvelope = execution_envelope_model()
 router = APIRouter()
-
-
-class ExecutionEnvelope(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    version: Literal[1]
-    executionId: UUID
 
 
 @router.post("/internal/seymour/executions")
@@ -27,12 +18,11 @@ def execute(body: ExecutionEnvelope, request: Request):
             status_code=403, detail="An IAM-authenticated Gateway invocation is required"
         )
 
-    result = handler(
-        {"Records": [{"messageId": str(body.executionId), "body": body.model_dump_json()}]}, None
-    )
-    if result["batchItemFailures"]:
+    try:
+        run_single_execution(body.model_dump(mode="json"))
+    except Exception:
         raise HTTPException(
             status_code=503, detail="Execution could not complete; retry its existing ID"
-        )
+        ) from None
 
     return {"executionId": str(body.executionId)}

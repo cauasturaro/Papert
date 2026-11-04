@@ -4,6 +4,7 @@ import os
 from contextlib import contextmanager
 
 from langfuse import Langfuse, propagate_attributes
+from langsmith import tracing_context
 
 from src.tutor.application.tools import TOOL_ARGUMENTS
 from src.tutor.infrastructure.openai_model import MODEL_PRICES
@@ -18,6 +19,14 @@ def mask(data, **_kwargs):
         return [mask(value) for value in data]
 
     return "[redacted]"
+
+
+class ExecutionMeasurements:
+    def __init__(self, observation):
+        self._observation = observation
+
+    def record_metadata(self, metadata: dict[str, int | str]) -> None:
+        self._observation.update(metadata=metadata)
 
 
 class TutorTrace:
@@ -35,6 +44,7 @@ class TutorTrace:
         trace_id = self.client.create_trace_id(seed=execution_id)
         try:
             with (
+                tracing_context(enabled=False),
                 self.client.start_as_current_observation(
                     name=name, as_type="agent", trace_context={"trace_id": trace_id}
                 ) as span,
@@ -43,7 +53,7 @@ class TutorTrace:
                 ),
             ):
                 try:
-                    yield span
+                    yield ExecutionMeasurements(span)
                 except Exception:
                     raise RuntimeError("Tutor invocation failed") from None
         finally:

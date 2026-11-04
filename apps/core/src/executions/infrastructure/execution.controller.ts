@@ -15,8 +15,9 @@ import {
 } from '../../auth/infrastructure/session.guard.js';
 import { DomainExceptionFilter } from '../../common/http/domain-exception.filter.js';
 import { ResourceIdPipe } from '../../common/http/resource-id.pipe.js';
+import { issueStreamTicket } from './stream-handshake.js';
 import { ExecutionService } from '../application/execution.service.js';
-import { ExecutionStream } from './aws-execution.js';
+import { ExecutionStreamService } from '../application/execution-stream.service.js';
 
 @Controller('executions')
 @UseGuards(SessionGuard)
@@ -24,7 +25,8 @@ import { ExecutionStream } from './aws-execution.js';
 export class ExecutionController {
   constructor(
     @Inject(ExecutionService) private readonly executions: ExecutionService,
-    @Inject(ExecutionStream) private readonly stream: ExecutionStream,
+    @Inject(ExecutionStreamService)
+    private readonly stream: ExecutionStreamService,
   ) {}
 
   @Get('quota')
@@ -80,6 +82,6 @@ export class ExecutionController {
     @CurrentPrincipal() principal: Principal,
     @Param('id', ResourceIdPipe) id: string,
   ) {
-    return this.stream.ticket(principal, id);
+    return issueStreamTicket(this.stream, principal, id);
   }
 }

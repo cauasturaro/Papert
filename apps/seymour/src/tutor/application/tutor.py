@@ -1,16 +1,14 @@
 """A bounded tutor graph. Only Core decides mode eligibility and progression."""
 
 import json
-import time
 from collections.abc import Callable
-from typing import Literal, Protocol, TypedDict
+from typing import Literal, TypedDict
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, START, StateGraph
-from langsmith import tracing_context
 
-from src.retrieval.application.grounding import grounding
+from src.retrieval import grounding
 from src.retrieval.domain.ports import Search
+from src.shared.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
 from src.tutor.application.conversation import recent_turns, search_query
 from src.tutor.application.guidance import Guidance, render
 from src.tutor.application.prompts import system_prompt
@@ -18,52 +16,12 @@ from src.tutor.application.tools import call_tool, tool_definitions
 from src.tutor.domain.context import ToolResult, TutorContext
 
 
-class BudgetExceeded(Exception):
-    pass
-
-
-class TutorCancelled(Exception):
-    pass
-
-
-class TutorModel(Protocol):
-    def complete(
-        self,
-        messages: list[BaseMessage],
-        tools: list[dict],
-        effort: str,
-        remaining: int,
-        deadline: float,
-        active: Callable[[], bool],
-    ) -> AIMessage: ...
-
-
 class State(TypedDict):
-    messages: list[BaseMessage]
+    messages: list[Message]
     tokens: int
     calls: int
     text: str
     stopped: bool
-
-
-def final_text(response: AIMessage) -> str:
-    """Use only the last final-answer message when the Responses API returns several phases."""
-    final_blocks = [
-        block
-        for block in response.content
-        if isinstance(block, dict) and block.get("phase") == "final_answer"
-    ]
-    if not final_blocks:
-        return response.text
-
-    final_message_id = final_blocks[-1].get("id")
-
-    return "".join(
-        block["text"]
-        for block in final_blocks
-        if block.get("type") == "text"
-        and (not final_message_id or block.get("id") == final_message_id)
-    )
 
 
 def run_tutor(
@@ -73,11 +31,13 @@ def run_tutor(
     effort: Literal["low", "medium", "high"],
     solution_allowed: bool,
     budget: int,
-    model: TutorModel,
+    model: Model,
     active: Callable[[], bool],
     progress: Callable[[str, int], None],
     observe_tool: Callable[[str, Callable[[], ToolResult]], ToolResult],
     search: Search | None = None,
+    *,
+    clock: Callable[[], float],
 ) -> State:
     if mode not in {"doubt", "teaching", "solution", "review"} or effort not in {
         "low",
@@ -119,15 +79,15 @@ def run_tutor(
         retrieved.extend(excerpts)
 
     messages = [
-        SystemMessage(content=system),
-        HumanMessage(content=json.dumps(request)),
+        Message(role="system", content=system),
+        Message(role="user", content=json.dumps(request)),
     ]
-    deadline = time.monotonic() + 20
+    deadline = clock() + 20
 
     def infer(state: State):
         if not active():
             return {"stopped": True, "text": ""}
-        if time.monotonic() >= deadline or state["calls"] >= 3:
+        if clock() >= deadline or state["calls"] >= 3:
             return {
                 "stopped": True,
                 "text": "Tutor limit reached. Narrow the question and try again.",
@@ -150,7 +110,7 @@ def run_tutor(
                 "text": "Context exceeds this attempt's token budget. Narrow the selection or question.",
             }
 
-        usage = response.usage_metadata
+        usage = response.usage
         if not usage or usage["total_tokens"] > budget - state["tokens"]:
             raise RuntimeError("Model usage is missing or exceeds the admitted budget")
 
@@ -188,7 +148,7 @@ def run_tutor(
         for call in response.tool_calls:
             if not active():
                 return {"stopped": True, "text": ""}
-            if time.monotonic() >= deadline:
+            if clock() >= deadline:
                 return {
                     "stopped": True,
                     "text": "Tutor limit reached. Narrow the question and try again.",
@@ -203,8 +163,11 @@ def run_tutor(
                 retrieved.extend(result.data["excerpts"])
 
             results.append(
-                ToolMessage(
-                    content=result.model_dump_json(), tool_call_id=call["id"], name=call["name"]
+                Message(
+                    role="tool",
+                    content=result.model_dump_json(),
+                    tool_call_id=call["id"],
+                    name=call["name"],
                 )
             )
 
@@ -225,8 +188,7 @@ def run_tutor(
     graph.add_conditional_edges("model", lambda state: END if state["stopped"] else "tools")
     graph.add_conditional_edges("tools", lambda state: END if state["stopped"] else "model")
 
-    with tracing_context(enabled=False):
-        return graph.compile().invoke(
-            {"messages": messages, "tokens": 0, "calls": 0, "text": "", "stopped": False},
-            {"recursion_limit": 8, "callbacks": []},
-        )
+    return graph.compile().invoke(
+        {"messages": messages, "tokens": 0, "calls": 0, "text": "", "stopped": False},
+        {"recursion_limit": 8, "callbacks": []},
+    )

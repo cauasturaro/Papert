@@ -95,17 +95,16 @@ def test_failed_publish_reports_attempt_failure_and_rethrows():
 
 
 def test_lambda_reports_only_failed_batch_items(monkeypatch):
-    import worker_handler
+    from src.executions.infrastructure import sqs as worker_handler
 
     seen = []
 
-    def run(message, _control, _publish):
+    def run(message):
         seen.append(message["id"])
         if message["id"] == "bad":
             raise ValueError("invalid envelope")
 
-    monkeypatch.setattr(worker_handler.boto3, "client", lambda *_args, **_kwargs: object())
-    monkeypatch.setattr(worker_handler, "run_job", run)
+    monkeypatch.setattr(worker_handler, "run_single_execution", run)
     records = [{"messageId": key, "body": '{"id":"' + key + '"}'} for key in ["bad", "good"]]
 
     result = worker_handler.handler({"Records": records}, None)

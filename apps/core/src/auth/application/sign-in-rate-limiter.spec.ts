@@ -12,8 +12,8 @@ describe('Sign-in rate limiter', () => {
     await limiter.check('alice@example.com', 'peer');
 
     expect(consumeAttempt.mock.calls).toEqual([
-      [attemptKey('peer:peer'), 300],
-      [attemptKey('email:alice@example.com'), 10],
+      [attemptKey('peer:peer'), 300, 900],
+      [attemptKey('email:alice@example.com'), 10, 900],
     ]);
   });
 

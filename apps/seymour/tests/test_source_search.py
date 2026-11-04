@@ -1,11 +1,12 @@
 import json
+import time
 from unittest.mock import MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage
 
 from src.retrieval.application.grounding import grounding
 from src.retrieval.domain.citation import cite
+from src.shared.inference import Message
 from src.tutor.application.conversation import search_query
 from src.tutor.application.guidance import Guidance, render
 from src.tutor.application.tools import call_tool, tool_definitions
@@ -143,8 +144,8 @@ def test_tutor_is_told_to_search_sources_and_receives_excerpts():
     }
     model = MagicMock()
     model.complete.side_effect = [
-        AIMessage(content="", tool_calls=[search_call], usage_metadata=usage),
-        AIMessage(content=answer, usage_metadata=usage),
+        Message(role="assistant", content="", tool_calls=[search_call], usage=usage),
+        Message(role="assistant", content=answer, usage=usage),
     ]
     search = RecordingSearch(
         [
@@ -158,6 +159,7 @@ def test_tutor_is_told_to_search_sources_and_receives_excerpts():
     )
 
     state = run_tutor(
+        clock=time.monotonic,
         context=build(),
         prompt="Give me a request example",
         mode="doubt",
@@ -186,9 +188,10 @@ def test_policy_is_absent_without_sources():
     usage = {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}
     answer = '{"explanation": "Validate input.", "next_step": "Check name.", "question": "Why?"}'
     model = MagicMock()
-    model.complete.side_effect = [AIMessage(content=answer, usage_metadata=usage)]
+    model.complete.side_effect = [Message(role="assistant", content=answer, usage=usage)]
 
     run_tutor(
+        clock=time.monotonic,
         context=build(sources=[], sourceIds=[], workspaceId=None),
         prompt="Help",
         mode="doubt",
@@ -231,12 +234,6 @@ def test_grounding_keeps_only_related_passages_unless_a_source_is_mentioned():
     assert mentioned_search.calls == [("summarize it", [NOTES])]
     assert [item["sourceId"] for item in mentioned] == [NOTES]
     assert without_sources == []
-
-
-def test_guidance_schema_requires_every_property_for_strict_outputs():
-    schema = Guidance.model_json_schema(mode="serialization")
-
-    assert set(schema["required"]) == set(schema["properties"])
 
 
 def excerpt(text, page, start, source=PDF):
@@ -336,10 +333,11 @@ def test_recent_turns_reach_the_model_as_untrusted_conversation():
         }
     )
     model = MagicMock()
-    model.complete.side_effect = [AIMessage(content=answer, usage_metadata=usage)]
+    model.complete.side_effect = [Message(role="assistant", content=answer, usage=usage)]
     turns = [{"prompt": "Is there an example?", "answer": "Yes, on page 4."}]
 
     run_tutor(
+        clock=time.monotonic,
         context=build(recentTurns=turns),
         prompt="Show me",
         mode="doubt",

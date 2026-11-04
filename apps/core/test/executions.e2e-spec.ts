@@ -1,3 +1,4 @@
+import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
@@ -7,7 +8,7 @@ import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
-import { ExecutionStream } from '../src/executions/infrastructure/aws-execution.js';
+import { ExecutionStreamService } from '../src/executions/application/execution-stream.service.js';
 import { configureHttp } from '../src/http.js';
 import {
   DAILY_LIMIT,
@@ -104,7 +105,11 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
         inject: [PrismaService],
         factory: (database: PrismaService) =>
           new ExecutionService(
-            new PrismaExecutionRepository(database, () => now),
+            new PrismaExecutionRepository(
+              database,
+              () => now,
+              new PrismaAttemptProgression(),
+            ),
             queue,
             new ParserSyntaxChecker(),
             noSources,
@@ -117,7 +122,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
 
     db = module.get(PrismaService);
     service = module.get(ExecutionService);
-    vi.spyOn(module.get(ExecutionStream), 'broadcast').mockResolvedValue(
+    vi.spyOn(module.get(ExecutionStreamService), 'broadcast').mockResolvedValue(
       undefined,
     );
   });
@@ -305,7 +310,11 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
     });
 
     const restarted = new ExecutionService(
-      new PrismaExecutionRepository(db, () => now),
+      new PrismaExecutionRepository(
+        db,
+        () => now,
+        new PrismaAttemptProgression(),
+      ),
       queue,
       new ParserSyntaxChecker(),
       noSources,

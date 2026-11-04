@@ -1,18 +1,12 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../infrastructure/database/prisma.service.js';
-import type { HealthStatus } from '../domain/health.js';
+import type { DatabaseProbe, HealthStatus } from '../domain/health.js';
 
-/**
- * Application service: orchestrates the health probe.
- * Uses PrismaService as an infrastructure adapter to check DB connectivity.
- */
-@Injectable()
 export class HealthService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly database: DatabaseProbe) {}
 
   async check(): Promise<HealthStatus> {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.database.check();
+
       return { status: 'ok', db: 'connected' };
     } catch {
       return { status: 'degraded', db: 'unreachable' };

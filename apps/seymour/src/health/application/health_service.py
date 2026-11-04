@@ -1,17 +1,14 @@
-"""Application: health probe use-case.
-Depends on an AsyncSession port via constructor injection.
-"""
-
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+"""Application health probe use case."""
 
 from src.health.domain.health import HealthStatus
+from src.health.domain.ports import DatabaseProbe
 
 
-async def check_health(session: AsyncSession) -> HealthStatus:
-    """Execute a trivial DB query; return HealthStatus."""
+async def check_health(probe: DatabaseProbe) -> HealthStatus:
+    """Return database reachability without depending on its driver."""
     try:
-        await session.execute(text("SELECT 1"))
+        await probe.check()
+
         return HealthStatus(status="ok", db="connected")
     except Exception:
         return HealthStatus(status="degraded", db="unreachable")

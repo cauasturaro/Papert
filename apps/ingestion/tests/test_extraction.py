@@ -5,8 +5,8 @@ import pytest
 from pypdf import PdfWriter
 
 from src.domain.errors import IngestionFailure
-from src.domain.extraction import extract, sniff
 from src.domain.extraction.common import MAX_PAGES
+from src.infrastructure.extraction import extract, sniff
 from tests.builders import docx_bytes, pdf_bytes, positioned_pdf_bytes
 
 FIXTURES = Path(__file__).parent / "fixtures"

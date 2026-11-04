@@ -1,82 +1,45 @@
-"""Process one SQS record carrying S3 notifications for registered source documents."""
+"""Process decoded source events for registered documents."""
 
 import json
 import time
-from dataclasses import dataclass
-from urllib.parse import unquote_plus
 
+from src.application.control import Begin, Complete, Fail, Reindex, Removal, Version
+from src.application.events import IngestionEvent, Outcome, ReindexEvent, SourceNotification
 from src.application.ports import Ports
 from src.domain.chunking import chunk
 from src.domain.errors import IngestionFailure
-from src.domain.extraction import extract
 
 MAX_RECEIVES = 3
-
-
-@dataclass(frozen=True)
-class S3Notification:
-    event: str
-    bucket: str
-    key: str
-    version_id: str | None
-    sequencer: str | None
-    size: int
 
 
 def log(metric, **fields):
     print(json.dumps({"metric": metric, **fields}), flush=True)
 
 
-def _notifications(payload):
-    # S3 sends a test event when the notification configuration is created.
-    if payload.get("Event") == "s3:TestEvent":
-        return []
+def _removal(ports: Ports, notification: SourceNotification):
+    answer = ports.control.removal(Removal(notification.bucket, notification.key))
 
-    notifications = []
-
-    for record in payload.get("Records", []):
-        s3 = record["s3"]
-
-        notifications.append(
-            S3Notification(
-                event=record["eventName"],
-                bucket=s3["bucket"]["name"],
-                key=unquote_plus(s3["object"]["key"]),
-                version_id=s3["object"].get("versionId"),
-                sequencer=s3["object"].get("sequencer"),
-                size=s3["object"].get("size", 0),
-            )
-        )
-
-    return notifications
-
-
-def _removal(ports: Ports, notification: S3Notification):
-    answer = ports.control(
-        {"action": "removal", "bucket": notification.bucket, "key": notification.key}
-    )
-
-    if not answer.get("documentId") or not answer.get("deleted"):
-        log("source_removal_ignored", known=bool(answer.get("documentId")))
+    if not answer.document_id or not answer.deleted:
+        log("source_removal_ignored", known=bool(answer.document_id))
         return
 
-    ports.store.purge(answer["documentId"], answer["workspaceId"])
-    log("source_purged", documentId=answer["documentId"])
+    ports.store.purge(answer.document_id, answer.workspace_id)
+    log("source_purged", documentId=answer.document_id)
 
 
-def _index(ports: Ports, notification: S3Notification, document, replace):
-    document_id = document["documentId"]
-    workspace_id = document["workspaceId"]
+def _index(ports: Ports, notification: SourceNotification, document, replace):
+    document_id = document.document_id
+    workspace_id = document.workspace_id
     started = time.monotonic()
 
     data = ports.objects.read(notification.bucket, notification.key, notification.version_id)
 
-    extracted = extract(document["format"], data)
+    extracted = ports.extractor.extract(document.format, data)
 
-    hard_key = "page" if document["format"] == "pdf" else None
+    hard_key = "page" if document.format == "pdf" else None
     chunks = chunk(extracted, hard_key=hard_key)
 
-    trace_metadata = {"format": document["format"], "chunks": len(chunks)}
+    trace_metadata = {"format": document.format, "chunks": len(chunks)}
 
     with (
         ports.trace.document(document_id, notification.version_id, trace_metadata),
@@ -104,23 +67,22 @@ def _index(ports: Ports, notification: S3Notification, document, replace):
         log("source_skipped", documentId=document_id, reason="stale")
         return
 
-    answer = ports.control(
-        {
-            "action": "complete",
-            "documentId": document_id,
-            "versionId": notification.version_id,
-            "sequencer": notification.sequencer,
-            "chunkCount": len(chunks),
+    answer = ports.control.complete(
+        Complete(
+            document_id=document_id,
+            version_id=notification.version_id,
+            sequencer=notification.sequencer,
+            chunk_count=len(chunks),
             # Extracted text, not chunk lengths: chunks overlap.
-            "characterCount": extracted.character_count,
-            "pageCount": extracted.page_count,
-            "embeddingTokens": embedded.tokens,
-            "warnings": extracted.warnings[:10],
-        }
+            character_count=extracted.character_count,
+            page_count=extracted.page_count,
+            embedding_tokens=embedded.tokens,
+            warnings=extracted.warnings[:10],
+        )
     )
 
     # Deleted while processing: never leave vectors behind for a removed document.
-    if answer.get("deleted"):
+    if answer.deleted:
         ports.store.purge(document_id, workspace_id)
         log("source_purged", documentId=document_id, reason="deleted_during_ingestion")
         return
@@ -128,8 +90,8 @@ def _index(ports: Ports, notification: S3Notification, document, replace):
     log(
         "source_ingested",
         documentId=document_id,
-        format=document["format"],
-        accepted=answer.get("accepted", False),
+        format=document.format,
+        accepted=answer.accepted,
         duplicate=outcome == "duplicate",
         chunks=len(chunks),
         characters=extracted.character_count,
@@ -139,88 +101,85 @@ def _index(ports: Ports, notification: S3Notification, document, replace):
     )
 
 
-def _created(ports: Ports, notification: S3Notification, receive_count):
+def _created(ports: Ports, notification: SourceNotification, receive_count):
     if not notification.version_id or not notification.sequencer:
         log("source_rejected", reason="unversioned_event")
         return
 
-    begin = ports.control(
-        {
-            "action": "begin",
-            "bucket": notification.bucket,
-            "key": notification.key,
-            "versionId": notification.version_id,
-            "sequencer": notification.sequencer,
-            "size": notification.size,
-        }
+    begin = ports.control.begin(
+        Begin(
+            notification.bucket,
+            notification.key,
+            notification.version_id,
+            notification.sequencer,
+            notification.size,
+        )
     )
 
-    if begin["outcome"] == "deleted":
-        ports.store.purge(begin["documentId"], begin["workspaceId"])
-        log("source_skipped", documentId=begin["documentId"], reason="deleted")
+    if begin.outcome == "deleted":
+        ports.store.purge(begin.document_id, begin.workspace_id)
+        log("source_skipped", documentId=begin.document_id, reason="deleted")
         return
 
     # A rejected newer version supersedes the old one, so its chunks must go too.
-    if begin["outcome"] == "invalid":
+    if begin.outcome == "invalid":
         ports.store.clear(
-            begin["documentId"],
-            begin["workspaceId"],
+            begin.document_id,
+            begin.workspace_id,
             notification.version_id,
             notification.sequencer,
         )
-        log("source_rejected", documentId=begin["documentId"], reason=begin["reason"])
+        log("source_rejected", documentId=begin.document_id, reason=begin.reason)
         return
 
-    if begin["outcome"] != "process":
-        log("source_rejected", outcome=begin["outcome"], reason=begin.get("reason"))
+    if begin.outcome != "process":
+        log("source_rejected", outcome=begin.outcome, reason=begin.reason)
         return
 
     _process(ports, notification, begin, receive_count, replace=False)
 
 
 def _reindex(ports: Ports, document_id, receive_count):
-    answer = ports.control({"action": "reindex", "documentId": document_id})
+    answer = ports.control.reindex(Reindex(document_id))
 
-    if answer["outcome"] != "process":
-        log("source_reindex_skipped", documentId=document_id, reason=answer.get("reason"))
+    if answer.outcome != "process":
+        log("source_reindex_skipped", documentId=document_id, reason=answer.reason)
         return
 
-    notification = S3Notification(
-        event="",
-        bucket=answer["bucket"],
-        key=answer["key"],
-        version_id=answer["versionId"],
-        sequencer=answer["sequencer"],
+    notification = SourceNotification(
+        kind="created",
+        bucket=answer.bucket,
+        key=answer.key,
+        version_id=answer.version_id,
+        sequencer=answer.sequencer,
         size=0,
     )
 
     _process(ports, notification, answer, receive_count, replace=True)
 
 
-def _process(ports: Ports, notification: S3Notification, document, receive_count, replace):
-    version = {
-        "documentId": document["documentId"],
-        "versionId": notification.version_id,
-        "sequencer": notification.sequencer,
-    }
+def _process(ports: Ports, notification: SourceNotification, document, receive_count, replace):
+    version = Version(document.document_id, notification.version_id, notification.sequencer)
 
     try:
         _index(ports, notification, document, replace)
     except IngestionFailure as failure:
         ports.store.clear(
-            document["documentId"],
-            document["workspaceId"],
-            version["versionId"],
-            version["sequencer"],
+            document.document_id,
+            document.workspace_id,
+            version.version_id,
+            version.sequencer,
         )
 
-        ports.control({"action": "fail", **version, "code": failure.code})
+        ports.control.fail(
+            Fail(version.document_id, version.version_id, version.sequencer, failure.code)
+        )
 
-        log("source_failed", documentId=document["documentId"], code=failure.code)
+        log("source_failed", documentId=document.document_id, code=failure.code)
     except Exception as error:
         log(
             "source_attempt_failed",
-            documentId=document["documentId"],
+            documentId=document.document_id,
             error=type(error).__name__,
             receive=receive_count,
         )
@@ -228,36 +187,29 @@ def _process(ports: Ports, notification: S3Notification, document, receive_count
         # On the last delivery, leave an explicit state before SQS moves the message to the DLQ.
         if receive_count >= MAX_RECEIVES:
             try:
-                ports.control({"action": "fail", **version, "code": "processing_failed"})
+                ports.control.fail(
+                    Fail(
+                        version.document_id,
+                        version.version_id,
+                        version.sequencer,
+                        "processing_failed",
+                    )
+                )
             except Exception:
-                log("source_failure_report_failed", documentId=document["documentId"])
+                log("source_failure_report_failed", documentId=document.document_id)
 
         raise
 
 
-def process_record(ports: Ports, record):
-    receive_count = int(record.get("attributes", {}).get("ApproximateReceiveCount", "1"))
-    payload = json.loads(record["body"])
+def process_record(ports: Ports, event: IngestionEvent | ReindexEvent) -> Outcome:
+    if isinstance(event, ReindexEvent):
+        _reindex(ports, event.document_id, event.receive_count)
+        return Outcome.HANDLED
 
-    # Operator messages from `make ingestion-reindex`; Core decides whether they apply.
-    if "PapertReindex" in payload:
-        _reindex(ports, payload["PapertReindex"]["documentId"], receive_count)
-        return
-
-    for notification in _notifications(payload):
-        if notification.event.startswith("ObjectRemoved"):
+    for notification in event.notifications:
+        if notification.kind == "removed":
             _removal(ports, notification)
-        elif notification.event.startswith("ObjectCreated"):
-            _created(ports, notification, receive_count)
+        elif notification.kind == "created":
+            _created(ports, notification, event.receive_count)
 
-
-def process_batch(ports: Ports, event):
-    failures = []
-
-    for record in event.get("Records", []):
-        try:
-            process_record(ports, record)
-        except Exception:
-            failures.append({"itemIdentifier": record["messageId"]})
-
-    return {"batchItemFailures": failures}
+    return Outcome.HANDLED

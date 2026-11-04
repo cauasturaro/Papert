@@ -42,7 +42,11 @@ export interface AuthRepository {
 }
 
 export interface AttemptStore {
-  consumeAttempt(key: string, limit: number): Promise<boolean>;
+  consumeAttempt(
+    key: string,
+    limit: number,
+    windowSeconds: number,
+  ): Promise<boolean>;
 }
 
 export interface SignInLimiter {

@@ -4,7 +4,7 @@ import json
 
 from pydantic import ValidationError
 
-from src.retrieval.application.grounding import EXCERPT_CHARACTERS, cited_excerpts
+from src.retrieval import EXCERPT_CHARACTERS, cited_excerpts
 from src.retrieval.domain.ports import Search
 from src.tutor.domain.context import (
     ReadCode,

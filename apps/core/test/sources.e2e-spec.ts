@@ -1,3 +1,4 @@
+import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
@@ -122,7 +123,11 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
           inject: [PrismaService, SourceService],
           factory: (prisma: PrismaService, sourceService: SourceService) =>
             new ExecutionService(
-              new PrismaExecutionRepository(prisma),
+              new PrismaExecutionRepository(
+                prisma,
+                undefined,
+                new PrismaAttemptProgression(),
+              ),
               { publish: async () => {} },
               new ParserSyntaxChecker(),
               new SourceServiceCatalog(sourceService),
@@ -132,7 +137,12 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
         .useFactory({
           inject: [PrismaService],
           factory: (prisma: PrismaService) =>
-            new SourceService(new PrismaSourceRepository(prisma), storage),
+            new SourceService(
+              new PrismaSourceRepository(prisma),
+              storage,
+              () => new Date(),
+              randomUUID,
+            ),
         })
         .compile();
 

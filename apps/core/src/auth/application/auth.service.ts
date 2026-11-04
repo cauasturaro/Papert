@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import type { Clock, IdGenerator } from '../../common/domain/runtime.js';
 import { AuthError } from '../domain/auth.js';
 import type {
   AuthRepository,
@@ -27,9 +27,11 @@ export class AuthService {
     private readonly passwords: Passwords,
     private readonly tokens: Tokens,
     private readonly limiter: SignInLimiter,
+    private readonly now: Clock,
+    private readonly generateId: IdGenerator,
   ) {
     // Unknown accounts still perform password verification to avoid a cheap timing signal.
-    this.dummyHash = passwords.hash(randomUUID());
+    this.dummyHash = passwords.hash(this.generateId());
   }
 
   async register(body: unknown, peer: string) {
@@ -89,7 +91,7 @@ export class AuthService {
     if (
       !session ||
       session.revokedAt ||
-      session.expiresAt.getTime() <= Date.now() ||
+      session.expiresAt.getTime() <= this.now().getTime() ||
       session.userId !== claims.userId ||
       session.tokenId !== claims.tokenId
     ) {
@@ -100,7 +102,7 @@ export class AuthService {
   }
 
   async refresh(principal: Principal) {
-    const tokenId = randomUUID();
+    const tokenId = this.generateId();
 
     // Compare-and-swap prevents renewal from reusing an already rotated token.
     const rotated = await this.repo.rotateSession(
@@ -136,18 +138,20 @@ export class AuthService {
   }
 
   private async startSession(user: User) {
-    const session = await this.repo.createSession(
-      user.id,
-      randomUUID(),
-      new Date(Date.now() + SESSION_SECONDS * 1000),
-    );
+    const tokenId = this.generateId();
+    const expiresAt = new Date(this.now().getTime() + SESSION_SECONDS * 1000);
+
+    const session = await this.repo.createSession(user.id, tokenId, expiresAt);
 
     return this.grant({ user, session });
   }
 
   private async grant({ user, session }: Principal) {
     const expiresAt = new Date(
-      Math.min(Date.now() + TOKEN_SECONDS * 1000, session.expiresAt.getTime()),
+      Math.min(
+        this.now().getTime() + TOKEN_SECONDS * 1000,
+        session.expiresAt.getTime(),
+      ),
     );
 
     return {

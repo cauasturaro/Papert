@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from src.tutor.domain.context import Challenge, StrictModel, TutorContext
+from src.shared.workspace import Challenge, StrictModel, validate_workspace
 
 
 class SyntaxCoverage(StrictModel):
@@ -28,15 +28,7 @@ class AnalysisContext(StrictModel):
 
     @model_validator(mode="after")
     def validate_workspace(self):
-        # Reuse the tutor's path, size and directory-marker rules for the same snapshot shape.
-        TutorContext(
-            sessionId=self.sessionId,
-            stepId=self.stepId,
-            objective=self.objective,
-            stepTitle=self.stepTitle,
-            files=self.files,
-            challenge=self.challenge,
-        )
+        validate_workspace(self.files)
 
         return self
 

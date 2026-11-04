@@ -1,3 +1,4 @@
+import { assertAttemptEligible } from '../domain/attempt-eligibility.js';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { FIXTURE_ID, fixtureDefinition } from '../domain/fixture.js';
@@ -176,12 +177,7 @@ export class PrismaStudyRepository implements StudyRepository {
       const step = roadmapSchema.parse(row.roadmap.definition).steps[
         row.currentStep
       ];
-      if (!step || step.id !== stepId) {
-        throw new StudyError(
-          'forbidden',
-          'Only the current step accepts attempts.',
-        );
-      }
+      assertAttemptEligible(step, stepId);
 
       const saved = await tx.studyAttempt.upsert({
         where: {

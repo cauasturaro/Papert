@@ -1,3 +1,5 @@
+import { PrismaAttemptProgression } from '../study/infrastructure/prisma-attempt-progression.js';
+import { createExecutionStream } from './infrastructure/stream-composition.js';
 import { PrismaExecutionRepository } from './infrastructure/prisma-execution.repository.js';
 import { Module } from '@nestjs/common';
 import { ParserSyntaxChecker } from '../analysis/infrastructure/parser-syntax-checker.js';
@@ -6,12 +8,10 @@ import { PrismaService } from '../infrastructure/database/prisma.service.js';
 import { SourceService } from '../sources/application/source.service.js';
 import { SourceModule } from '../sources/source.module.js';
 import { ExecutionService } from './application/execution.service.js';
+import { ExecutionStreamService } from './application/execution-stream.service.js';
 import { ExecutionController } from './infrastructure/execution.controller.js';
 import { SourceServiceCatalog } from './infrastructure/source-catalog.js';
-import {
-  ExecutionStream,
-  SqsExecutionQueue,
-} from './infrastructure/aws-execution.js';
+import { SqsExecutionQueue } from './infrastructure/aws-execution.js';
 
 @Module({
   imports: [AuthModule, SourceModule],
@@ -22,19 +22,23 @@ import {
       inject: [PrismaService, SourceService],
       useFactory: (db: PrismaService, sources: SourceService) =>
         new ExecutionService(
-          new PrismaExecutionRepository(db),
+          new PrismaExecutionRepository(
+            db,
+            undefined,
+            new PrismaAttemptProgression(),
+          ),
           new SqsExecutionQueue(),
           new ParserSyntaxChecker(),
           new SourceServiceCatalog(sources),
         ),
     },
     {
-      provide: ExecutionStream,
+      provide: ExecutionStreamService,
       inject: [PrismaService, ExecutionService],
       useFactory: (db: PrismaService, executions: ExecutionService) =>
-        new ExecutionStream(db, executions),
+        createExecutionStream(db, executions),
     },
   ],
-  exports: [ExecutionService, ExecutionStream],
+  exports: [ExecutionService, ExecutionStreamService],
 })
 export class ExecutionModule {}

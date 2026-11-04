@@ -1,16 +1,15 @@
 import json
-from contextlib import contextmanager
+import time
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
-from langchain_core.messages import AIMessage
 
-from src.evaluation.application import evaluator
 from src.evaluation.application.evaluator import run_analysis, workspace_map
 from src.evaluation.domain.evaluation import AnalysisContext
+from src.executions.application.ports import ExecutionResources
 from src.executions.worker import run_job
-from src.tutor.application.tutor import BudgetExceeded
+from src.shared.inference import BudgetExceeded, Message
 
 ATTEMPT_ID = str(uuid4())
 
@@ -67,15 +66,17 @@ def answer(criteria=None, path="src/greeting.ts", tokens=900):
         "hints": ["Which module should know about HTTP?", "Look at the imports of greeting.ts."],
     }
 
-    return AIMessage(
+    return Message(
+        role="assistant",
         content=json.dumps(payload),
-        usage_metadata={"input_tokens": tokens - 100, "output_tokens": 100, "total_tokens": tokens},
+        usage={"input_tokens": tokens - 100, "output_tokens": 100, "total_tokens": tokens},
     )
 
 
 def analyze(context, model, **options):
     arguments = dict(
         context=context,
+        clock=time.monotonic,
         effort="medium",
         budget=8000,
         model=model,
@@ -155,9 +156,10 @@ def test_repairs_invalid_output_once_with_low_effort_and_counts_both_calls(conte
 )
 def test_invalid_output_twice_yields_no_evaluation(context, content):
     model = MagicMock()
-    invalid = AIMessage(
+    invalid = Message(
+        role="assistant",
         content=content,
-        usage_metadata={"input_tokens": 100, "output_tokens": 10, "total_tokens": 110},
+        usage={"input_tokens": 100, "output_tokens": 10, "total_tokens": 110},
     )
     model.complete.side_effect = [invalid, invalid]
 
@@ -196,33 +198,20 @@ def test_rejects_snapshots_outside_the_authorized_workspace(context):
         AnalysisContext.model_validate({**data, "files": {"../.env": "SECRET=1"}})
 
 
-def test_worker_publishes_bound_evaluation_through_the_results_contract(context, monkeypatch):
+def test_worker_publishes_bound_evaluation_through_the_results_contract(
+    context, monkeypatch, noop_trace
+):
     execution_id = str(uuid4())
     lease = str(uuid4())
     events = []
     snapshot = {"kind": "analysis", "effort": "high", **context.model_dump()}
 
-    class Trace:
-        @contextmanager
-        def execution(self, *_args):
-            yield MagicMock()
-
-        def generation(self, *_args):
-            raise AssertionError("The fake model does not generate")
-
-    def fake_run(received, effort, budget, _model, _active, progress):
-        assert received == context
-        assert (effort, budget) == ("high", 8000)
-        progress("Seymour is mapping your files…", 0)
-
-        model = MagicMock()
-        model.complete.return_value = answer()
-
-        return analyze(received, model)
-
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setattr("src.tutor.infrastructure.tracing.TutorTrace", Trace)
-    monkeypatch.setattr(evaluator, "run_analysis", fake_run)
+    model = MagicMock()
+    model.complete.return_value = answer()
+    runtime = ExecutionResources(model, noop_trace, time.monotonic)
+    monkeypatch.setattr(
+        "src.executions.infrastructure.composition.evaluation_resources", lambda: runtime
+    )
 
     def control(request):
         if request["action"] == "claim":
@@ -232,6 +221,7 @@ def test_worker_publishes_bound_evaluation_through_the_results_contract(context,
 
     run_job({"version": 1, "executionId": execution_id}, control, events.append)
 
+    assert model.complete.call_args.args[2:4] == ("high", 8000)
     assert [event["status"] for event in events] == ["running", "completed"]
     final = events[-1]
     assert final["index"] == 100
@@ -239,3 +229,15 @@ def test_worker_publishes_bound_evaluation_through_the_results_contract(context,
     assert final["evaluation"]["attemptId"] == ATTEMPT_ID
     assert "1 of 2 criteria met" in final["text"]
     assert "approved" not in final["text"].lower()
+
+
+def test_analysis_deadline_uses_the_injected_clock(context):
+    model = MagicMock()
+    moments = iter([100.0, 145.0])
+
+    result = analyze(context, model, clock=lambda: next(moments))
+
+    assert result["reason"] == "deadline"
+    assert result["calls"] == 0
+    assert result["evaluation"] is None
+    model.complete.assert_not_called()

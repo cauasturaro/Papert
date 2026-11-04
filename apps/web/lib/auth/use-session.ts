@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  AuthRequestError,
+  checkSession as requestSession,
+  logout as requestLogout,
+  type User,
+} from "./auth-api";
 
-export type User = { id: string; email: string };
+export type { User } from "./auth-api";
 
 /**
  * Owns the signed-in user: initial check, periodic refresh, focus re-check and
@@ -22,37 +28,29 @@ export function useSession() {
       const version = authVersion.current;
 
       try {
-        const response = await fetch(
-          `/api/auth/${refresh ? "refresh" : "me"}`,
-          {
-            method: refresh ? "POST" : "GET",
-            cache: "no-store",
-            headers: refresh ? { "Content-Type": "application/json" } : {},
-            body: refresh ? "{}" : undefined,
-          },
-        );
-        const data = await response.json();
+        const data = await requestSession(refresh);
 
         // Login/logout invalidates checks started under an earlier session state.
         if (!mounted || version !== authVersion.current) {
           return;
         }
 
-        if (response.ok) {
-          setUser(data.user);
-          setMessage("");
-        } else if (response.status === 401) {
+        setUser(data.user);
+        setMessage("");
+      } catch (error) {
+        if (!mounted || version !== authVersion.current) {
+          return;
+        }
+
+        if (error instanceof AuthRequestError && error.status === 401) {
           setUser(null);
-          setMessage(
-            "Please sign in to continue. If your session expired, sign in again to return here.",
-          );
-        } else {
-          setMessage("We could not check your session. Please try again.");
         }
-      } catch {
-        if (mounted && version === authVersion.current) {
-          setMessage("The service is unavailable. Please try again.");
-        }
+
+        setMessage(
+          error instanceof AuthRequestError
+            ? error.message
+            : "The service is unavailable. Please try again.",
+        );
       } finally {
         if (mounted && version === authVersion.current) {
           setLoading(false);
@@ -87,18 +85,10 @@ export function useSession() {
     setSigningOut(true);
 
     try {
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
+      await requestLogout();
 
-      if (response.ok || response.status === 401) {
-        setUser(null);
-        setMessage("You are signed out.");
-      } else {
-        setMessage("We could not sign you out. Please try again.");
-      }
+      setUser(null);
+      setMessage("You are signed out.");
     } catch {
       setMessage("We could not sign you out. Please try again.");
     } finally {

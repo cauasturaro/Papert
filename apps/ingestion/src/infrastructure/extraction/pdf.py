@@ -8,10 +8,10 @@ from src.domain.extraction.common import (
     MAX_PAGES,
     Block,
     Extracted,
-    _check_deadline,
     _check_text_limit,
     _clean,
 )
+from src.infrastructure.extraction.support import _check_deadline
 
 
 def extract_pdf(data):
