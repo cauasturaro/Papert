@@ -46,3 +46,11 @@ make down-all
 ```
 
 Database and trace volumes are preserved.
+
+## License
+
+Copyright (C) 2026 cauasturaro
+
+Papert is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+If you run a modified version as a network service, you must make its source
+code available to the users of that service.
