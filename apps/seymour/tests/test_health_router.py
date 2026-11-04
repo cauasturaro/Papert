@@ -1,8 +1,9 @@
 """Tests for GET /health using a mocked DB session (no real database required)."""
 
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
-from unittest.mock import AsyncMock, MagicMock
 
 from main import app
 from src.infrastructure.database.database import get_session

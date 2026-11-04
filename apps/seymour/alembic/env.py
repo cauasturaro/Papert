@@ -4,15 +4,15 @@ import asyncio
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
-from src.infrastructure.database.database import Base
+from alembic import context
 
 # Register all models so autogenerate can detect them.
 # Add imports here as new domain models are created.
 from src.health.infrastructure.models import HealthCheck  # noqa: F401
+from src.infrastructure.database.database import Base
 
 config = context.config
 if config.config_file_name is not None:
