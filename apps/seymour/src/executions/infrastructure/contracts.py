@@ -42,6 +42,9 @@ def encode_result(result: Result) -> dict:
     if result.evaluation is not None:
         event["evaluation"] = result.evaluation
 
+    if result.grounding is not None:
+        event["grounding"] = result.grounding
+
     return event
 
 
@@ -65,3 +68,8 @@ class RpcControl:
 
     def failed(self, execution_id: str, lease: str) -> None:
         self.invoke({"action": "failed", "executionId": execution_id, "lease": lease})
+
+    def live_sources(self, execution_id: str, lease: str) -> list[str]:
+        answer = self.invoke({"action": "sources", "executionId": execution_id, "lease": lease})
+
+        return answer["sourceIds"]

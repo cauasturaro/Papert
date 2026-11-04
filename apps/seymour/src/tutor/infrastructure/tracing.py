@@ -1,6 +1,7 @@
 """Send correlation and numeric measurements, never learner content or credentials."""
 
 import os
+import re
 from contextlib import contextmanager
 
 from langfuse import Langfuse, propagate_attributes
@@ -9,9 +10,15 @@ from langsmith import tracing_context
 from src.tutor.application.tools import TOOL_ARGUMENTS
 from src.tutor.infrastructure.openai_model import MODEL_PRICES
 
+# Opaque identifiers and our own enum values are safe; any other string may be learner content.
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+SAFE_VALUES = {"cited", "unsupported"}
+
 
 def mask(data, **_kwargs):
     if isinstance(data, int | float | bool) or data is None:
+        return data
+    if isinstance(data, str) and (UUID.match(data) or data in SAFE_VALUES):
         return data
     if isinstance(data, dict):
         return {key: mask(value) for key, value in data.items()}
@@ -25,7 +32,7 @@ class ExecutionMeasurements:
     def __init__(self, observation):
         self._observation = observation
 
-    def record_metadata(self, metadata: dict[str, int | str]) -> None:
+    def record_metadata(self, metadata: dict) -> None:
         self._observation.update(metadata=metadata)
 
 
@@ -73,6 +80,16 @@ class TutorTrace:
         ) as generation:
             yield generation
 
+    def retrieval(self, action):
+        """Records which passages were used (ids, ordinals, distances, sizes), never their text."""
+        with self.client.start_as_current_observation(
+            name="source-retrieval", as_type="retriever"
+        ) as span:
+            passages, tokens = action()
+            span.update(metadata=retrieval_metadata(passages, tokens))
+
+        return passages, tokens
+
     def tool(self, name, action):
         safe_name = name if name in TOOL_ARGUMENTS else "unknown-tool"
         with self.client.start_as_current_observation(name=safe_name, as_type="tool") as span:
@@ -80,3 +97,21 @@ class TutorTrace:
             span.update(metadata={"error": result.kind == "error"})
 
         return result
+
+
+def retrieval_metadata(passages, tokens):
+    used = [
+        {
+            "documentId": passage["documentId"],
+            "ordinal": passage["ordinal"],
+            "distance": passage["distance"],
+            "characters": len(passage["content"]),
+            # Headings are learner text; numeric locations are enough to find the passage.
+            "location": {
+                key: value for key, value in passage["location"].items() if isinstance(value, int)
+            },
+        }
+        for passage in passages
+    ]
+
+    return {"embeddingTokens": tokens, "passages": used}

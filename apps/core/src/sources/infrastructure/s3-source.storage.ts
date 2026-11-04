@@ -1,5 +1,6 @@
 import {
   DeleteObjectsCommand,
+  GetObjectCommand,
   ListObjectVersionsCommand,
   PutObjectCommand,
   S3Client,
@@ -47,7 +48,45 @@ export class S3SourceStorage implements SourceStorage {
     });
   }
 
+  async presignDownload(request: {
+    key: string;
+    versionId?: string;
+    contentType: string;
+    attachmentFilename?: string;
+    expiresInSeconds: number;
+  }) {
+    const disposition = request.attachmentFilename
+      ? `attachment; filename*=UTF-8''${encodeURIComponent(request.attachmentFilename)}`
+      : 'inline';
+
+    // Pinning the version keeps the link on the exact bytes Core authorized.
+    const command = new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: request.key,
+      VersionId: request.versionId,
+      ResponseContentType: request.contentType,
+      ResponseContentDisposition: disposition,
+    });
+
+    return getSignedUrl(this.signer, command, {
+      expiresIn: request.expiresInSeconds,
+    });
+  }
+
   async deleteAllVersions(key: string) {
+    await this.deleteVersions(key, (candidate) => candidate === key);
+  }
+
+  async deleteAllVersionsUnder(prefix: string) {
+    await this.deleteVersions(prefix, (candidate) =>
+      candidate.startsWith(prefix),
+    );
+  }
+
+  private async deleteVersions(
+    prefix: string,
+    matches: (key: string) => boolean,
+  ) {
     let keyMarker: string | undefined;
     let versionMarker: string | undefined;
 
@@ -55,15 +94,15 @@ export class S3SourceStorage implements SourceStorage {
       const page = await this.s3.send(
         new ListObjectVersionsCommand({
           Bucket: this.bucket,
-          Prefix: key,
+          Prefix: prefix,
           KeyMarker: keyMarker,
           VersionIdMarker: versionMarker,
         }),
       );
 
       const versions = [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])]
-        .filter((item) => item.Key === key && item.VersionId)
-        .map((item) => ({ Key: key, VersionId: item.VersionId }));
+        .filter((item) => item.Key && matches(item.Key) && item.VersionId)
+        .map((item) => ({ Key: item.Key, VersionId: item.VersionId }));
 
       if (versions.length > 0) {
         const result = await this.s3.send(

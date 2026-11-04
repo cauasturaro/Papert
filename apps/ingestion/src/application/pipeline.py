@@ -8,6 +8,7 @@ from src.application.events import IngestionEvent, Outcome, ReindexEvent, Source
 from src.application.ports import Ports
 from src.domain.chunking import chunk
 from src.domain.errors import IngestionFailure
+from src.domain.rendition import rendition, rendition_key
 
 MAX_RECEIVES = 3
 
@@ -38,6 +39,12 @@ def _index(ports: Ports, notification: SourceNotification, document, replace):
 
     hard_key = "page" if document.format == "pdf" else None
     chunks = chunk(extracted, hard_key=hard_key)
+
+    body = rendition(document_id, notification.version_id, document.format, extracted)
+
+    if body is not None:
+        key = rendition_key(document_id, notification.version_id)
+        ports.renditions.write(notification.bucket, key, body)
 
     trace_metadata = {"format": document.format, "chunks": len(chunks)}
 

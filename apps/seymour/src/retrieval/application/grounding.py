@@ -23,6 +23,7 @@ def cited_excerpts(
         {
             "sourceId": passage["documentId"],
             "cite": cite(filenames[passage["documentId"]], passage["location"]),
+            "location": passage["location"],
             "start": passage.get("start", 0),
             "text": passage["content"][:characters],
         }

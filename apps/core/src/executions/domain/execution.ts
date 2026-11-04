@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import { DomainError } from '../../common/domain/domain-error.js';
 import type { TutorSource } from './tutor-context.js';
+import type { Grounding } from './grounding.js';
 import { nextUtcDayStart, utcDayKey } from '../../common/domain/utc-day.js';
 
 export class ExecutionError extends DomainError {}
@@ -74,10 +75,14 @@ export const workerEvent = z
     tokens: z.number().int().min(0).max(TUTOR_ATTEMPT_BUDGET),
     // Validated against the attempt by Core; malformed content is recorded, never trusted.
     evaluation: z.unknown().optional(),
+    // Citations are re-authorized against live sources before they are stored.
+    grounding: z.unknown().optional(),
   })
   .strict()
   .refine(
-    (event) => event.evaluation === undefined || event.status === 'completed',
+    (event) =>
+      (event.evaluation === undefined && event.grounding === undefined) ||
+      event.status === 'completed',
   );
 
 export type WorkerEvent = z.infer<typeof workerEvent>;
@@ -169,6 +174,7 @@ export type ExecutionRecord = {
   input: unknown;
   status: string;
   text: string;
+  grounding: unknown;
   sequence: number;
   attempts: number;
   charged: number;
@@ -219,7 +225,16 @@ export interface ExecutionRepository {
   }>;
   failed(id: string, lease: string): Promise<{ status: string }>;
   active(id: string, lease: string): Promise<boolean>;
-  accept(event: WorkerEvent): Promise<ExecutionRecord>;
+  accept(
+    event: WorkerEvent,
+    grounding: Grounding | null,
+  ): Promise<ExecutionRecord>;
+  // Internal: who owns an execution and which sources it was admitted with.
+  sourceScope(id: string): Promise<{
+    userId: string;
+    workspaceId: string;
+    sourceIds: string[];
+  } | null>;
   markPublished(id: string): Promise<void>;
   pending(): Promise<ExecutionRecord[]>;
   expire(): Promise<number>;

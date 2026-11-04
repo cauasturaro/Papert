@@ -20,6 +20,11 @@ Resources:
             AllowedHeaders: [content-type, content-length]
             ExposedHeaders: [ETag]
             MaxAge: 600
+          - AllowedMethods: [GET, HEAD]
+            AllowedOrigins: [!Ref WebOrigin]
+            AllowedHeaders: [range]
+            ExposedHeaders: [Content-Length, Content-Range, Accept-Ranges, ETag]
+            MaxAge: 600
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true

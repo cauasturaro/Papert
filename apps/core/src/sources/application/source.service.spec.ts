@@ -51,6 +51,14 @@ function setup() {
     bucket: 'sources',
     presignUpload: vi.fn<SourceStorage['presignUpload']>(),
     deleteAllVersions: vi.fn<SourceStorage['deleteAllVersions']>(),
+    deleteAllVersionsUnder: vi.fn<SourceStorage['deleteAllVersionsUnder']>(),
+    presignDownload: vi
+      .fn<SourceStorage['presignDownload']>()
+      .mockImplementation(async (request) =>
+        request.attachmentFilename
+          ? `https://storage/download/${request.key}`
+          : `https://storage/view/${request.key}`,
+      ),
   };
   const service = new SourceService(
     repo,
@@ -247,6 +255,9 @@ describe('SourceService', () => {
       documentId,
     );
     expect(storage.deleteAllVersions).toHaveBeenCalledWith(key);
+    expect(storage.deleteAllVersionsUnder).toHaveBeenCalledWith(
+      `renditions/${documentId}/`,
+    );
     expect(repo.markPurged).toHaveBeenCalledWith(documentId);
     expect(repo.markDeleted.mock.invocationCallOrder[0]).toBeLessThan(
       storage.deleteAllVersions.mock.invocationCallOrder[0],
@@ -286,5 +297,57 @@ describe('SourceService', () => {
     });
 
     expect(storage.deleteAllVersions).not.toHaveBeenCalled();
+  });
+
+  describe('view', () => {
+    const docxKey = `documents/${documentId}/original.docx`;
+    const ready: StoredSource = {
+      ...storedSource(),
+      objectKey: docxKey,
+      filename: 'notes.docx',
+      format: 'docx',
+      status: 'ready',
+      objectVersionId: 'version-2',
+    };
+
+    it('issues version-pinned links and the rendition of the current version', async () => {
+      const { repo, storage, service } = setup();
+      repo.list.mockResolvedValue([ready]);
+
+      const view = await service.view('user', workspaceId, documentId);
+
+      expect(repo.list).toHaveBeenCalledWith('user', workspaceId);
+      expect(view.renderer).toBe('paragraphs');
+      expect(view.original).toBe(`https://storage/view/${docxKey}`);
+      expect(view.download).toBe(`https://storage/download/${docxKey}`);
+      expect(view.rendition).toBe(
+        `https://storage/view/renditions/${documentId}/version-2.json`,
+      );
+      expect(storage.presignDownload).toHaveBeenCalledWith(
+        expect.objectContaining({
+          key: docxKey,
+          versionId: 'version-2',
+          expiresInSeconds: 300,
+        }),
+      );
+    });
+
+    it('denies other workspaces, deleted and unfinished sources', async () => {
+      const { repo, storage, service } = setup();
+
+      repo.list.mockResolvedValueOnce(null);
+      const foreign = service.view('intruder', workspaceId, documentId);
+
+      repo.list.mockResolvedValueOnce([]);
+      const deleted = service.view('user', workspaceId, documentId);
+
+      repo.list.mockResolvedValueOnce([{ ...ready, status: 'processing' }]);
+      const processing = service.view('user', workspaceId, documentId);
+
+      await expect(foreign).rejects.toMatchObject({ kind: 'not_found' });
+      await expect(deleted).rejects.toMatchObject({ kind: 'not_found' });
+      await expect(processing).rejects.toMatchObject({ kind: 'conflict' });
+      expect(storage.presignDownload).not.toHaveBeenCalled();
+    });
   });
 });

@@ -44,6 +44,7 @@ type SourceRowProps = {
   source: Source;
   upload: LocalUpload | undefined;
   deleting: boolean;
+  onOpen: () => void;
   onDelete: () => void;
 };
 
@@ -51,6 +52,7 @@ export function SourceRow({
   source,
   upload,
   deleting,
+  onOpen,
   onDelete,
 }: SourceRowProps) {
   const uploading = upload?.progress !== null && upload?.progress !== undefined;
@@ -85,9 +87,20 @@ export function SourceRow({
         <FileIcon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="truncate font-medium" title={source.filename}>
-            {source.filename}
-          </p>
+          {source.status === "ready" ? (
+            <button
+              type="button"
+              className="block max-w-full truncate text-left font-medium underline-offset-2 hover:underline focus-visible:underline"
+              title={`Open ${source.filename}`}
+              onClick={onOpen}
+            >
+              {source.filename}
+            </button>
+          ) : (
+            <p className="truncate font-medium" title={source.filename}>
+              {source.filename}
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
             {badge}

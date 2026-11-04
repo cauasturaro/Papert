@@ -18,7 +18,11 @@ class SourceSearch:
 
     def search(self, query: str, document_ids: list[str], limit: int) -> tuple[list[Passage], int]:
         """Closest passages plus the chunk after the best one, and the query's embedding tokens."""
-        allowed = [item for item in document_ids if item in self.document_ids] or self.document_ids
+        allowed = [item for item in document_ids if item in self.document_ids]
+
+        # Nothing authorized (e.g. every requested source was deleted) means nothing to search.
+        if not allowed:
+            return [], 0
 
         vector, tokens = self.embedder.embed(query)
         passages = self.index.nearest(self.workspace_id, allowed, vector, limit)

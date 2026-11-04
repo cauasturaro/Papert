@@ -398,7 +398,7 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
     );
     const failing = new PrismaExecutionRepository(db, undefined, progression);
 
-    await expect(failing.accept(event)).rejects.toThrow(
+    await expect(failing.accept(event, null)).rejects.toThrow(
       'Study write interrupted',
     );
 

@@ -38,6 +38,11 @@
       "maxItems": 5,
       "title": "Sources",
       "type": "array"
+    },
+    "answered_from_sources": {
+      "default": true,
+      "title": "Answered From Sources",
+      "type": "boolean"
     }
   },
   "required": [
@@ -46,7 +51,8 @@
     "quote_to",
     "next_step",
     "question",
-    "sources"
+    "sources",
+    "answered_from_sources"
   ],
   "title": "Guidance",
   "type": "object"

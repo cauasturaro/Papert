@@ -15,6 +15,7 @@ import type { Source } from "./sources-api";
 import { ACCEPTED_EXTENSIONS, MAX_WORKSPACE_SOURCES } from "./source-rules";
 import { SourceRow, UploadRow } from "./source-rows";
 import { useSources } from "./use-sources";
+import { useOpenSource } from "../viewer/source-viewer-context";
 
 type SourcesPanelProps = {
   workspaceId: string;
@@ -22,6 +23,7 @@ type SourcesPanelProps = {
 
 export function SourcesPanel({ workspaceId }: SourcesPanelProps) {
   const sources = useSources(workspaceId);
+  const openSource = useOpenSource();
   const input = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Source | null>(null);
@@ -139,6 +141,7 @@ export function SourcesPanel({ workspaceId }: SourcesPanelProps) {
                 (upload) => upload.sourceId === source.id,
               )}
               deleting={sources.removing === source.id}
+              onOpen={() => openSource({ sourceId: source.id })}
               onDelete={() => {
                 sources.resetRemoveError();
                 setPendingDelete(source);

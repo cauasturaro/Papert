@@ -2,6 +2,7 @@
 
 from contextlib import nullcontext
 from dataclasses import dataclass, field
+from unittest.mock import Mock
 
 from src.application.control import (
     Begin,
@@ -105,7 +106,10 @@ class NoopTracer:
 def test_semantic_created_removed_and_ignored_events_drive_typed_ports(capsys):
     control = FakeControl()
     store = FakeStore()
-    ports = Ports(control, FakeObjects(), store, FakeEmbeddings(), NoopTracer(), FakeExtractor())
+    renditions = Mock()
+    ports = Ports(
+        control, FakeObjects(), store, FakeEmbeddings(), NoopTracer(), FakeExtractor(), renditions
+    )
     created = SourceNotification("created", "sources", "source.md", "version", "00A1", 13)
     removed = SourceNotification("removed", "sources", "source.md", "version", "00A2", 0)
     ignored = SourceNotification("ignored", "sources", "source.md", None, None, 0)
@@ -120,6 +124,7 @@ def test_semantic_created_removed_and_ignored_events_drive_typed_ports(capsys):
     ]
     assert store.writes == [("document", "workspace", "version", "00A1", 25, False)]
     assert store.purges == [("document", "workspace")]
+    renditions.write.assert_not_called()
     output = capsys.readouterr().out
     assert '"metric": "source_ingested"' in output
     assert '"metric": "source_purged"' in output

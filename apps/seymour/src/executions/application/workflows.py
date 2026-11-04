@@ -34,6 +34,21 @@ def run_tutor_job(
     def active():
         return control.active(execution_id, lease)
 
+    search = None
+
+    if runtime.search is not None:
+        source_search = runtime.search
+
+        def search(query, document_ids):
+            # Core re-authorizes before every lookup, so a source deleted mid-run is never searched.
+            live = set(control.live_sources(execution_id, lease))
+            allowed = [document_id for document_id in document_ids if document_id in live]
+
+            if not allowed:
+                return [], 0
+
+            return runtime.trace.retrieval(lambda: source_search(query, allowed))
+
     def progress(text, tokens):
         nonlocal index
         index += 1
@@ -52,12 +67,43 @@ def run_tutor_job(
             active,
             progress,
             runtime.trace.tool,
-            runtime.search,
+            search,
             clock=runtime.clock,
         )
-        span.record_metadata({"calls": result["calls"], "tokens": result["tokens"]})
+        sources = result["grounding"]
 
-        publish(Result(execution_id, lease, 100, "completed", result["text"], result["tokens"]))
+        span.record_metadata(
+            {
+                "calls": result["calls"],
+                "tokens": result["tokens"],
+                **grounding_measurements(sources),
+            }
+        )
+
+        publish(
+            Result(
+                execution_id,
+                lease,
+                100,
+                "completed",
+                result["text"],
+                result["tokens"],
+                grounding=sources,
+            )
+        )
+
+
+def grounding_measurements(grounding: dict | None) -> dict:
+    """Trace-safe summary: support and cited document ids/locations, never source text."""
+    if grounding is None:
+        return {}
+
+    cited = [
+        {"sourceId": citation["sourceId"], "location": citation["location"]}
+        for citation in grounding["citations"]
+    ]
+
+    return {"sourceSupport": grounding["support"], "citations": cited}
 
 
 ANALYSIS_MESSAGES = {

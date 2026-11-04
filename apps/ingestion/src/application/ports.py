@@ -41,6 +41,10 @@ class ObjectReader(Protocol):
     def read(self, bucket: str, key: str, version_id: str) -> bytes: ...
 
 
+class RenditionWriter(Protocol):
+    def write(self, bucket: str, key: str, body: dict) -> None: ...
+
+
 class SourceIndex(Protocol):
     def write(
         self,
@@ -85,3 +89,4 @@ class Ports:
     embeddings: Embedder
     trace: IngestionTracer
     extractor: Extractor
+    renditions: RenditionWriter

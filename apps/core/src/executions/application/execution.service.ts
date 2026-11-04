@@ -17,6 +17,8 @@ import type {
   ExecutionRecord,
 } from '../domain/execution.js';
 import type { TutorSourceCatalog } from '../domain/tutor-context.js';
+import { authorizedGrounding, liveSourceIds } from '../domain/grounding.js';
+import { parseGrounding } from './grounding-contract.js';
 
 // Same response body executions have always returned for invalid input.
 function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {
@@ -128,6 +130,7 @@ export class ExecutionService {
       prompt: input.prompt ?? null,
       status: job.status,
       text: job.text,
+      grounding: job.grounding ?? null,
       sequence: job.sequence,
       attempts: job.attempts,
       charged: job.charged,
@@ -167,11 +170,54 @@ export class ExecutionService {
     return this.repo.active(id, lease);
   }
 
+  /** Sources Seymour may still search for this leased execution; deleted ones drop out. */
+  async liveSources(id: string, lease: string) {
+    const active = await this.repo.active(id, lease);
+
+    if (!active) {
+      return [];
+    }
+
+    return this.admittedAndReady(id);
+  }
+
   async accept(body: unknown) {
     const event = parseRequest(workerEvent, body);
-    const job = await this.repo.accept(event);
+
+    const grounding = await this.authorizeGrounding(
+      event.executionId,
+      event.grounding,
+    );
+
+    const job = await this.repo.accept(event, grounding);
 
     return this.snapshot(job);
+  }
+
+  private async authorizeGrounding(id: string, value: unknown) {
+    const grounding = value === undefined ? null : parseGrounding(value);
+
+    if (!grounding) {
+      return null;
+    }
+
+    const live = await this.admittedAndReady(id);
+
+    return authorizedGrounding(grounding, live);
+  }
+
+  // Sources the execution was admitted with that are still ready in its workspace now.
+  private async admittedAndReady(id: string) {
+    const scope = await this.repo.sourceScope(id);
+
+    if (!scope || scope.sourceIds.length === 0) {
+      return [];
+    }
+
+    const ready = await this.sources.ready(scope.userId, scope.workspaceId);
+    const readyIds = ready.map((source) => source.id);
+
+    return liveSourceIds(scope.sourceIds, readyIds);
   }
 
   private async publish(job: ExecutionRecord) {

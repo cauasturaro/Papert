@@ -18,6 +18,8 @@ import type {
   ExecutionRepository,
 } from '../domain/execution.js';
 import type { TutorSource } from '../domain/tutor-context.js';
+import { admittedSourceIds } from '../domain/grounding.js';
+import type { Grounding } from '../domain/grounding.js';
 import {
   attemptBudget,
   activeStudyStep,
@@ -184,6 +186,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     status: string,
     text = job.text,
     evaluation?: unknown,
+    grounding: Grounding | null = null,
   ) {
     await this.study.recordOutcome(tx, job, (snapshot) =>
       analysisOutcome(snapshot, job.id, status, evaluation, this.now()),
@@ -201,6 +204,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       data: {
         status,
         text,
+        grounding: grounding ?? undefined,
         reserved: 0,
         finishedAt: this.now(),
         sequence: { increment: 1 },
@@ -293,7 +297,21 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     return !!job && activeLease(job, lease, this.now(), this.now());
   }
 
-  async accept(event: WorkerEvent) {
+  async sourceScope(id: string) {
+    const job = await this.db.execution.findUnique({ where: { id } });
+
+    if (!job) {
+      return null;
+    }
+
+    return {
+      userId: job.userId,
+      workspaceId: job.workspaceId,
+      sourceIds: admittedSourceIds(job.input),
+    };
+  }
+
+  async accept(event: WorkerEvent, grounding: Grounding | null) {
     const job = await this.locked(event.executionId, async (tx, record) => {
       let current = record;
       const refund = usageRefund(current, event);
@@ -334,6 +352,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
           event.status,
           event.text,
           event.evaluation,
+          grounding,
         );
       }
 

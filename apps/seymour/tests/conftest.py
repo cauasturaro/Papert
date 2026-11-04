@@ -16,6 +16,9 @@ class NoopTracer:
     def tool(self, name, action):
         return action()
 
+    def retrieval(self, action):
+        return action()
+
 
 @pytest.fixture
 def noop_trace():

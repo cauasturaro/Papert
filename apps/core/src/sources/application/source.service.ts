@@ -13,6 +13,12 @@ import {
   SourceError,
   UPLOAD_URL_SECONDS,
 } from '../domain/source.js';
+import {
+  renditionPrefix,
+  VIEW_URL_SECONDS,
+  viewPlan,
+} from '../domain/viewer.js';
+import { contentTypeOf } from '../domain/source.js';
 import { controlSchema, registerSchema } from './contracts.js';
 import type { ControlRequest } from './contracts.js';
 import { presentSource } from './presentation.js';
@@ -114,6 +120,61 @@ export class SourceService {
       }));
   }
 
+  /** Fresh links to open a ready source; requires the same workspace authorization as listing. */
+  async view(userId: string, workspaceId: string, sourceId: string) {
+    const sources = await this.repo.list(userId, workspaceId);
+    const source = sources?.find((item) => item.id === sourceId) ?? null;
+
+    const plan = viewPlan(source);
+
+    if (plan.kind === 'not_found') {
+      throw new SourceError('not_found', 'Source not found.');
+    }
+
+    if (plan.kind === 'not_ready') {
+      throw new SourceError(
+        'conflict',
+        'This source is not ready to open yet.',
+      );
+    }
+
+    const opened = source!;
+    const contentType = contentTypeOf(opened.format);
+    const now = this.now();
+    const link = {
+      key: plan.key,
+      versionId: plan.versionId,
+      contentType,
+      expiresInSeconds: VIEW_URL_SECONDS,
+    };
+
+    const original = await this.storage.presignDownload(link);
+    const download = await this.storage.presignDownload({
+      ...link,
+      attachmentFilename: opened.filename,
+    });
+
+    let rendition = null;
+
+    if (plan.renditionKey) {
+      rendition = await this.storage.presignDownload({
+        key: plan.renditionKey,
+        contentType: 'application/json',
+        expiresInSeconds: VIEW_URL_SECONDS,
+      });
+    }
+
+    return {
+      source: presentSource(opened, now),
+      renderer: plan.renderer,
+      versionId: plan.versionId,
+      original,
+      download,
+      rendition,
+      expiresAt: new Date(now.getTime() + VIEW_URL_SECONDS * 1000),
+    };
+  }
+
   async remove(userId: string, workspaceId: string, sourceId: string) {
     const deleted = await this.repo.markDeleted(userId, workspaceId, sourceId);
     if (!deleted) {
@@ -189,6 +250,7 @@ export class SourceService {
   private async purge(id: string, key: string) {
     try {
       await this.storage.deleteAllVersions(key);
+      await this.storage.deleteAllVersionsUnder(renditionPrefix(id));
       await this.repo.markPurged(id);
 
       return true;

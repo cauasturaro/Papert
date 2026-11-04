@@ -42,3 +42,4 @@ next-env.d.ts
 
 # Generated local editor assets
 /public/monaco/
+/public/pdfjs/

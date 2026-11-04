@@ -36,6 +36,13 @@ const rpcSchema = z.discriminatedUnion('action', [
       lease: z.string().uuid(),
     })
     .strict(),
+  z
+    .object({
+      action: z.literal('sources'),
+      executionId: z.string().uuid(),
+      lease: z.string().uuid(),
+    })
+    .strict(),
 ]);
 
 // This Lambda has no HTTP event. Only the Seymour role may invoke it through IAM.
@@ -58,6 +65,15 @@ export async function workerControl(event: unknown) {
     );
 
     return result;
+  }
+
+  if (request.action === 'sources') {
+    return {
+      sourceIds: await executions.liveSources(
+        request.executionId,
+        request.lease,
+      ),
+    };
   }
 
   return {

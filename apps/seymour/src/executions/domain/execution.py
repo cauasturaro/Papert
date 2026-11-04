@@ -44,3 +44,5 @@ class Result:
     text: str
     tokens: int
     evaluation: dict | None = None
+    # Tutor answers in workspaces with sources: support and citations; Core re-authorizes them.
+    grounding: dict | None = None

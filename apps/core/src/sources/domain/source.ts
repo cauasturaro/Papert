@@ -114,6 +114,10 @@ export function registration(body: Declaration) {
   return result;
 }
 
+export function contentTypeOf(format: SourceFormat) {
+  return SOURCE_FORMATS[format].contentType;
+}
+
 export function objectKey(documentId: string, format: SourceFormat) {
   return `documents/${documentId}/original.${SOURCE_FORMATS[format].extension}`;
 }

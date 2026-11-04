@@ -202,3 +202,49 @@ def _bounded(selected: list[tuple[str, str, str]]) -> tuple[str, list[str]]:
     cites = list(dict.fromkeys(cite for _document, cite, _line in kept))
 
     return text, cites
+
+
+# Learner wording that asks to see source text; then any quote of the excerpts is wanted.
+SHOW_REQUEST = re.compile(
+    r"\b(show|see|example|sample|quote|exact|verbatim|payload|body|snippet|request|response)\b",
+    re.IGNORECASE,
+)
+TERM = re.compile(r"[a-z0-9][a-z0-9_-]+")
+COMMON_WORDS = {"about", "there", "these", "those", "which", "would", "should", "could", "their"}
+
+
+def _terms(text: str) -> set[str]:
+    """Distinctive terms: anything with a digit (limits, codes) or words of 5+ letters."""
+    words = TERM.findall(text.lower())
+
+    return {
+        word for word in words if (_has_digit(word) or len(word) >= 5) and word not in COMMON_WORDS
+    }
+
+
+def _has_digit(word: str) -> bool:
+    return any(char.isdigit() for char in word)
+
+
+def quote_supports(quote: str, explanation: str, prompt: str) -> bool:
+    """A quote is shown when the learner asked to see source text or it backs the explanation."""
+    if SHOW_REQUEST.search(prompt):
+        return True
+
+    return bool(_terms(quote) & _terms(explanation))
+
+
+def attributed_cites(excerpts: list[dict], answer: str, prompt: str) -> list[str]:
+    """Cites of excerpts whose numbers or codes the answer states and the question did not.
+
+    The model often leaves its sources list empty while answering from an excerpt; a fact
+    such as a limit or an error code copied from it is deterministic evidence of use.
+    """
+    stated = {term for term in _terms(answer) if _has_digit(term)} - _terms(prompt)
+    cites = []
+
+    for excerpt in excerpts:
+        if stated & _terms(excerpt["text"]):
+            cites.append(excerpt["cite"])
+
+    return list(dict.fromkeys(cites))

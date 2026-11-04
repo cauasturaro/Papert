@@ -1,3 +1,5 @@
+import type { Grounding } from "./viewer/citations";
+
 export type Execution = {
   id: string;
   workspaceId: string;
@@ -5,6 +7,8 @@ export type Execution = {
   prompt: string | null;
   status: string;
   text: string;
+  // Present on tutor answers in workspaces with sources (older answers lack it).
+  grounding?: Grounding | null;
   sequence: number;
   charged: number;
   reserved: number;

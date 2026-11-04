@@ -40,6 +40,10 @@ provider:
           Resource: !Sub "arn:aws:s3:::papert-sources/documents/*"
 
         - Effect: Allow
+          Action: s3:PutObject
+          Resource: !Sub "arn:aws:s3:::papert-sources/renditions/*"
+
+        - Effect: Allow
           Action: lambda:InvokeFunction
           Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:papert-core-${self:provider.stage}-sourceControl"
 

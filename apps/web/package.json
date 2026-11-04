@@ -8,8 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "predev": "node scripts/prepare-monaco.mjs",
-    "prebuild": "node scripts/prepare-monaco.mjs",
+    "predev": "node scripts/prepare-monaco.mjs && node scripts/prepare-pdf.mjs",
+    "prebuild": "node scripts/prepare-monaco.mjs && node scripts/prepare-pdf.mjs",
     "test": "node --experimental-strip-types --test test/*.test.mjs"
   },
   "dependencies": {
@@ -25,6 +25,7 @@
     "clsx": "^2.1.1",
     "monaco-editor": "^0.57.0",
     "next": "16.4.3",
+    "pdfjs-dist": "6.5.438",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "tailwind-merge": "^3.7.0"

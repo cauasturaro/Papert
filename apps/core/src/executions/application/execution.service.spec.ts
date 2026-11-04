@@ -12,6 +12,7 @@ const execution: ExecutionRecord = {
   input: { kind: 'chat', prompt: 'Help', secret: 'private' },
   status: 'queued',
   text: '',
+  grounding: null,
   sequence: 0,
   attempts: 0,
   charged: 0,
@@ -22,6 +23,11 @@ const execution: ExecutionRecord = {
   finishedAt: null,
   publishedAt: null,
 };
+const KEPT = '11111111-1111-4111-8111-111111111111';
+const DELETED = '22222222-2222-4222-8222-222222222222';
+const EXECUTION_ID = '33333333-3333-4333-8333-333333333333';
+const LEASE = '44444444-4444-4444-8444-444444444444';
+
 const request = {
   requestKey: '4ca755d9-108c-497c-b9a0-1dab240cb901',
   kind: 'chat',
@@ -58,6 +64,11 @@ function setup() {
       .fn<ExecutionRepository['pending']>()
       .mockResolvedValue([execution]),
     expire: vi.fn<ExecutionRepository['expire']>().mockResolvedValue(2),
+    sourceScope: vi.fn<ExecutionRepository['sourceScope']>().mockResolvedValue({
+      userId: 'user',
+      workspaceId: 'workspace',
+      sourceIds: [KEPT, DELETED],
+    }),
   } satisfies ExecutionRepository;
   const queue = { publish: vi.fn().mockResolvedValue(undefined) };
   const syntax = {
@@ -198,5 +209,60 @@ describe('ExecutionService with fake ports', () => {
     await service.submit('user', 'workspace', request);
 
     expect(queue.publish).not.toHaveBeenCalled();
+  });
+
+  it('lets Seymour search only admitted sources that are still ready', async () => {
+    const { service, repo, sources } = setup();
+    repo.active.mockResolvedValue(true);
+    sources.ready.mockResolvedValue([
+      { id: KEPT, filename: 'a.pdf', format: 'pdf' },
+    ]);
+
+    const live = await service.liveSources(EXECUTION_ID, LEASE);
+
+    repo.active.mockResolvedValue(false);
+    const stale = await service.liveSources(EXECUTION_ID, LEASE);
+
+    expect(live).toEqual([KEPT]);
+    expect(stale).toEqual([]);
+    expect(sources.ready).toHaveBeenCalledWith('user', 'workspace');
+  });
+
+  it('re-authorizes citations before storing a completed answer', async () => {
+    const { service, repo, sources } = setup();
+    sources.ready.mockResolvedValue([
+      { id: KEPT, filename: 'a.pdf', format: 'pdf' },
+    ]);
+
+    const citation = (sourceId: string) => ({
+      sourceId,
+      cite: 'a.pdf, p. 1',
+      location: { page: 1 },
+      excerpt: 'text',
+      quote: null,
+    });
+    const event = {
+      version: 1,
+      executionId: EXECUTION_ID,
+      lease: LEASE,
+      index: 100,
+      status: 'completed',
+      text: 'Answer',
+      tokens: 10,
+      grounding: {
+        support: 'cited',
+        citations: [citation(DELETED), citation(KEPT)],
+      },
+    };
+    const malformed = { ...event, grounding: { support: 'maybe' } };
+
+    await service.accept(event);
+    await service.accept(malformed);
+
+    expect(repo.accept.mock.calls[0][1]).toEqual({
+      support: 'cited',
+      citations: [citation(KEPT)],
+    });
+    expect(repo.accept.mock.calls[1][1]).toBeNull();
   });
 });

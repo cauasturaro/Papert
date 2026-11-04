@@ -9,7 +9,7 @@ async function proxy(
   const resource = path.join("/");
 
   if (
-    !/^(roadmaps\/[a-z0-9-]{1,100}(\/start)?|workspaces\/[a-fA-F0-9-]{36}(\/attempts|\/steps\/[a-z0-9-]+|\/sources(\/[a-fA-F0-9-]{36})?)?)$/.test(
+    !/^(roadmaps\/[a-z0-9-]{1,100}(\/start)?|workspaces\/[a-fA-F0-9-]{36}(\/attempts|\/steps\/[a-z0-9-]+|\/sources(\/[a-fA-F0-9-]{36}(\/view)?)?)?)$/.test(
       resource,
     )
   ) {

@@ -1,10 +1,12 @@
 import json
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from unittest.mock import ANY, Mock
 
 import pytest
 
 from src.application.ports import Embedded, Ports
+from src.domain.extraction import Block, Extracted
 from src.infrastructure.control import RpcControl
 from src.infrastructure.events import decode_record, process_batch, process_record
 from src.infrastructure.extraction import DocumentExtractor
@@ -127,6 +129,7 @@ def ports(control=None, store=None, objects=None):
         embeddings=FakeEmbeddings(),
         trace=FakeTrace(),
         extractor=DocumentExtractor(),
+        renditions=Mock(),
     )
 
 
@@ -329,3 +332,95 @@ def test_unknown_events_keep_the_existing_silent_ignore_behavior(capsys):
     assert control.calls == []
     assert store.events == []
     assert capsys.readouterr().out == ""
+
+
+@pytest.mark.parametrize("format", ["doc", "docx", "pdf", "md"])
+@pytest.mark.parametrize("reindex", [False, True])
+def test_renditions_preserve_extracted_blocks_before_index_write(format, reindex):
+    control = FakeControl()
+    control.begin["format"] = format
+    control.reindex["format"] = format
+    adapters = ports(control)
+    extracted = Extracted(
+        [
+            Block("Ação e coração", {"paragraphStart": 1, "paragraphEnd": 1, "heading": "Ação"}),
+            Block("  Second paragraph.\n", {"paragraphStart": 3, "paragraphEnd": 4}),
+        ]
+    )
+    adapters.extractor = Mock()
+    adapters.extractor.extract.return_value = extracted
+    adapters.store.write = Mock(return_value="written")
+    writes = Mock()
+    writes.attach_mock(adapters.renditions.write, "rendition")
+    writes.attach_mock(adapters.store.write, "index")
+    record = s3_record()
+
+    if reindex:
+        record = {"messageId": "r", "body": json.dumps({"PapertReindex": {"documentId": DOCUMENT}})}
+
+    process_record(adapters, record)
+
+    expected_order = ["index"]
+
+    if format in ("doc", "docx"):
+        expected_body = {
+            "version": 1,
+            "documentId": DOCUMENT,
+            "versionId": "v1",
+            "format": format,
+            "blocks": [
+                {
+                    "text": "Ação e coração",
+                    "location": {"paragraphStart": 1, "paragraphEnd": 1, "heading": "Ação"},
+                },
+                {
+                    "text": "  Second paragraph.\n",
+                    "location": {"paragraphStart": 3, "paragraphEnd": 4},
+                },
+            ],
+        }
+        adapters.renditions.write.assert_called_once_with(
+            "papert-sources", f"renditions/{DOCUMENT}/v1.json", expected_body
+        )
+        expected_order = ["rendition", "index"]
+    else:
+        adapters.renditions.write.assert_not_called()
+
+    assert [entry[0] for entry in writes.mock_calls] == expected_order
+    adapters.store.write.assert_called_once_with(
+        DOCUMENT, WORKSPACE, "v1", "00A1", ANY, ANY, extracted.character_count, replace=reindex
+    )
+    assert control.actions() == ["reindex" if reindex else "begin", "complete"]
+
+
+@pytest.mark.parametrize("format", ["doc", "docx"])
+@pytest.mark.parametrize("reindex", [False, True])
+def test_rendition_write_failure_propagates_without_index_or_completion(format, reindex):
+    control = FakeControl()
+    control.begin["format"] = format
+    control.reindex["format"] = format
+    adapters = ports(control)
+    adapters.extractor = Mock()
+    adapters.extractor.extract.return_value = Extracted(
+        [Block("Document text.", {"paragraphStart": 1, "paragraphEnd": 1})]
+    )
+    adapters.renditions.write.side_effect = ConnectionError("S3 unavailable")
+    adapters.store = Mock()
+    record = s3_record()
+
+    if reindex:
+        record = {"messageId": "r", "body": json.dumps({"PapertReindex": {"documentId": DOCUMENT}})}
+
+    with pytest.raises(ConnectionError, match="S3 unavailable"):
+        process_record(adapters, record)
+
+    adapters.renditions.write.assert_called_once()
+    assert adapters.store.mock_calls == []
+    assert adapters.embeddings.inputs == []
+    assert control.actions() == ["reindex" if reindex else "begin"]
+
+    result = process_batch(adapters, {"Records": [record]})
+
+    assert result == {"batchItemFailures": [{"itemIdentifier": record["messageId"]}]}
+    assert adapters.store.mock_calls == []
+    assert control.actions() == ["reindex" if reindex else "begin"] * 2

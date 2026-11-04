@@ -44,7 +44,7 @@ class FakeIndex:
 
 @pytest.mark.parametrize(
     ("requested", "authorized"),
-    [(["allowed", "foreign"], ["allowed"]), (["foreign"], ["allowed", "other"])],
+    [(["allowed", "foreign"], ["allowed"]), (["allowed", "other"], ["allowed", "other"])],
 )
 @pytest.mark.parametrize("already_present", [False, True])
 def test_authorized_filter_and_following_chunk_selection(requested, authorized, already_present):
@@ -72,8 +72,21 @@ def test_empty_results_do_not_request_a_following_chunk():
     index = FakeIndex([], None)
     search = SourceSearch("workspace", ["allowed"], FakeEmbedder(), index)
 
-    results, tokens = search.search("HTTP validation", [], 5)
+    results, tokens = search.search("HTTP validation", ["allowed"], 5)
 
     assert results == []
     assert tokens == 7
     assert index.following_requests == []
+
+
+@pytest.mark.parametrize("requested", [[], ["foreign"]])
+def test_unauthorized_requests_search_nothing(requested):
+    index = FakeIndex([passage("allowed", 1, 0.1)], None)
+    embedder = FakeEmbedder()
+    search = SourceSearch("workspace", ["allowed"], embedder, index)
+
+    results, tokens = search.search("HTTP validation", requested, 5)
+
+    assert results == []
+    assert tokens == 0
+    assert index.requests == []

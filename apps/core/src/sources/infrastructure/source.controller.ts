@@ -57,6 +57,15 @@ export class SourceController {
     };
   }
 
+  @Get(':sourceId/view')
+  view(
+    @CurrentPrincipal() principal: Principal,
+    @Param('workspaceId', ResourceIdPipe) workspaceId: string,
+    @Param('sourceId', ResourceIdPipe) sourceId: string,
+  ) {
+    return this.sources.view(principal.user.id, workspaceId, sourceId);
+  }
+
   @Delete(':sourceId')
   @HttpCode(204)
   async remove(

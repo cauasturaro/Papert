@@ -14,6 +14,7 @@ import { SeymourComposer } from "./seymour-composer";
 import type { Execution } from "../execution-state";
 import { useSeymour, type CodeSelection } from "./use-seymour";
 import { useReadySources } from "../sources/use-ready-sources";
+import { AnswerSources } from "./answer-sources";
 
 type SeymourPanelProps = {
   workspaceId: string;
@@ -121,6 +122,10 @@ function ChatTurn({
         >
           {execution.text}
         </p>
+
+        {execution.grounding && (
+          <AnswerSources grounding={execution.grounding} />
+        )}
       </div>
     </>
   );

@@ -11,6 +11,7 @@ from src.retrieval.domain.ports import Search
 from src.shared.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
 from src.tutor.application.conversation import recent_turns, search_query
 from src.tutor.application.guidance import Guidance, render
+from src.tutor.application.guidance import grounding as answer_grounding
 from src.tutor.application.prompts import system_prompt
 from src.tutor.application.tools import call_tool, tool_definitions
 from src.tutor.domain.context import ToolResult, TutorContext
@@ -22,6 +23,8 @@ class State(TypedDict):
     calls: int
     text: str
     stopped: bool
+    # Set only for valid guidance: support and citations of the learner's sources.
+    grounding: dict | None
 
 
 def run_tutor(
@@ -120,12 +123,15 @@ def run_tutor(
             return {"messages": updated, "tokens": tokens, "calls": state["calls"] + 1}
 
         guidance_text = final_text(response)
+        sources = None
 
         try:
             guidance = Guidance.model_validate_json(guidance_text)
-            text = render(guidance, retrieved)
+            text, citations = render(guidance, retrieved, prompt)
             if len(text.encode("utf-16-le")) > 8000:
                 raise ValueError("Guidance exceeds the transport limit")
+
+            sources = answer_grounding(bool(context.sources), citations)
         except (ValueError, TypeError):
             text = (
                 "The tutor could not produce valid guidance. Please narrow the question and retry."
@@ -137,6 +143,7 @@ def run_tutor(
             "calls": state["calls"] + 1,
             "text": text,
             "stopped": True,
+            "grounding": sources,
         }
 
     def tools(state: State):
@@ -189,6 +196,13 @@ def run_tutor(
     graph.add_conditional_edges("tools", lambda state: END if state["stopped"] else "model")
 
     return graph.compile().invoke(
-        {"messages": messages, "tokens": 0, "calls": 0, "text": "", "stopped": False},
+        {
+            "messages": messages,
+            "tokens": 0,
+            "calls": 0,
+            "text": "",
+            "stopped": False,
+            "grounding": None,
+        },
         {"recursion_limit": 8, "callbacks": []},
     )

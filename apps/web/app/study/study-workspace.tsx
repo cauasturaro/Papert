@@ -20,6 +20,7 @@ import { SourcesPanel } from "./sources/sources-panel";
 import { StudyLayout } from "./study-layout";
 import { StudyNavbar } from "./study-navbar";
 import { WorkspaceResources } from "./workspace-resources";
+import { SourceViewerProvider } from "./viewer/source-viewer-context";
 import type { Workspace } from "./study-api";
 import type { useStudy } from "./use-study";
 
@@ -54,7 +55,7 @@ export function StudyWorkspace({ study, workspace }: StudyWorkspaceProps) {
     : undefined;
 
   return (
-    <>
+    <SourceViewerProvider workspaceId={workspace.id}>
       <StudyNavbar
         workspace={workspace}
         status={study.status}
@@ -163,6 +164,6 @@ export function StudyWorkspace({ study, workspace }: StudyWorkspaceProps) {
         collapsed={panels.collapsed}
         onExpand={panels.expand}
       />
-    </>
+    </SourceViewerProvider>
   );
 }
