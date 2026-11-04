@@ -379,3 +379,16 @@ export function registrationLimit(
 export function processingDeadline(now: Date) {
   return new Date(now.getTime() - PROCESSING_TIMEOUT_MS);
 }
+
+export type NewSource = Registration & {
+  id: string;
+  bucket: string;
+  objectKey: string;
+  uploadExpiresAt: Date;
+};
+
+export type RegisterOutcome =
+  | { kind: 'created'; source: StoredSource }
+  | { kind: 'workspace_not_found' }
+  | { kind: 'workspace_limit' }
+  | { kind: 'daily_limit' };

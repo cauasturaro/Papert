@@ -1,6 +1,6 @@
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { ExecutionStreamService } from '../application/execution-stream.service.js';
-import type { StreamExecutions } from '../domain/stream.js';
+import type { StreamExecutions } from '../domain/ports/stream-executions.js';
 import {
   PrismaStreamTickets,
   PrismaStreamAuthorization,

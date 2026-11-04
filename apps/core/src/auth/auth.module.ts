@@ -2,13 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { AuthService } from './application/auth.service.js';
 import { SignInRateLimiter } from './application/sign-in-rate-limiter.js';
-import { PrismaAttemptStore } from './infrastructure/prisma-attempt.store.js';
+import { PrismaAttemptStore } from './infrastructure/prisma-attempt-store.js';
 import {
   AuthController,
   AUTH_ORIGIN,
 } from './infrastructure/auth.controller.js';
 import { ArgonPasswords, JweTokens } from './infrastructure/crypto.js';
-import { PrismaAuthRepository } from './infrastructure/prisma-auth.repository.js';
+import { PrismaAuthRepository } from './infrastructure/prisma-auth-repository.js';
 import { PrismaService } from '../infrastructure/database/prisma.service.js';
 
 @Module({

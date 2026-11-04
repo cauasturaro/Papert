@@ -1,6 +1,6 @@
 """Composition of production adapters shared by the Lambda and local entry points."""
 
-from src.application.ports import Ports
+from src.domain.ports import Ports
 from src.infrastructure.control import RpcControl
 from src.infrastructure.embeddings import OpenAIEmbeddings
 from src.infrastructure.extraction import DocumentExtractor

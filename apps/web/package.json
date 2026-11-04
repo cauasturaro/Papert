@@ -10,7 +10,7 @@
     "lint": "eslint",
     "predev": "node scripts/prepare-monaco.mjs && node scripts/prepare-pdf.mjs",
     "prebuild": "node scripts/prepare-monaco.mjs && node scripts/prepare-pdf.mjs",
-    "test": "node --experimental-strip-types --test test/*.test.mjs"
+    "test": "node --experimental-strip-types --test 'app/**/*.test.mjs' 'lib/**/*.test.mjs'"
   },
   "dependencies": {
     "@dnd-kit/dom": "0.5.1",

@@ -1,22 +1,17 @@
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import { buildGenerationContext } from '../application/worker-context.js';
+import { DEADLINE_MS } from '../domain/admission.js';
+import { ExecutionError } from '../domain/execution.js';
+import { GENERATION_ATTEMPT_BUDGET, period } from '../domain/quota.js';
+import { allocateQuota } from '../domain/quota.js';
 import {
-  DEADLINE_MS,
-  ExecutionError,
-  GENERATION_ATTEMPT_BUDGET,
-  period,
-} from '../domain/execution.js';
-import {
-  allocateQuota,
   assertRateLimit,
   assertSameGeneration,
   rateWindowStart,
-} from '../domain/policy.js';
-import type {
-  ExecutionRoadmapDrafts,
-  GenerationRequest,
-} from '../domain/roadmap-drafts.js';
+} from '../domain/admission.js';
+import type { ExecutionRoadmapDrafts } from '../domain/ports/execution-roadmap-drafts.js';
+import type { GenerationRequest } from '../domain/roadmap-drafts.js';
 import type { TutorSource } from '../domain/tutor-context.js';
 import { lockUserQuota, lockWorkspace } from './execution-locks.js';
 

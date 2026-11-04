@@ -74,3 +74,11 @@ def grounding(has_sources: bool, citations: list[dict]) -> dict | None:
     support = "cited" if citations else "unsupported"
 
     return {"support": support, "citations": citations}
+
+
+def guidance_schema() -> dict:
+    """Require every model output field, including fields with defaults."""
+    schema = Guidance.model_json_schema(mode="serialization")
+    schema["required"] = list(schema["properties"])
+
+    return schema

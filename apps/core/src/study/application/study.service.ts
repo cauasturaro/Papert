@@ -4,9 +4,9 @@ import {
   attemptSchema,
   parse,
   saveSchema,
-  StudyError,
-} from '../domain/study.js';
-import type { StudyRepository } from '../domain/study.js';
+} from './contracts/study.contract.js';
+import { StudyError } from '../domain/study.js';
+import type { StudyRepository } from '../domain/ports/study-repository.js';
 
 export class StudyService {
   constructor(private readonly repo: StudyRepository) {}

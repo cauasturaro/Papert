@@ -3,8 +3,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module.js';
 import { PrismaService } from '../infrastructure/database/prisma.service.js';
 import { SourceService } from './application/source.service.js';
-import { PrismaSourceRepository } from './infrastructure/prisma-source.repository.js';
-import { S3SourceStorage } from './infrastructure/s3-source.storage.js';
+import { PrismaSourceRepository } from './infrastructure/prisma-source-repository.js';
+import { S3SourceStorage } from './infrastructure/s3-source-storage.js';
 import { SourceController } from './infrastructure/source.controller.js';
 
 @Module({

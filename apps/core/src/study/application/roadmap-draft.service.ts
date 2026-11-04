@@ -1,10 +1,12 @@
-import { createDraftSchema, emptyBodySchema } from './draft-contracts.js';
+import {
+  createDraftSchema,
+  emptyBodySchema,
+} from './contracts/draft.contract.js';
 import { draftView } from './draft-presentation.js';
-import type {
-  DraftSources,
-  RoadmapDraftRepository,
-} from '../domain/draft-ports.js';
-import { parse, StudyError } from '../domain/study.js';
+import type { DraftSources } from '../domain/ports/draft-sources.js';
+import type { RoadmapDraftRepository } from '../domain/ports/roadmap-draft-repository.js';
+import { parse } from './contracts/study.contract.js';
+import { StudyError } from '../domain/study.js';
 
 /** Preparation workspaces: created before uploads, bound to the roadmap they generate. */
 export class RoadmapDraftService {

@@ -13,17 +13,14 @@ import {
   PostToConnectionCommand,
 } from '@aws-sdk/client-apigatewaymanagementapi';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
-import type { ExecutionQueue } from '../domain/execution.js';
+import type { ExecutionQueue } from '../domain/ports/execution-queue.js';
 
 import { StreamConnectionClosed } from '../domain/stream.js';
-import type {
-  StreamTickets,
-  StreamGrant,
-  StreamAuthorization,
-  StreamConnection,
-  StreamConnections,
-  StreamDelivery,
-} from '../domain/stream.js';
+import type { StreamTickets } from '../domain/ports/stream-tickets.js';
+import type { StreamAuthorization } from '../domain/ports/stream-authorization.js';
+import type { StreamConnections } from '../domain/ports/stream-connections.js';
+import type { StreamDelivery } from '../domain/ports/stream-delivery.js';
+import type { StreamGrant, StreamConnection } from '../domain/stream.js';
 
 const awsOptions = () => ({
   region: process.env.AWS_REGION ?? 'us-east-1',

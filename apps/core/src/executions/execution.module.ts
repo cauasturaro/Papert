@@ -1,7 +1,7 @@
 import { PrismaAttemptProgression } from '../study/infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapGeneration } from '../study/infrastructure/prisma-roadmap-generation.js';
 import { createExecutionStream } from './infrastructure/stream-composition.js';
-import { PrismaExecutionRepository } from './infrastructure/prisma-execution.repository.js';
+import { PrismaExecutionRepository } from './infrastructure/prisma-execution-repository.js';
 import { Module } from '@nestjs/common';
 import { ParserSyntaxChecker } from '../analysis/infrastructure/parser-syntax-checker.js';
 import { AuthModule } from '../auth/auth.module.js';

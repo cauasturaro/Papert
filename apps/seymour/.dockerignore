@@ -5,3 +5,5 @@
 .ruff_cache/
 tests/
 evals/
+**/test_*.py
+**/conftest.py

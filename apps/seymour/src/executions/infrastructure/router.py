@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, HTTPException, Request
 
-from src.executions.infrastructure.contracts import execution_envelope_model
+from src.executions.application.contracts.transport import execution_envelope_model
 from src.executions.infrastructure.entry import run_single_execution
 
 ExecutionEnvelope = execution_envelope_model()

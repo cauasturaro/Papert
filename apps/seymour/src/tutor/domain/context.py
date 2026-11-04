@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from src.shared.workspace import Challenge, StrictModel, validate_workspace
+from src.shared.domain.workspace import Challenge, StrictModel, validate_workspace
 
 
 class Selection(StrictModel):
@@ -128,24 +128,6 @@ class TutorContext(StrictModel):
             raise ValueError("Working context exceeds the input allowance; narrow the selection")
 
         return result
-
-
-class ReadCode(StrictModel):
-    stepId: str
-    path: Annotated[str, Field(min_length=1, max_length=200)]
-    start: Annotated[int, Field(ge=0)] = 0
-    length: Annotated[int, Field(ge=1, le=2000)] = 1000
-
-
-class ReadStep(StrictModel):
-    stepId: str
-
-
-class SearchSources(StrictModel):
-    stepId: str
-    query: Annotated[str, Field(min_length=1, max_length=300)]
-    sourceIds: Annotated[list[str], Field(max_length=5)] = Field(default_factory=list)
-    recentTurns: Annotated[list[Turn], Field(max_length=3)] = Field(default_factory=list)
 
 
 class ToolResult(StrictModel):

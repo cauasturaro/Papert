@@ -12,4 +12,7 @@ Docs/
 **/.pytest_cache/
 **/.ruff_cache/
 **/*.tsbuildinfo
+**/test_*.py
+**/conftest.py
+**/*.test.mjs
 .DS_Store

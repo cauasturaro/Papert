@@ -2,11 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { ExecutionStreamService } from './execution-stream.service.js';
 import { StreamConnectionClosed } from '../domain/stream.js';
 import type { ExecutionRecord } from '../domain/execution.js';
-import type {
-  StreamConnection,
-  StreamConnections,
-  StreamSettings,
-} from '../domain/stream.js';
+import type { StreamConnection, StreamSettings } from '../domain/stream.js';
+import type { StreamConnections } from '../domain/ports/stream-connections.js';
 
 const now = new Date('2026-11-03T10:00:00Z');
 const secret = 'a'.repeat(43);

@@ -4,7 +4,7 @@ import os
 
 from openai import OpenAI
 
-from src.application.ports import Embedded
+from src.domain.ports import Embedded
 
 DIMENSIONS = 1536
 BATCH_SIZE = 96

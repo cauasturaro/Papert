@@ -8,11 +8,11 @@ import { AppModule } from '../src/app.module.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { configureHttp } from '../src/http.js';
 import { SourceService } from '../src/sources/application/source.service.js';
-import { PrismaSourceRepository } from '../src/sources/infrastructure/prisma-source.repository.js';
-import type { SourceStorage } from '../src/sources/domain/ports.js';
+import { PrismaSourceRepository } from '../src/sources/infrastructure/prisma-source-repository.js';
+import type { SourceStorage } from '../src/sources/domain/ports/source-storage.js';
 import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
-import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
+import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution-repository.js';
 import { SourceServiceCatalog } from '../src/executions/infrastructure/source-catalog.js';
 
 class FakeStorage implements SourceStorage {

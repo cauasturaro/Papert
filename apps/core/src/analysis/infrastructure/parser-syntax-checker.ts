@@ -6,7 +6,8 @@ import type { Node } from 'web-tree-sitter';
 import { parseAllDocuments } from 'yaml';
 import { checkDockerfile } from '../domain/dockerfile-syntax.js';
 import { positionAt } from '../domain/syntax.js';
-import type { Language, Position, SyntaxChecker } from '../domain/syntax.js';
+import type { Language, Position } from '../domain/syntax.js';
+import type { SyntaxChecker } from '../domain/ports/syntax-checker.js';
 
 // Parsers only build syntax trees; nothing here evaluates or imports learner code.
 const PARSE_TIMEOUT_MS = 1000;

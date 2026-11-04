@@ -1,25 +1,21 @@
 import type { z } from 'zod';
 import { lintWorkspace } from '../../analysis/domain/syntax.js';
-import type {
-  SyntaxChecker,
-  SyntaxReport,
-} from '../../analysis/domain/syntax.js';
-import { validate } from '../../common/domain/validation.js';
-import {
-  ExecutionError,
-  executionRequest,
-  workerEvent,
-} from '../domain/execution.js';
-import type {
-  ExecutionRequest,
-  ExecutionQueue,
-  ExecutionRepository,
-  ExecutionRecord,
-} from '../domain/execution.js';
-import type { TutorSourceCatalog } from '../domain/tutor-context.js';
+import type { SyntaxChecker } from '../../analysis/domain/ports/syntax-checker.js';
+import type { SyntaxReport } from '../../analysis/domain/syntax.js';
+import { validate } from '../../common/application/validation.js';
+import { ExecutionError } from '../domain/execution.js';
+import { executionRequest } from './contracts/execution-request.contract.js';
+import { workerEvent } from './contracts/worker-event.contract.js';
+import type { ExecutionRequest, ExecutionRecord } from '../domain/execution.js';
+import type { ExecutionQueue } from '../domain/ports/execution-queue.js';
+import type { ExecutionRepository } from '../domain/ports/execution-repository.js';
+import type { TutorSourceCatalog } from '../domain/ports/tutor-source-catalog.js';
 import { authorizedGrounding, liveSourceIds } from '../domain/grounding.js';
-import { parseGrounding } from './grounding-contract.js';
-import { generationRequest, isGenerationBody } from './generation-contract.js';
+import { parseGrounding } from './contracts/grounding.contract.js';
+import {
+  generationRequest,
+  isGenerationBody,
+} from './contracts/generation.contract.js';
 
 // Same response body executions have always returned for invalid input.
 function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {

@@ -3,13 +3,13 @@ import { ExecutionError } from '../domain/execution.js';
 import type {
   StreamPrincipal,
   StreamConnection,
-  StreamTickets,
-  StreamAuthorization,
-  StreamConnections,
-  StreamDelivery,
-  StreamExecutions,
   StreamSettings,
 } from '../domain/stream.js';
+import type { StreamTickets } from '../domain/ports/stream-tickets.js';
+import type { StreamAuthorization } from '../domain/ports/stream-authorization.js';
+import type { StreamConnections } from '../domain/ports/stream-connections.js';
+import type { StreamDelivery } from '../domain/ports/stream-delivery.js';
+import type { StreamExecutions } from '../domain/ports/stream-executions.js';
 
 export class ExecutionStreamService {
   constructor(

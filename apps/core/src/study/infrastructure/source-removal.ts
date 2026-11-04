@@ -1,5 +1,5 @@
 import type { SourceService } from '../../sources/application/source.service.js';
-import type { DraftSources } from '../domain/draft-ports.js';
+import type { DraftSources } from '../domain/ports/draft-sources.js';
 
 /** Deletes through the sources module's public service, so originals and vectors are purged. */
 export class SourceServiceRemoval implements DraftSources {

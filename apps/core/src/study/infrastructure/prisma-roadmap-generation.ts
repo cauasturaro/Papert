@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { parseGeneratedRoadmap } from '../application/generation-contract.js';
+import { parseGeneratedRoadmap } from '../application/contracts/generation.contract.js';
 import type { ProgressionTransaction } from '../domain/attempt-progression.js';
-import type { RoadmapGeneration } from '../domain/draft-ports.js';
+import type { RoadmapGeneration } from '../domain/ports/roadmap-generation.js';
 import {
   assertGenerationAllowed,
   authorizedEvidence,
@@ -10,7 +10,7 @@ import {
   GENERATED_AUTHOR_NAME,
 } from '../domain/roadmap-draft.js';
 import type { DraftStatus, GenerationStatus } from '../domain/roadmap-draft.js';
-import { levelSchema } from '../domain/study.js';
+import { levelSchema } from '../application/contracts/study.contract.js';
 
 function consultedSources(input: unknown) {
   const snapshot = input as { sources?: { id: string; filename: string }[] };

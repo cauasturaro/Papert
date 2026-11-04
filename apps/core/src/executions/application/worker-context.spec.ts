@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildWorkerContext } from './worker-context.js';
-import { rateWindowStart } from '../domain/policy.js';
+import { rateWindowStart } from '../domain/admission.js';
 import type { ExecutionRequest } from '../domain/execution.js';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 

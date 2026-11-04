@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field
 
-from src.shared.workspace import StrictModel, validate_workspace
+from src.shared.domain.workspace import StrictModel, validate_workspace
 
 Slug = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{0,59}$")]
 Level = Literal["beginner", "intermediate", "advanced"]

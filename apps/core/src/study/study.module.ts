@@ -7,7 +7,7 @@ import { RoadmapDraftService } from './application/roadmap-draft.service.js';
 import { StudyService } from './application/study.service.js';
 import { DraftController } from './infrastructure/draft.controller.js';
 import { PrismaRoadmapDrafts } from './infrastructure/prisma-roadmap-drafts.js';
-import { PrismaStudyRepository } from './infrastructure/prisma-study.repository.js';
+import { PrismaStudyRepository } from './infrastructure/prisma-study-repository.js';
 import { SourceServiceRemoval } from './infrastructure/source-removal.js';
 import { StudyController } from './infrastructure/study.controller.js';
 

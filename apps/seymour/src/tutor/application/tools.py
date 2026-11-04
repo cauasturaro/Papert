@@ -4,15 +4,10 @@ import json
 
 from pydantic import ValidationError
 
-from src.retrieval import EXCERPT_CHARACTERS, cited_excerpts
+from src.retrieval.application.grounding import EXCERPT_CHARACTERS, cited_excerpts
 from src.retrieval.domain.ports import Search
-from src.tutor.domain.context import (
-    ReadCode,
-    ReadStep,
-    SearchSources,
-    ToolResult,
-    TutorContext,
-)
+from src.tutor.application.contracts.tool_request import ReadCode, ReadStep, SearchSources
+from src.tutor.domain.context import ToolResult, TutorContext
 
 TOOL_ARGUMENTS = {
     "read_code": ReadCode,

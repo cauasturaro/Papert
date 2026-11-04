@@ -6,11 +6,6 @@ export type TutorSource = { id: string; filename: string; format: string };
 
 export type TutorTurn = { prompt: string; answer: string };
 
-/** Ready sources of a workspace the user owns; provided by the sources module. */
-export interface TutorSourceCatalog {
-  ready(userId: string, workspaceId: string): Promise<TutorSource[]>;
-}
-
 export const RECENT_TURNS = 3;
 
 /** @-mentions may only name sources that are ready in the workspace. */

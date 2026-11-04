@@ -8,12 +8,12 @@ import {
 } from '../src/auth/infrastructure/auth.controller.js';
 import { AuthService } from '../src/auth/application/auth.service.js';
 import { SignInRateLimiter } from '../src/auth/application/sign-in-rate-limiter.js';
-import { PrismaAttemptStore } from '../src/auth/infrastructure/prisma-attempt.store.js';
+import { PrismaAttemptStore } from '../src/auth/infrastructure/prisma-attempt-store.js';
 import {
   ArgonPasswords,
   JweTokens,
 } from '../src/auth/infrastructure/crypto.js';
-import { PrismaAuthRepository } from '../src/auth/infrastructure/prisma-auth.repository.js';
+import { PrismaAuthRepository } from '../src/auth/infrastructure/prisma-auth-repository.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { configureHttp } from '../src/http.js';
 

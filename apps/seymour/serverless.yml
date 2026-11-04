@@ -47,6 +47,8 @@ package:
   patterns:
     - "!.venv/**"
     - "!tests/**"
+    - "!src/**/test_*.py"
+    - "!src/**/conftest.py"
     - "!__pycache__/**"
     - "!*.pyc"
     - "!.env*"

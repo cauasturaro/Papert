@@ -13,8 +13,8 @@ from uuid import uuid4
 
 from src.evaluation.application.evaluator import run_analysis
 from src.evaluation.domain.evaluation import AnalysisContext, ModelEvaluation
-from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
-from src.tutor.infrastructure.tracing import TutorTrace
+from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+from src.shared.infrastructure.tracing import ExecutionTrace
 
 
 def context_for(case: dict, step: dict) -> AnalysisContext:
@@ -39,7 +39,7 @@ def main():
     dataset = json.loads(Path(__file__).with_name("evaluation.json").read_text())
     selected = set(sys.argv[1:])
     effort = os.environ.get("EVALUATION_EFFORT", "medium")
-    trace = TutorTrace()
+    trace = ExecutionTrace()
     model_name = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
     model = OpenAIModel(
         os.environ["OPENAI_API_KEY"],

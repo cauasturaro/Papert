@@ -6,13 +6,16 @@ import uuid
 import psycopg
 import pytest
 
-from src.application.ports import Embedded
 from src.domain.chunking import Chunk
+from src.domain.ports import Embedded
 from src.infrastructure.store import SourceStore
 
 URL = os.environ.get("INGESTION_TEST_DATABASE_URL")
 
-pytestmark = pytest.mark.skipif(not URL, reason="INGESTION_TEST_DATABASE_URL is not set")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not URL, reason="INGESTION_TEST_DATABASE_URL is not set"),
+]
 
 
 @pytest.fixture

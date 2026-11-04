@@ -89,7 +89,35 @@ jobs:
         run: python -m ruff check .
 
       - name: Unit tests
-        run: python -m pytest -m "not integration" -v
+        run: python -m pytest -m unit -v
+
+  ingestion:
+    name: Ingestion — lint, test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ingestion
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            apps/ingestion/requirements.txt
+            apps/ingestion/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: python -m ruff check src tests
+
+      # Database tests require pgvector, Seymour migrations and INGESTION_TEST_DATABASE_URL.
+      - name: Unit tests
+        run: python -m pytest -m unit -v
 
   # ── Prisma schema validation ────────────────────────────────────────────────
   core-migration-check:

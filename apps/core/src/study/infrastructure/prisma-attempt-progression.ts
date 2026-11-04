@@ -1,8 +1,11 @@
 import { attemptOutcomeDecision } from '../domain/attempt-progression.js';
 import type { Prisma } from '@prisma/client';
-import { roadmapSchema, stepSchema } from '../domain/study.js';
+import {
+  roadmapSchema,
+  stepSchema,
+} from '../application/contracts/study.contract.js';
+import type { AttemptProgression } from '../domain/ports/attempt-progression.js';
 import type {
-  AttemptProgression,
   ProgressionTransaction,
   ProgressionStep,
   OutcomeSnapshot,

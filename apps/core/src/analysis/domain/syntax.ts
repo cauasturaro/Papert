@@ -1,3 +1,5 @@
+import type { SyntaxChecker } from './ports/syntax-checker.js';
+
 export type Language =
   | 'typescript'
   | 'tsx'
@@ -20,10 +22,6 @@ export type SyntaxReport = {
   unchecked: string[];
   diagnostics: SyntaxDiagnostic[];
 };
-
-export interface SyntaxChecker {
-  check(language: Language, source: string): Promise<Position[]>;
-}
 
 export const MAX_DIAGNOSTICS = 20;
 const MAX_MESSAGE = 300;

@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from src.shared.workspace import Challenge, StrictModel, validate_workspace
+from src.shared.domain.workspace import Challenge, StrictModel, validate_workspace
 
 
 class SyntaxCoverage(StrictModel):

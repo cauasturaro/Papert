@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { fixtureDefinition, FIXTURE_ID } from '../domain/fixture.js';
-import type { StudyRepository, Workspace } from '../domain/study.js';
+import {
+  defaultRoadmapDefinition,
+  DEFAULT_ROADMAP_ID,
+} from '../domain/default-roadmap.js';
+import type { StudyRepository } from '../domain/ports/study-repository.js';
+import type { Workspace } from '../domain/study.js';
 import { StudyService } from './study.service.js';
 
 describe('StudyService', () => {
@@ -22,14 +26,14 @@ describe('StudyService', () => {
     workspace = {
       id,
       roadmap: {
-        id: FIXTURE_ID,
+        id: DEFAULT_ROADMAP_ID,
         authorName: 'Papert',
         authorUserId: null,
-        definition: fixtureDefinition,
+        definition: defaultRoadmapDefinition,
       },
       currentStep: 0,
       revision: 0,
-      files: fixtureDefinition.starterFiles,
+      files: defaultRoadmapDefinition.starterFiles,
       notes: '',
       session: { id: randomUUID(), lastOpenedAt: new Date() },
       attempts: [],
@@ -77,13 +81,13 @@ describe('StudyService', () => {
     expect(repo.recordAttempt).not.toHaveBeenCalled();
 
     expect(await service.step('student', id, 'validate-input')).toEqual(
-      fixtureDefinition.steps[0],
+      defaultRoadmapDefinition.steps[0],
     );
   });
 
   it('rejects forged start state and stale writes', async () => {
     await expect(
-      service.start('student', FIXTURE_ID, { currentStep: 1 }),
+      service.start('student', DEFAULT_ROADMAP_ID, { currentStep: 1 }),
     ).rejects.toMatchObject({ kind: 'invalid' });
 
     expect(repo.start).not.toHaveBeenCalled();

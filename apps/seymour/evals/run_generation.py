@@ -28,8 +28,8 @@ from src.retrieval.application.search import SourceSearch
 from src.retrieval.infrastructure.openai_embedder import DIMENSIONS, OpenAIQueryEmbedder
 from src.roadmap.application.generator import GENERATION_BUDGET, run_generation
 from src.roadmap.domain.roadmap import GenerationContext, ModelRoadmap
-from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
-from src.tutor.infrastructure.tracing import TutorTrace
+from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+from src.shared.infrastructure.tracing import ExecutionTrace
 
 EVALS = Path(__file__).parent
 FIXTURES = EVALS / "fixtures" / "generation"
@@ -198,7 +198,7 @@ def main():
     chunks = ingestion_chunks(filenames) if filenames else {}
 
     client = OpenAI(max_retries=0, timeout=30)
-    trace = TutorTrace()
+    trace = ExecutionTrace()
     model = OpenAIModel(
         os.environ["OPENAI_API_KEY"],
         os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),

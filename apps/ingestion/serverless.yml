@@ -53,6 +53,8 @@ package:
     - "!__pycache__/**"
     - "!*.pyc"
     - "!tests/**"
+    - "!**/test_*.py"
+    - "!**/conftest.py"
 
 functions:
   ingest:

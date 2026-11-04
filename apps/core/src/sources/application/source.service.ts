@@ -1,8 +1,9 @@
 import type { Clock, IdGenerator } from '../../common/domain/runtime.js';
 import type { z } from 'zod';
 import { utcDayStart } from '../../common/domain/utc-day.js';
-import { validate } from '../../common/domain/validation.js';
-import type { SourceRepository, SourceStorage } from '../domain/ports.js';
+import { validate } from '../../common/application/validation.js';
+import type { SourceRepository } from '../domain/ports/source-repository.js';
+import type { SourceStorage } from '../domain/ports/source-storage.js';
 import {
   beginDecision,
   MAX_DAILY_REGISTRATIONS,
@@ -19,9 +20,9 @@ import {
   viewPlan,
 } from '../domain/viewer.js';
 import { contentTypeOf } from '../domain/source.js';
-import { controlSchema, registerSchema } from './contracts.js';
-import type { ControlRequest } from './contracts.js';
-import { presentSource } from './presentation.js';
+import { controlSchema, registerSchema } from './contracts/source.contract.js';
+import type { ControlRequest } from './contracts/source.contract.js';
+import { presentSource } from './source-presentation.js';
 
 function parse<T>(schema: z.ZodType<T>, value: unknown) {
   return validate(

@@ -17,7 +17,11 @@ python -m venv .venv
 .venv/bin/python -m pytest
 ```
 
+Unit tests live beside the code in `src/` and can be selected with `-m unit`.
+Database integration tests remain in `tests/` and use `-m integration`.
+
 Set `INGESTION_TEST_DATABASE_URL` to a `seymour_user` connection to include
-the database tests.
+the database tests. The database must have pgvector enabled and the Seymour
+Alembic migrations applied.
 
 See the [project README](../../README.md) for running the services.

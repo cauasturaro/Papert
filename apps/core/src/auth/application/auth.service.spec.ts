@@ -1,14 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { SESSION_SECONDS, TOKEN_SECONDS, AuthService } from './auth.service.js';
 import { SignInRateLimiter } from './sign-in-rate-limiter.js';
-import type {
-  Passwords,
-  Tokens,
-  AttemptStore,
-  AuthRepository,
-  User,
-  Session,
-} from '../domain/auth.js';
+import type { Passwords } from '../domain/ports/passwords.js';
+import type { Tokens } from '../domain/ports/tokens.js';
+import type { AttemptStore } from '../domain/ports/attempt-store.js';
+import type { AuthRepository } from '../domain/ports/auth-repository.js';
+import type { User, Session } from '../domain/auth.js';
 
 class FakePasswords implements Passwords {
   async hash(password: string) {

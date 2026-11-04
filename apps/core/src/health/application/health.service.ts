@@ -1,4 +1,5 @@
-import type { DatabaseProbe, HealthStatus } from '../domain/health.js';
+import type { DatabaseProbe } from '../domain/ports/database-probe.js';
+import type { HealthStatus } from '../domain/health.js';
 
 export class HealthService {
   constructor(private readonly database: DatabaseProbe) {}

@@ -22,8 +22,8 @@ import {
   QueryCommand,
 } from '@aws-sdk/client-dynamodb';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
-import { PrismaStudyRepository } from '../src/study/infrastructure/prisma-study.repository.js';
-import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
+import { PrismaStudyRepository } from '../src/study/infrastructure/prisma-study-repository.js';
+import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution-repository.js';
 import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-syntax-checker.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
 import { SqsExecutionQueue } from '../src/executions/infrastructure/aws-execution.js';

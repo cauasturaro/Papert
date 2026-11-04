@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
-import type { RoadmapDraftRepository } from '../domain/draft-ports.js';
+import type { RoadmapDraftRepository } from '../domain/ports/roadmap-draft-repository.js';
 import {
   assertDiscardAllowed,
   assertDraftCapacity,
@@ -10,7 +10,10 @@ import type {
   DraftStatus,
   RoadmapDraft,
 } from '../domain/roadmap-draft.js';
-import { levelSchema, roadmapSchema } from '../domain/study.js';
+import {
+  levelSchema,
+  roadmapSchema,
+} from '../application/contracts/study.contract.js';
 import type { Level } from '../domain/study.js';
 
 const include = { workspace: { include: { roadmap: true } } } as const;

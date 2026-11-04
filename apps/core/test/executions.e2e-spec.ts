@@ -1,6 +1,6 @@
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';
-import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
+import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution-repository.js';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
@@ -11,10 +11,7 @@ import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-synta
 import { ExecutionService } from '../src/executions/application/execution.service.js';
 import { ExecutionStreamService } from '../src/executions/application/execution-stream.service.js';
 import { configureHttp } from '../src/http.js';
-import {
-  DAILY_LIMIT,
-  RESERVATION,
-} from '../src/executions/domain/execution.js';
+import { DAILY_LIMIT, RESERVATION } from '../src/executions/domain/quota.js';
 
 // These suites do not exercise workspace sources.
 const noSources = { ready: async () => [] };

@@ -1,5 +1,6 @@
 import { AuthError } from '../domain/auth.js';
-import type { AttemptStore, SignInLimiter } from '../domain/auth.js';
+import type { AttemptStore } from '../domain/ports/attempt-store.js';
+import type { SignInLimiter } from '../domain/ports/sign-in-limiter.js';
 
 const RETRY_AFTER_SECONDS = 15 * 60;
 

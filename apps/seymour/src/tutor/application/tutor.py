@@ -6,9 +6,9 @@ from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from src.retrieval import grounding
+from src.retrieval.application.grounding import grounding
 from src.retrieval.domain.ports import Search
-from src.shared.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
+from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
 from src.tutor.application.conversation import recent_turns, search_query
 from src.tutor.application.guidance import Guidance, render
 from src.tutor.application.guidance import grounding as answer_grounding

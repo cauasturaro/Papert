@@ -1,13 +1,7 @@
-// How a tutor answer is supported by the learner's sources.
+import type { CitationLocation } from '../../common/domain/citation-location.js';
+export type { CitationLocation } from '../../common/domain/citation-location.js';
 
-export type CitationLocation =
-  | { page: number }
-  | { lineStart: number; lineEnd: number; headings?: string[] }
-  | {
-      paragraphStart: number;
-      paragraphEnd: number;
-      heading?: string | null;
-    };
+// How a tutor answer is supported by the learner's sources.
 
 export type Citation = {
   sourceId: string;

@@ -7,9 +7,10 @@ import time
 from functools import partial
 from typing import TYPE_CHECKING
 
-from src.executions.application.ports import ExecutionResources
+from src.executions.application.contracts.transport import decode_execution, encode_result
 from src.executions.application.worker import run_execution
-from src.executions.infrastructure.contracts import RpcControl, decode_execution, encode_result
+from src.executions.domain.ports import ExecutionResources
+from src.executions.infrastructure.rpc_control import RpcControl
 
 if TYPE_CHECKING:
     from src.roadmap.domain.roadmap import GenerationContext
@@ -18,14 +19,16 @@ if TYPE_CHECKING:
 
 def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
     # Inference/retrieval SDK imports stay lazy so transport-only jobs avoid their cold start.
-    from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
-    from src.tutor.infrastructure.tracing import TutorTrace
+    from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.shared.infrastructure.tracing import ExecutionTrace
+    from src.tutor.application.guidance import guidance_schema
+    from src.tutor.application.tools import TOOL_ARGUMENTS
 
-    trace = TutorTrace()
+    trace = ExecutionTrace(TOOL_ARGUMENTS)
     search = None
 
     if snapshot.sources:
-        from src.retrieval import SEARCH_LIMIT
+        from src.retrieval.application.grounding import SEARCH_LIMIT
         from src.retrieval.application.search import SourceSearch
         from src.retrieval.infrastructure.openai_embedder import OpenAIQueryEmbedder
         from src.retrieval.infrastructure.pgvector_index import PgvectorPassageIndex
@@ -44,6 +47,8 @@ def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
         os.environ["OPENAI_API_KEY"],
         os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
         trace.generation,
+        "tutor_guidance",
+        guidance_schema(),
     )
 
     return ExecutionResources(model, trace, time.monotonic, search)
@@ -52,10 +57,10 @@ def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
 def evaluation_resources() -> ExecutionResources:
     # Evaluation SDKs and schemas are unnecessary for deterministic transport jobs.
     from src.evaluation.domain.evaluation import ModelEvaluation
-    from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
-    from src.tutor.infrastructure.tracing import TutorTrace
+    from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.shared.infrastructure.tracing import ExecutionTrace
 
-    trace = TutorTrace()
+    trace = ExecutionTrace()
     model = OpenAIModel(
         os.environ["OPENAI_API_KEY"],
         os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
@@ -74,10 +79,10 @@ GENERATION_SEARCH_LIMIT = 10
 
 def generation_resources(snapshot: GenerationContext) -> ExecutionResources:
     from src.roadmap.domain.roadmap import ModelRoadmap
-    from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
-    from src.tutor.infrastructure.tracing import TutorTrace
+    from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.shared.infrastructure.tracing import ExecutionTrace
 
-    trace = TutorTrace()
+    trace = ExecutionTrace()
     search = None
 
     if snapshot.sources:

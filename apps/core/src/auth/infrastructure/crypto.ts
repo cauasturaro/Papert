@@ -1,6 +1,7 @@
 import * as argon2 from 'argon2';
 import { EncryptJWT, jwtDecrypt } from 'jose';
-import type { Passwords, Tokens } from '../domain/auth.js';
+import type { Passwords } from '../domain/ports/passwords.js';
+import type { Tokens } from '../domain/ports/tokens.js';
 
 export class ArgonPasswords implements Passwords {
   hash(password: string) {

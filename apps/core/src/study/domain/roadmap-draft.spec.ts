@@ -10,7 +10,6 @@ import {
   generationDecision,
 } from './roadmap-draft.js';
 import type { GeneratedRoadmap } from './roadmap-draft.js';
-import { roadmapSchema } from './study.js';
 import type { RoadmapDefinition } from './study.js';
 
 const LIVE = '11111111-1111-4111-8111-111111111111';
@@ -34,13 +33,13 @@ function step(id: string, requires: string[] = []) {
 }
 
 function definition(steps = [step('a'), step('b', ['a']), step('c', ['b'])]) {
-  return roadmapSchema.parse({
+  return {
     title: 'Generated',
     description: 'A generated roadmap.',
     level: 'intermediate',
     steps,
     starterFiles: { 'src/index.ts': '// start\n' },
-  });
+  } satisfies RoadmapDefinition;
 }
 
 describe('draft capacity and transitions', () => {

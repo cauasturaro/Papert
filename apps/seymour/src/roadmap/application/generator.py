@@ -7,11 +7,15 @@ from typing import Literal, TypedDict
 from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
-from src.retrieval import EXCERPT_CHARACTERS, GROUNDING_DISTANCE, cited_excerpts
+from src.retrieval.application.grounding import (
+    EXCERPT_CHARACTERS,
+    GROUNDING_DISTANCE,
+    cited_excerpts,
+)
 from src.retrieval.domain.ports import Search
 from src.roadmap.application.prompts import LEVELS, REPAIR, SYSTEM
 from src.roadmap.domain.roadmap import GenerationContext, ModelRoadmap, RoadmapRuleError, bind
-from src.shared.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
+from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
 
 GENERATION_BUDGET = 16000
 MAX_MODEL_CALLS = 2

@@ -1,6 +1,6 @@
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import type { ExecutionRequest } from '../domain/execution.js';
-import type { ProgressionStep } from '../domain/attempt-progression.js';
+import type { ProgressionStep } from '../domain/ports/execution-study-progression.js';
 import { recentTurns } from '../domain/tutor-context.js';
 import type { TutorSource } from '../domain/tutor-context.js';
 import type {

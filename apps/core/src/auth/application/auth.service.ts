@@ -1,14 +1,11 @@
 import type { Clock, IdGenerator } from '../../common/domain/runtime.js';
 import { AuthError } from '../domain/auth.js';
-import type {
-  AuthRepository,
-  Passwords,
-  Principal,
-  Tokens,
-  SignInLimiter,
-  User,
-} from '../domain/auth.js';
-import { parseCredentials } from '../domain/credentials.js';
+import type { AuthRepository } from '../domain/ports/auth-repository.js';
+import type { Passwords } from '../domain/ports/passwords.js';
+import type { Principal, User } from '../domain/auth.js';
+import type { Tokens } from '../domain/ports/tokens.js';
+import type { SignInLimiter } from '../domain/ports/sign-in-limiter.js';
+import { parseCredentials } from './contracts/credentials.contract.js';
 
 export const TOKEN_SECONDS = 15 * 60;
 export const SESSION_SECONDS = 7 * 24 * 60 * 60;

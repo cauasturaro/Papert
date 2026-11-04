@@ -6,7 +6,7 @@ import { ParserSyntaxChecker } from '../src/analysis/infrastructure/parser-synta
 import { AppModule } from '../src/app.module.js';
 import { ExecutionService } from '../src/executions/application/execution.service.js';
 import { ExecutionStreamService } from '../src/executions/application/execution-stream.service.js';
-import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
+import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution-repository.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';

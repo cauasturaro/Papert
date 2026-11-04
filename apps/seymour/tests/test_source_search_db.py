@@ -14,7 +14,10 @@ from src.retrieval.infrastructure.pgvector_index import PgvectorPassageIndex
 
 URL = os.environ.get("SEYMOUR_TEST_DATABASE_URL")
 
-pytestmark = pytest.mark.skipif(not URL, reason="SEYMOUR_TEST_DATABASE_URL is not set")
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(not URL, reason="SEYMOUR_TEST_DATABASE_URL is not set"),
+]
 
 
 class FixedEmbedding:
@@ -96,7 +99,8 @@ def test_search_adds_the_following_chunk_and_skips_unauthorized_or_deleted(index
     search = SourceSearch(workspace, [document, deleted], embedder, index)
     foreign = SourceSearch(str(uuid.uuid4()), [document], embedder, index)
 
-    passages, tokens = search.search("example", [document, deleted], 2)
+    # Fetch only the best match so the following chunk must be added, independent of ties.
+    passages, tokens = search.search("example", [document, deleted], 1)
     other_workspace, _ = foreign.search("example", [document], 2)
 
     assert tokens == 4

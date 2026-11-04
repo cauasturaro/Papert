@@ -9,14 +9,14 @@ import { ExecutionStreamService } from '../src/executions/application/execution-
 import {
   GENERATION_ATTEMPT_BUDGET,
   MAX_ATTEMPTS,
-} from '../src/executions/domain/execution.js';
-import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
+} from '../src/executions/domain/quota.js';
+import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution-repository.js';
 import { SourceServiceCatalog } from '../src/executions/infrastructure/source-catalog.js';
 import { configureHttp } from '../src/http.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { SourceService } from '../src/sources/application/source.service.js';
-import type { SourceStorage } from '../src/sources/domain/ports.js';
-import { PrismaSourceRepository } from '../src/sources/infrastructure/prisma-source.repository.js';
+import type { SourceStorage } from '../src/sources/domain/ports/source-storage.js';
+import { PrismaSourceRepository } from '../src/sources/infrastructure/prisma-source-repository.js';
 import { GENERATED_AUTHOR_NAME } from '../src/study/domain/roadmap-draft.js';
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';

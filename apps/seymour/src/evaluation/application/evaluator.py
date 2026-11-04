@@ -10,7 +10,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
 from src.evaluation.domain.evaluation import AnalysisContext, Evaluation, ModelEvaluation, bind
-from src.shared.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
+from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
 
 MAX_MODEL_CALLS = 2
 DEADLINE_SECONDS = 45

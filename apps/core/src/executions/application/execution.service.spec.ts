@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ExecutionService } from './execution.service.js';
-import type {
-  ExecutionRecord,
-  ExecutionRepository,
-} from '../domain/execution.js';
+import type { ExecutionRecord } from '../domain/execution.js';
+import type { ExecutionRepository } from '../domain/ports/execution-repository.js';
 import type { Position } from '../../analysis/domain/syntax.js';
 
 const execution: ExecutionRecord = {
@@ -121,7 +119,7 @@ describe('ExecutionService with fake ports', () => {
 
     const admitted = await service.submit('user', 'workspace', request);
 
-    expect(admitted.id).toBe(execution.id);
+    expect(admitted).toMatchObject({ id: execution.id });
     expect(repo.markPublished).not.toHaveBeenCalled();
 
     const swept = await service.sweep();

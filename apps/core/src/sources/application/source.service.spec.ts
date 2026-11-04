@@ -1,5 +1,6 @@
 import { SourceService } from './source.service.js';
-import type { SourceRepository, SourceStorage } from '../domain/ports.js';
+import type { SourceRepository } from '../domain/ports/source-repository.js';
+import type { SourceStorage } from '../domain/ports/source-storage.js';
 import type { StoredSource } from '../domain/source.js';
 
 const documentId = '11111111-1111-4111-8111-111111111111';

@@ -7,7 +7,6 @@ import {
   registration,
   SourceError,
 } from './source.js';
-import { presentSource } from '../application/presentation.js';
 import {
   failureVerdict,
   registrationLimit,
@@ -177,22 +176,6 @@ describe('begin decisions', () => {
 
     expect(deleted).toMatchObject({ result: { outcome: 'deleted' } });
     expect(resized).toEqual({ kind: 'invalid' });
-  });
-});
-
-describe('source presentation', () => {
-  it('reports expired uploads and learner-safe error messages', () => {
-    const now = new Date('2026-11-03T13:00:00Z');
-
-    const expired = presentSource(source(), now);
-    const failed = presentSource(
-      source({ status: 'failed', errorCode: 'no_text' }),
-      now,
-    );
-
-    expect(expired.status).toBe('failed');
-    expect(expired.error?.code).toBe('upload_expired');
-    expect(failed.error?.message).toMatch(/No extractable text/);
   });
 });
 

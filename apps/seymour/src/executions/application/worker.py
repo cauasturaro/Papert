@@ -2,7 +2,8 @@
 
 import time
 
-from src.executions.application.ports import (
+from src.executions.domain.execution import Execution, Result
+from src.executions.domain.ports import (
     Control,
     EvaluationRunner,
     GenerationRunner,
@@ -10,7 +11,6 @@ from src.executions.application.ports import (
     Publisher,
     TutorRunner,
 )
-from src.executions.domain.execution import Execution, Result
 
 
 def run_execution(

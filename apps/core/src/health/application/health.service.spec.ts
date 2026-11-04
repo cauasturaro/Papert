@@ -2,10 +2,10 @@ import { HealthService } from './health.service.js';
 
 describe('HealthService', () => {
   let healthService: HealthService;
-  let probe: { check: ReturnType<typeof vi.fn> };
+  let probe: { check: ReturnType<typeof vi.fn<() => Promise<void>>> };
 
   beforeEach(() => {
-    probe = { check: vi.fn() };
+    probe = { check: vi.fn<() => Promise<void>>() };
     healthService = new HealthService(probe);
   });
 

@@ -7,10 +7,12 @@ from contextlib import nullcontext
 from pathlib import Path
 from uuid import uuid4
 
+from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+from src.shared.infrastructure.tracing import ExecutionTrace
+from src.tutor.application.guidance import guidance_schema
+from src.tutor.application.tools import TOOL_ARGUMENTS
 from src.tutor.application.tutor import run_tutor
 from src.tutor.domain.context import TutorContext
-from src.tutor.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
-from src.tutor.infrastructure.tracing import TutorTrace
 
 
 def main():
@@ -32,9 +34,15 @@ def main():
             ],
         },
     )
-    trace = TutorTrace()
+    trace = ExecutionTrace(TOOL_ARGUMENTS)
     model_name = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
-    model = OpenAIModel(os.environ["OPENAI_API_KEY"], model_name, trace.generation)
+    model = OpenAIModel(
+        os.environ["OPENAI_API_KEY"],
+        model_name,
+        trace.generation,
+        "tutor_guidance",
+        guidance_schema(),
+    )
     results = []
 
     for case in cases:

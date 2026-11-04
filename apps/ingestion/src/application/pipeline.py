@@ -2,15 +2,20 @@
 
 import json
 import time
+from enum import Enum
 
-from src.application.control import Begin, Complete, Fail, Reindex, Removal, Version
-from src.application.events import IngestionEvent, Outcome, ReindexEvent, SourceNotification
-from src.application.ports import Ports
+from src.application.contracts.events import IngestionEvent, ReindexEvent, SourceNotification
 from src.domain.chunking import chunk
+from src.domain.control import Begin, Complete, Fail, Reindex, Removal, Version
 from src.domain.errors import IngestionFailure
+from src.domain.ports import Ports
 from src.domain.rendition import rendition, rendition_key
 
 MAX_RECEIVES = 3
+
+
+class Outcome(Enum):
+    HANDLED = "handled"
 
 
 def log(metric, **fields):

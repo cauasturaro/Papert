@@ -2,9 +2,11 @@ import { buildWorkerContext } from '../application/worker-context.js';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
-import { ExecutionError, DEADLINE_MS, period } from '../domain/execution.js';
+import { ExecutionError } from '../domain/execution.js';
+import { DEADLINE_MS } from '../domain/admission.js';
+import { period } from '../domain/quota.js';
 import type { ExecutionRequest } from '../domain/execution.js';
-import type { ExecutionStudyProgression } from '../domain/attempt-progression.js';
+import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
 import { assertMentionsReady } from '../domain/tutor-context.js';
 import type { TutorSource } from '../domain/tutor-context.js';
 import {
@@ -16,11 +18,11 @@ import {
   assertSavedSelection,
   solutionEligible,
   assertSolutionEligible,
-  assertAnalysisRetry,
   assertRateLimit,
-  allocateQuota,
-} from '../domain/policy.js';
-import type { AttemptState } from '../domain/policy.js';
+} from '../domain/admission.js';
+import { assertAnalysisRetry } from '../domain/analysis.js';
+import { allocateQuota } from '../domain/quota.js';
+import type { AttemptState } from '../domain/analysis.js';
 import { lockUserQuota, lockWorkspace } from './execution-locks.js';
 
 export async function admitExecution(
