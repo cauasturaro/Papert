@@ -108,9 +108,13 @@ export class PrismaAttemptProgression implements AttemptProgression {
       return;
     }
 
-    const steps = roadmapSchema.parse(
-      attempt.workspace.roadmap.definition,
-    ).steps;
+    // Attempts only exist in workspaces bound to a roadmap.
+    const bound = attempt.workspace.roadmap;
+    if (!bound) {
+      return;
+    }
+
+    const steps = roadmapSchema.parse(bound.definition).steps;
     const transition = attemptOutcomeDecision(lockedAttempt, association, {
       approved: outcome.approved,
       currentStep: attempt.workspace.currentStep,

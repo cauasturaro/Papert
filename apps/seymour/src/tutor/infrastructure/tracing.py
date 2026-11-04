@@ -12,7 +12,17 @@ from src.tutor.infrastructure.openai_model import MODEL_PRICES
 
 # Opaque identifiers and our own enum values are safe; any other string may be learner content.
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-SAFE_VALUES = {"cited", "unsupported"}
+SAFE_VALUES = {
+    "cited",
+    "unsupported",
+    # Generation and analysis stop reasons.
+    "generated",
+    "evaluated",
+    "invalid",
+    "budget",
+    "deadline",
+    "cancelled",
+}
 
 
 def mask(data, **_kwargs):

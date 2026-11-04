@@ -1,4 +1,5 @@
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
+import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';
 import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
@@ -109,6 +110,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
               database,
               () => now,
               new PrismaAttemptProgression(),
+              new PrismaRoadmapGeneration(),
             ),
             queue,
             new ParserSyntaxChecker(),
@@ -314,6 +316,7 @@ describe.skipIf(!enabled)('Executions HTTP + PostgreSQL', () => {
         db,
         () => now,
         new PrismaAttemptProgression(),
+        new PrismaRoadmapGeneration(),
       ),
       queue,
       new ParserSyntaxChecker(),

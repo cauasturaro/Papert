@@ -1,4 +1,4 @@
-// How a tutor answer is supported by the learner's sources (ADR-007).
+// How a tutor answer is supported by the learner's sources.
 
 export type CitationLocation =
   | { page: number }

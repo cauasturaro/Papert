@@ -10,6 +10,8 @@ from src.shared.inference import BudgetExceeded, Message, TutorCancelled
 from src.tutor.application.guidance import Guidance
 
 DEFAULT_MODEL = "gpt-5.4-nano-2026-03-17"
+# Output reservation per reasoning effort; roadmap generation passes larger limits.
+OUTPUT_LIMITS = {"low": 2048, "medium": 3072, "high": 4096}
 # Standard USD per million tokens: uncached input, cached input, output.
 MODEL_PRICES = {
     "gpt-5-nano": (0.05, 0.005, 0.40),
@@ -27,6 +29,7 @@ class OpenAIModel:
         generation_observer,
         response_name: str = "tutor_guidance",
         response_schema: dict | None = None,
+        output_limits: dict[str, int] | None = None,
     ):
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY is required")
@@ -40,13 +43,14 @@ class OpenAIModel:
         schema["required"] = list(schema["properties"])
 
         self.response_schema = response_schema or schema
+        self.output_limits = output_limits or OUTPUT_LIMITS
 
     def complete(self, messages: list[Message], tools, effort, remaining, deadline, active):
         message_ids = {id(message) for message in messages}
         self._history = {key: entry for key, entry in self._history.items() if key in message_ids}
         provider_messages = [self._to_langchain(message) for message in messages]
 
-        maximum_output = {"low": 2048, "medium": 3072, "high": 4096}[effort]
+        maximum_output = self.output_limits[effort]
         payload = {}
 
         def capture_response(response):

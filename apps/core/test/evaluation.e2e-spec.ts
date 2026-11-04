@@ -9,6 +9,7 @@ import { ExecutionStreamService } from '../src/executions/application/execution-
 import { PrismaExecutionRepository } from '../src/executions/infrastructure/prisma-execution.repository.js';
 import { PrismaService } from '../src/infrastructure/database/prisma.service.js';
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
+import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';
 import { configureHttp } from '../src/http.js';
 
 // These suites do not exercise workspace sources.
@@ -159,6 +160,7 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
               database,
               undefined,
               new PrismaAttemptProgression(),
+              new PrismaRoadmapGeneration(),
             ),
             queue,
             new ParserSyntaxChecker(),
@@ -396,9 +398,14 @@ describe.skipIf(!enabled)('Analysis, evaluation and progression', () => {
         throw new Error('Study write interrupted');
       },
     );
-    const failing = new PrismaExecutionRepository(db, undefined, progression);
+    const failing = new PrismaExecutionRepository(
+      db,
+      undefined,
+      progression,
+      new PrismaRoadmapGeneration(),
+    );
 
-    await expect(failing.accept(event, null)).rejects.toThrow(
+    await expect(failing.accept(event, null, [])).rejects.toThrow(
       'Study write interrupted',
     );
 

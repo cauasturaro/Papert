@@ -8,7 +8,7 @@ SEARCH_LIMIT = 4
 EXCERPT_CHARACTERS = 1600
 
 # Measured with text-embedding-3-small on 2026-11-03: related questions scored
-# 0.22-0.55 and unrelated ones 0.88-0.94. Revisit with the Phase 13 evals.
+# 0.22-0.55 and unrelated ones 0.88-0.94.
 GROUNDING_DISTANCE = 0.72
 GROUNDING_LIMIT = 3
 # Bounds the tokens grounding adds to every model call of the attempt.

@@ -1,4 +1,5 @@
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
+import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';
 import { randomUUID } from 'node:crypto';
 import { Test } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
@@ -147,6 +148,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
                 prisma,
                 undefined,
                 new PrismaAttemptProgression(),
+                new PrismaRoadmapGeneration(),
               ),
               { publish: async () => {} },
               new ParserSyntaxChecker(),

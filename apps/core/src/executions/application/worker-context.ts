@@ -3,6 +3,10 @@ import type { ExecutionRequest } from '../domain/execution.js';
 import type { ProgressionStep } from '../domain/attempt-progression.js';
 import { recentTurns } from '../domain/tutor-context.js';
 import type { TutorSource } from '../domain/tutor-context.js';
+import type {
+  GenerationLevel,
+  GenerationRequest,
+} from '../domain/roadmap-drafts.js';
 
 export function buildWorkerContext(
   input: ExecutionRequest,
@@ -51,5 +55,26 @@ export function buildWorkerContext(
           },
         }
       : {}),
+  };
+}
+
+/** Seymour's GenerationContext: the draft's goal/level and its ready sources, nothing else. */
+export function buildGenerationContext(
+  input: GenerationRequest,
+  facts: {
+    sessionId: string;
+    workspaceId: string;
+    goal: string;
+    level: GenerationLevel;
+    sources: TutorSource[];
+  },
+) {
+  return {
+    ...input,
+    sessionId: facts.sessionId,
+    workspaceId: facts.workspaceId,
+    goal: facts.goal,
+    level: facts.level,
+    sources: facts.sources,
   };
 }

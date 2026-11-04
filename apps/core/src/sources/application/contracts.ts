@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { FAILURE_CODES } from '../domain/source.js';
 
-// Wire formats of the HTTP registration and the IAM-only control endpoint (ADR-005).
+// Wire formats of the HTTP registration and the IAM-only control endpoint.
 
 const filename = z
   .string()

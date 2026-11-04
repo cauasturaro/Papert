@@ -165,6 +165,7 @@ describe('execution lifecycle policies', () => {
     expect(attemptBudget({})).toBe(1000);
     expect(attemptBudget({ mode: 'doubt' })).toBe(8000);
     expect(attemptBudget({ attemptId: 'attempt' })).toBe(8000);
+    expect(attemptBudget({ kind: 'generation' })).toBe(16000);
     expect(retriesExhausted(job)).toBe(false);
     expect(retriesExhausted({ ...job, attempts: MAX_ATTEMPTS })).toBe(true);
     expect(retriesExhausted({ ...job, reserved: 999 })).toBe(true);
@@ -257,6 +258,21 @@ describe('execution lifecycle policies', () => {
     expect(() =>
       usageRefund(leased, { ...event, tokens: 1001, lease: 'unknown' }),
     ).toThrow('authorized attempt budget');
+  });
+
+  it('bounds usage by each kind’s own budget, not the larger generation one', () => {
+    const tutor = {
+      input: { mode: 'doubt' },
+      leases: ['lease'],
+      settledLeases: [],
+    };
+    const generation = { ...tutor, input: { kind: 'generation' } };
+
+    expect(() => usageRefund(tutor, { ...event, tokens: 8001 })).toThrow(
+      'authorized attempt budget',
+    );
+
+    expect(usageRefund(generation, { ...event, tokens: 12000 })).toBe(4000);
   });
 
   it.each(['met', 'not_met'] as const)(

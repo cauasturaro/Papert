@@ -121,12 +121,59 @@ export function UserIcon(props: IconProps) {
   );
 }
 
-export function PapertMark(props: IconProps) {
+export function RouteIcon(props: IconProps) {
   return (
     <Icon {...props}>
-      <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />
-      <path d="m13.5 5-3 14" />
+      <circle cx="6" cy="6" r="2" />
+      <circle cx="18" cy="18" r="2" />
+      <path d="M8 6h6.5a3.5 3.5 0 0 1 0 7h-5a3.5 3.5 0 0 0 0 7H16" />
     </Icon>
+  );
+}
+
+/*
+ * Brand mark: the Logo-language turtle seen from above, head up. Unlike the
+ * stroke icons it is a filled silhouette, drawn with the small optical-size
+ * geometry so the gaps survive at 16px. Keep in sync with `app/icon.svg`.
+ */
+export function PapertMark(props: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+      <rect x="9" y="2.5" width="6" height="4.5" rx="2.25" />
+      <rect
+        x="2.5"
+        y="8"
+        width="6"
+        height="4"
+        rx="2"
+        transform="rotate(25 5.5 10)"
+      />
+      <rect
+        x="15.5"
+        y="8"
+        width="6"
+        height="4"
+        rx="2"
+        transform="rotate(-25 18.5 10)"
+      />
+      <rect
+        x="3.5"
+        y="18"
+        width="6.5"
+        height="4"
+        rx="2"
+        transform="rotate(-40 6.75 20)"
+      />
+      <rect
+        x="14"
+        y="18"
+        width="6.5"
+        height="4"
+        rx="2"
+        transform="rotate(40 17.25 20)"
+      />
+      <ellipse cx="12" cy="15" rx="6.5" ry="7.5" />
+    </svg>
   );
 }
 

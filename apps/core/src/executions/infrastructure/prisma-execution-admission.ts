@@ -21,7 +21,7 @@ import {
   allocateQuota,
 } from '../domain/policy.js';
 import type { AttemptState } from '../domain/policy.js';
-import { lockWorkspace } from './execution-locks.js';
+import { lockUserQuota, lockWorkspace } from './execution-locks.js';
 
 export async function admitExecution(
   db: PrismaService,
@@ -37,18 +37,7 @@ export async function admitExecution(
   const budget = admissionBudget(input);
 
   const execution = await db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM core.app_user WHERE id = ${userId}::uuid FOR UPDATE`;
-
-    // One quota-row lock serializes reservations across all of a user's workspaces.
-    await tx.$executeRaw`
-        INSERT INTO core.execution_quota (user_id, period) VALUES (${userId}::uuid, ${period(now)})
-        ON CONFLICT (user_id, period) DO NOTHING`;
-    const quotas = await tx.$queryRaw<
-      { id: string; used: number; reserved: number }[]
-    >`
-        SELECT id, used, reserved FROM core.execution_quota
-        WHERE user_id = ${userId}::uuid AND period = ${period(now)} FOR UPDATE`;
-    const quota = quotas[0];
+    const quota = await lockUserQuota(tx, userId, period(now));
 
     const previous = await tx.execution.findUnique({
       where: { userId_requestKey: { userId, requestKey: input.requestKey } },
@@ -71,7 +60,9 @@ export async function admitExecution(
     });
     assertSavedRevision(workspace.revision, input.revision);
 
-    const definition = study.definition(workspace.roadmap.definition);
+    // A draft workspace has no step to tutor or analyze.
+    const roadmap = activeStudyStep(workspace.roadmap ?? undefined);
+    const definition = study.definition(roadmap.definition);
     const step = activeStudyStep(
       definition.steps[workspace.currentStep],
       !!workspace.session,

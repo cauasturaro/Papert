@@ -5,6 +5,7 @@ import time
 from src.executions.application.ports import (
     Control,
     EvaluationRunner,
+    GenerationRunner,
     Pause,
     Publisher,
     TutorRunner,
@@ -18,6 +19,7 @@ def run_execution(
     publish: Publisher,
     tutor_runner: TutorRunner,
     evaluation_runner: EvaluationRunner,
+    generation_runner: GenerationRunner,
     pause: Pause = time.sleep,
 ) -> None:
     execution_id = execution.id
@@ -31,6 +33,10 @@ def run_execution(
     try:
         if workflow == "analysis":
             evaluation_runner(execution_id, lease, claim.context, claim.budget, control, publish)
+            return
+
+        if workflow == "generation":
+            generation_runner(execution_id, lease, claim.context, claim.budget, control, publish)
             return
 
         if workflow == "tutor":

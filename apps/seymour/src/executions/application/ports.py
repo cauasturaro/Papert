@@ -43,6 +43,10 @@ class EvaluationRunner(TutorRunner, Protocol):
     pass
 
 
+class GenerationRunner(TutorRunner, Protocol):
+    pass
+
+
 Pause = Callable[[float], None]
 
 

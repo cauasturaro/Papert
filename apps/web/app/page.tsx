@@ -9,7 +9,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card/card";
-import { FileIcon, PapertMark, SparklesIcon } from "@/components/icons";
+import {
+  FileIcon,
+  PapertMark,
+  RouteIcon,
+  SparklesIcon,
+} from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 const features: {
@@ -33,7 +38,7 @@ const features: {
     title: "Step-by-step roadmaps",
     description:
       "Each step has a challenge and clear acceptance criteria. An approved analysis unlocks the next one.",
-    Icon: PapertMark,
+    Icon: RouteIcon,
   },
 ];
 
@@ -109,7 +114,10 @@ export default function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6 text-sm text-muted-foreground">
-          <span>Papert</span>
+          <span className="flex items-center gap-2 font-medium text-foreground">
+            <PapertMark className="size-4" />
+            Papert
+          </span>
           <span>Learn by building.</span>
         </div>
       </footer>

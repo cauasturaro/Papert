@@ -27,6 +27,11 @@ import { StudyService } from '../application/study.service.js';
 export class StudyController {
   constructor(@Inject(StudyService) private readonly study: StudyService) {}
 
+  @Get('roadmaps')
+  roadmaps(@CurrentPrincipal() principal: Principal) {
+    return this.study.roadmaps(principal.user.id);
+  }
+
   @Get('roadmaps/fixture')
   fixture() {
     return this.study.fixture();

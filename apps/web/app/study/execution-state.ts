@@ -3,7 +3,7 @@ import type { Grounding } from "./viewer/citations";
 export type Execution = {
   id: string;
   workspaceId: string;
-  kind: "chat" | "analysis";
+  kind: "chat" | "analysis" | "generation";
   prompt: string | null;
   status: string;
   text: string;

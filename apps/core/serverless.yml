@@ -54,7 +54,7 @@ provider:
         - Effect: Allow
           Action: [s3:PutObject, s3:DeleteObject, s3:DeleteObjectVersion]
           Resource: arn:aws:s3:::papert-sources/documents/*
-        # Presigned viewer links (ADR-007) are signed by Core and need read access.
+        # Presigned viewer links are signed by Core and need read access.
         - Effect: Allow
           Action: [s3:GetObject, s3:GetObjectVersion]
           Resource:

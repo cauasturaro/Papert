@@ -9,7 +9,28 @@ from src.executions.application.ports import Control, ExecutionResources, Publis
 from src.executions.domain.execution import Result
 
 if TYPE_CHECKING:
+    from src.roadmap.domain.roadmap import GenerationContext
     from src.tutor.domain.context import TutorContext
+
+
+def live_search(runtime: ExecutionResources, control: Control, execution_id, lease):
+    """Search wrapper that asks Core for the still-ready sources before every lookup."""
+    if runtime.search is None:
+        return None
+
+    source_search = runtime.search
+
+    def search(query, document_ids):
+        # Core re-authorizes before every lookup, so a source deleted mid-run is never searched.
+        live = set(control.live_sources(execution_id, lease))
+        allowed = [document_id for document_id in document_ids if document_id in live]
+
+        if not allowed:
+            return [], 0
+
+        return runtime.trace.retrieval(lambda: source_search(query, allowed))
+
+    return search
 
 
 def run_tutor_job(
@@ -34,20 +55,7 @@ def run_tutor_job(
     def active():
         return control.active(execution_id, lease)
 
-    search = None
-
-    if runtime.search is not None:
-        source_search = runtime.search
-
-        def search(query, document_ids):
-            # Core re-authorizes before every lookup, so a source deleted mid-run is never searched.
-            live = set(control.live_sources(execution_id, lease))
-            allowed = [document_id for document_id in document_ids if document_id in live]
-
-            if not allowed:
-                return [], 0
-
-            return runtime.trace.retrieval(lambda: source_search(query, allowed))
+    search = live_search(runtime, control, execution_id, lease)
 
     def progress(text, tokens):
         nonlocal index
@@ -167,3 +175,99 @@ def run_analysis_job(
             evaluation = result["evaluation"].model_dump()
 
         publish(Result(execution_id, lease, 100, "completed", text, result["tokens"], evaluation))
+
+
+GENERATION_MESSAGES = {
+    "budget": "The roadmap did not fit this generation budget. Shorten the goal and try again.",
+    "invalid": "Seymour could not produce a valid roadmap. Nothing was saved; try again.",
+    "deadline": "The generation time limit was reached. Nothing was saved; try again.",
+    "cancelled": "",
+}
+
+
+def run_generation_job(
+    execution_id,
+    lease,
+    context,
+    budget,
+    control: Control,
+    publish: Publisher,
+    resources: Callable[[GenerationContext], ExecutionResources],
+):
+    from src.roadmap.application.generator import run_generation, summary_text
+    from src.roadmap.domain.roadmap import GenerationContext
+
+    snapshot = GenerationContext.model_validate(
+        {key: context[key] for key in GenerationContext.model_fields if key in context}
+    )
+
+    runtime = resources(snapshot)
+    search = live_search(runtime, control, execution_id, lease)
+    index = 0
+
+    def active():
+        return control.active(execution_id, lease)
+
+    def progress(text, tokens):
+        nonlocal index
+        index += 1
+
+        publish(Result(execution_id, lease, index, "running", text, tokens))
+
+    with runtime.trace.execution(execution_id, snapshot.sessionId, "seymour-roadmap") as span:
+        result = run_generation(
+            snapshot,
+            context.get("effort", "low"),
+            budget,
+            runtime.model,
+            active,
+            progress,
+            search,
+            clock=runtime.clock,
+        )
+        roadmap = result["roadmap"]
+
+        span.record_metadata(
+            {
+                "calls": result["calls"],
+                "tokens": result["tokens"],
+                "reason": result["reason"],
+                **generation_measurements(roadmap, result["excerpts"]),
+            }
+        )
+
+        text = GENERATION_MESSAGES.get(result["reason"], "")
+        if roadmap is not None:
+            text = summary_text(roadmap)
+
+        publish(
+            Result(
+                execution_id,
+                lease,
+                100,
+                "completed",
+                text,
+                result["tokens"],
+                roadmap=roadmap,
+            )
+        )
+
+
+def generation_measurements(roadmap: dict | None, excerpts: list[dict]) -> dict:
+    """Trace-safe counts and source ids; titles, goals and source text stay out of traces."""
+    measurements = {
+        "excerpts": len(excerpts),
+        "consultedSources": sorted({excerpt["sourceId"] for excerpt in excerpts}),
+    }
+
+    if roadmap is None:
+        return measurements
+
+    evidence = roadmap["evidence"]
+
+    return {
+        **measurements,
+        "steps": len(roadmap["definition"]["steps"]),
+        "evidence": len(evidence),
+        "citedSources": sorted({item["sourceId"] for item in evidence}),
+    }

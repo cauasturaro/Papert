@@ -19,6 +19,7 @@ import type {
 import type { TutorSourceCatalog } from '../domain/tutor-context.js';
 import { authorizedGrounding, liveSourceIds } from '../domain/grounding.js';
 import { parseGrounding } from './grounding-contract.js';
+import { generationRequest, isGenerationBody } from './generation-contract.js';
 
 // Same response body executions have always returned for invalid input.
 function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {
@@ -47,6 +48,10 @@ export class ExecutionService {
 
   // HTTP entry point: analysis may end in a syntax rejection instead of an execution.
   async submit(userId: string, workspaceId: string, body: unknown) {
+    if (isGenerationBody(body)) {
+      return this.generate(userId, workspaceId, body);
+    }
+
     const input = parseRequest(executionRequest, body);
     if (input.kind === 'analysis') {
       return this.analyze(userId, workspaceId, input);
@@ -93,6 +98,29 @@ export class ExecutionService {
     }
 
     return this.start(userId, workspaceId, input, syntax);
+  }
+
+  /** Drafts a roadmap from the preparation workspace's goal, level and ready sources. */
+  async generate(userId: string, workspaceId: string, body: unknown) {
+    const input = parseRequest(generationRequest, body);
+
+    // Only ready sources are snapshotted.
+    const sources = await this.sources.ready(userId, workspaceId);
+
+    const execution = await this.repo.createGeneration(
+      userId,
+      workspaceId,
+      input,
+      sources,
+    );
+
+    try {
+      await this.publish(execution);
+    } catch {
+      // The execution row is the durable outbox; the scheduled sweep retries publication.
+    }
+
+    return this.snapshot(execution);
   }
 
   private async start(
@@ -189,7 +217,13 @@ export class ExecutionService {
       event.grounding,
     );
 
-    const job = await this.repo.accept(event, grounding);
+    // Drop evidence from sources deleted during the run.
+    let liveSourceIds: string[] = [];
+    if (event.roadmap !== undefined) {
+      liveSourceIds = await this.admittedAndReady(event.executionId);
+    }
+
+    const job = await this.repo.accept(event, grounding, liveSourceIds);
 
     return this.snapshot(job);
   }

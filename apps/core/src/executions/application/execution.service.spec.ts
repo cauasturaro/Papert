@@ -55,6 +55,9 @@ function setup() {
     cancel: vi
       .fn<ExecutionRepository['cancel']>()
       .mockResolvedValue({ ...execution, status: 'cancelled' }),
+    createGeneration: vi
+      .fn<ExecutionRepository['createGeneration']>()
+      .mockResolvedValue(execution),
     claim: vi.fn<ExecutionRepository['claim']>(),
     failed: vi.fn<ExecutionRepository['failed']>(),
     active: vi.fn<ExecutionRepository['active']>(),

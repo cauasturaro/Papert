@@ -1,4 +1,5 @@
 import { PrismaAttemptProgression } from '../study/infrastructure/prisma-attempt-progression.js';
+import { PrismaRoadmapGeneration } from '../study/infrastructure/prisma-roadmap-generation.js';
 import { createExecutionStream } from './infrastructure/stream-composition.js';
 import { PrismaExecutionRepository } from './infrastructure/prisma-execution.repository.js';
 import { Module } from '@nestjs/common';
@@ -26,6 +27,7 @@ import { SqsExecutionQueue } from './infrastructure/aws-execution.js';
             db,
             undefined,
             new PrismaAttemptProgression(),
+            new PrismaRoadmapGeneration(),
           ),
           new SqsExecutionQueue(),
           new ParserSyntaxChecker(),

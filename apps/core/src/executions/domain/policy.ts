@@ -2,6 +2,7 @@ import {
   assessEvaluation,
   ExecutionError,
   ATTEMPT_BUDGET,
+  GENERATION_ATTEMPT_BUDGET,
   TUTOR_ATTEMPT_BUDGET,
   MAX_ATTEMPTS,
   DAILY_LIMIT,
@@ -33,7 +34,33 @@ export function activeStudyStep<T>(
 }
 
 export function attemptBudget(input: unknown) {
+  const snapshot = input as Record<string, unknown>;
+
+  if (snapshot.kind === 'generation') {
+    return GENERATION_ATTEMPT_BUDGET;
+  }
+
   return usesModel(input) ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;
+}
+
+/** A retried generation request key must name the same draft and settings. */
+export function assertSameGeneration(
+  previous: { workspaceId: string; input: unknown },
+  workspaceId: string,
+  input: { kind: 'generation'; effort?: string },
+) {
+  const old = previous.input as Record<string, unknown>;
+
+  if (
+    previous.workspaceId !== workspaceId ||
+    old.kind !== input.kind ||
+    old.effort !== input.effort
+  ) {
+    throw new ExecutionError(
+      'conflict',
+      'This request key already identifies a different request.',
+    );
+  }
 }
 
 // A job may hold fewer than MAX_ATTEMPTS when the quota only had room for some.
@@ -193,7 +220,13 @@ type LeaseSnapshot = {
   input: unknown;
 };
 
-export function claimDecision(job: LeaseSnapshot, now: Date) {
+export function claimDecision(
+  job: LeaseSnapshot,
+  now: Date,
+):
+  | { action: 'ignore'; status: string }
+  | { action: 'finish'; status: 'timed_out' | 'failed' }
+  | { action: 'claim'; status: 'running' } {
   if (terminal(job.status)) {
     return { action: 'ignore' as const, status: job.status };
   }
@@ -219,7 +252,10 @@ export function failureDecision(
     input: unknown;
   },
   lease: string,
-) {
+):
+  | { action: 'ignore'; status: string }
+  | { action: 'finish'; status: 'failed' }
+  | { action: 'release'; status: 'retry' } {
   if (terminal(job.status) || job.lease !== lease) {
     return { action: 'ignore' as const, status: job.status };
   }

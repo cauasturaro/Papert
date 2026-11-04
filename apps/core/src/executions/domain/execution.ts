@@ -3,14 +3,19 @@ import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import { DomainError } from '../../common/domain/domain-error.js';
 import type { TutorSource } from './tutor-context.js';
 import type { Grounding } from './grounding.js';
+import type { GenerationRequest } from './roadmap-drafts.js';
 import { nextUtcDayStart, utcDayKey } from '../../common/domain/utc-day.js';
 
 export class ExecutionError extends DomainError {}
+
+export type TerminalStatus = 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 // The execution_quota_check database constraint enforces the same limit.
 export const DAILY_LIMIT = 100000;
 export const ATTEMPT_BUDGET = 1000;
 export const TUTOR_ATTEMPT_BUDGET = 8000;
+// Must match Seymour's GENERATION_BUDGET.
+export const GENERATION_ATTEMPT_BUDGET = 16000;
 export const MAX_ATTEMPTS = 3;
 export const RESERVATION = ATTEMPT_BUDGET * MAX_ATTEMPTS;
 export const RATE_LIMIT = 10;
@@ -57,11 +62,13 @@ export const executionRequest = z
       (!input.effort && !input.activeFile && !input.selection),
   );
 
-// Tutor and analysis snapshots carry a mode or an attempt; older transport jobs carry neither.
+// Tutor, analysis and generation snapshots use the model; older transport jobs do not.
 export function usesModel(input: unknown) {
   const snapshot = input as Record<string, unknown>;
 
-  return !!snapshot.mode || !!snapshot.attemptId;
+  return (
+    !!snapshot.mode || !!snapshot.attemptId || snapshot.kind === 'generation'
+  );
 }
 
 export const workerEvent = z
@@ -72,16 +79,20 @@ export const workerEvent = z
     index: z.number().int().min(1).max(100),
     status: z.enum(['running', 'completed', 'failed']),
     text: z.string().max(4000),
-    tokens: z.number().int().min(0).max(TUTOR_ATTEMPT_BUDGET),
+    tokens: z.number().int().min(0).max(GENERATION_ATTEMPT_BUDGET),
     // Validated against the attempt by Core; malformed content is recorded, never trusted.
     evaluation: z.unknown().optional(),
     // Citations are re-authorized against live sources before they are stored.
     grounding: z.unknown().optional(),
+    // Untrusted; Study validates it.
+    roadmap: z.unknown().optional(),
   })
   .strict()
   .refine(
     (event) =>
-      (event.evaluation === undefined && event.grounding === undefined) ||
+      (event.evaluation === undefined &&
+        event.grounding === undefined &&
+        event.roadmap === undefined) ||
       event.status === 'completed',
   );
 
@@ -202,6 +213,12 @@ export interface ExecutionRepository {
     input: ExecutionRequest,
     context: { syntax?: SyntaxReport; sources: TutorSource[] },
   ): Promise<ExecutionRecord>;
+  createGeneration(
+    userId: string,
+    workspaceId: string,
+    input: GenerationRequest,
+    sources: TutorSource[],
+  ): Promise<ExecutionRecord>;
   // Returns null when the revision is no longer current, so a retried request key can still resolve.
   analysisFiles(
     userId: string,
@@ -225,9 +242,11 @@ export interface ExecutionRepository {
   }>;
   failed(id: string, lease: string): Promise<{ status: string }>;
   active(id: string, lease: string): Promise<boolean>;
+  // liveSourceIds: admitted sources still ready now, for generation evidence.
   accept(
     event: WorkerEvent,
     grounding: Grounding | null,
+    liveSourceIds: string[],
   ): Promise<ExecutionRecord>;
   // Internal: who owns an execution and which sources it was admitted with.
   sourceScope(id: string): Promise<{

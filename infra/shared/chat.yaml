@@ -1,12 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Papert chat/analysis queues and Seymour-to-Core results queue (ADR-001)
+Description: Papert chat/analysis queues and Seymour-to-Core results queue
 
 Resources:
   ChatQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: papert-chat
-      VisibilityTimeout: 180
+      # Six times the Seymour worker timeout, as AWS recommends for Lambda.
+      VisibilityTimeout: 360
       MessageRetentionPeriod: 345600
       RedrivePolicy:
         deadLetterTargetArn:
@@ -21,7 +22,7 @@ Resources:
       QueueName: papert-chat-dlq
       MessageRetentionPeriod: 1209600
 
-  # ADR-001: Seymour publishes structured evaluation results here;
+  # Seymour publishes structured evaluation results here;
   # Core consumes them to validate and persist progression.
   ResultsQueue:
     Type: AWS::SQS::Queue

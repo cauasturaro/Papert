@@ -3,16 +3,24 @@ export type Challenge = {
   criteria: { id: string; description: string }[];
 };
 
+export type Level = "beginner" | "intermediate" | "advanced";
+
 type Roadmap = {
   id: string;
   authorName: string;
+  // Null for Papert's own roadmaps; set on roadmaps a learner generated.
+  authorUserId: string | null;
   definition: {
     title: string;
     description: string;
+    level?: Level;
     steps: {
       id: string;
       title: string;
       content: string;
+      // Generated roadmaps name concepts and earlier prerequisite steps.
+      concepts?: string[];
+      requires?: string[];
       challenge: Challenge;
     }[];
   };

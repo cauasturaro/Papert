@@ -1,74 +1,40 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  studyRequest,
-  StudyRequestError,
-  type Roadmap,
-  type Workspace,
-} from "./study-api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { studyRequest, StudyRequestError, type Workspace } from "./study-api";
 import { sameFiles, validateTree, type Files } from "./workspace-tree";
-
-type Draft = { files: Files; notes: string };
-type Recovery = Draft & { revision: number };
+import { useLeaveWarning, useMounted, useOnline } from "./use-browser-session";
+import {
+  downloadDraft,
+  readRecovery,
+  restoreDraft,
+  storeRecovery,
+  type Draft,
+  type Recovery,
+} from "./workspace-recovery";
 
 export function useStudy() {
   const queryClient = useQueryClient();
-  const roadmapQuery = useQuery({
-    queryKey: ["study", "fixture"],
-    queryFn: () => studyRequest<Roadmap>("roadmaps/fixture"),
-    retry: false,
-    refetchOnWindowFocus: false,
-  });
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [draft, setDraft] = useState<Draft>({ files: {}, notes: "" });
   const [status, setStatus] = useState("All changes saved.");
   const [message, setMessage] = useState("");
   const [conflict, setConflict] = useState(false);
-  const [online, setOnline] = useState(true);
+  const online = useOnline();
   const current = useRef({ workspace, draft, conflict });
   const pending = useRef<Promise<Workspace | null> | null>(null);
-  const mounted = useRef(true);
+  const mounted = useMounted();
   current.current = { workspace, draft, conflict };
 
   const dirty =
     workspace !== null &&
     (!sameFiles(draft.files, workspace.files) ||
       draft.notes !== workspace.notes);
-  const key = (id: string) => `papert:workspace:${id}`;
 
-  useEffect(() => {
-    mounted.current = true;
-
-    const updateConnection = () => setOnline(navigator.onLine);
-    updateConnection();
-    window.addEventListener("online", updateConnection);
-    window.addEventListener("offline", updateConnection);
-
-    return () => {
-      mounted.current = false;
-      window.removeEventListener("online", updateConnection);
-      window.removeEventListener("offline", updateConnection);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!dirty) {
-      return;
-    }
-
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  useLeaveWarning(dirty);
 
   function remember(next: Draft, saved: Workspace) {
     try {
-      const recovery: Recovery = { ...next, revision: saved.revision };
-      sessionStorage.setItem(key(saved.id), JSON.stringify(recovery));
+      storeRecovery(saved.id, { ...next, revision: saved.revision });
     } catch {
       setMessage(
         "Browser recovery storage is unavailable. Keep this tab open or download your draft.",
@@ -89,57 +55,23 @@ export function useStudy() {
     }
   }
 
+  // Resumes the learner's existing workspace, including a generated roadmap's draft workspace.
   const startMutation = useMutation({
-    mutationFn: async () => {
-      const roadmap = roadmapQuery.data;
-      if (!roadmap) {
-        throw new Error("Load the roadmap before starting.");
-      }
-
-      return studyRequest<Workspace>(
-        `roadmaps/${roadmap.id}/start`,
-        "POST",
-        {},
-      );
-    },
+    mutationFn: async (roadmapId: string) =>
+      studyRequest<Workspace>(`roadmaps/${roadmapId}/start`, "POST", {}),
     onSuccess: (saved) => {
       let recovered: Recovery | null = null;
 
       try {
-        const stored = sessionStorage.getItem(key(saved.id));
-        if (stored) {
-          const value: Recovery = JSON.parse(stored);
-          if (
-            !value.files ||
-            typeof value.files !== "object" ||
-            Array.isArray(value.files) ||
-            !Object.values(value.files).every(
-              (content) => typeof content === "string",
-            ) ||
-            typeof value.notes !== "string" ||
-            value.notes.length > 8000 ||
-            !Number.isInteger(value.revision) ||
-            value.revision < 0
-          ) {
-            throw new Error("Invalid recovery data.");
-          }
-
-          recovered = value;
-        }
+        recovered = readRecovery(saved.id);
       } catch {
         setMessage(
           "Could not read the browser draft. Download any open draft before closing this tab.",
         );
       }
 
-      const next: Draft = {
-        files: recovered?.files ?? saved.files,
-        notes: recovered?.notes ?? saved.notes,
-      };
-      const differs =
-        !sameFiles(next.files, saved.files) || next.notes !== saved.notes;
-      const hasConflict =
-        !!recovered && differs && recovered.revision !== saved.revision;
+      const restored = restoreDraft(saved, recovered);
+      const { draft: next, conflict: hasConflict } = restored;
 
       current.current = {
         workspace: saved,
@@ -150,7 +82,9 @@ export function useStudy() {
       setWorkspace(saved);
       setDraft(next);
       setConflict(hasConflict);
-      setStatus(differs ? "Recovered unsaved draft." : "All changes saved.");
+      setStatus(
+        restored.differs ? "Recovered unsaved draft." : "All changes saved.",
+      );
       queryClient.setQueryData(["study", saved.id], saved);
     },
     onError: (error) => setMessage(error.message),
@@ -348,24 +282,11 @@ export function useStudy() {
     }
   }
 
-  function download() {
-    const blob = new Blob([JSON.stringify(current.current.draft, null, 2)], {
-      type: "application/json",
-    });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "papert-workspace.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  const signedOut = [roadmapQuery.error, startMutation.error].some(
-    (error) => error instanceof StudyRequestError && error.status === 401,
-  );
+  const signedOut =
+    startMutation.error instanceof StudyRequestError &&
+    startMutation.error.status === 401;
 
   return {
-    roadmap: roadmapQuery.data,
     workspace,
     files: draft.files,
     notes: draft.notes,
@@ -373,19 +294,18 @@ export function useStudy() {
       updateDraft({ ...current.current.draft, files }),
     setNotes: (notes: string) =>
       updateDraft({ ...current.current.draft, notes }),
-    busy: roadmapQuery.isPending || startMutation.isPending,
-    message: message || roadmapQuery.error?.message || "",
+    busy: startMutation.isPending,
+    message,
     status:
       dirty && status === "All changes saved." ? "Unsaved changes." : status,
     conflict,
     online,
     dirty,
     signedOut,
-    start: () => startMutation.mutate(),
-    retryLoad: () => void roadmapQuery.refetch(),
+    start: (roadmapId: string) => startMutation.mutate(roadmapId),
     save,
     reload,
-    download,
+    download: () => downloadDraft(current.current.draft),
     prepareAnalysis,
     refresh,
   };

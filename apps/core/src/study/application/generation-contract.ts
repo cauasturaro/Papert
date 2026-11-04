@@ -1,0 +1,39 @@
+import { z } from 'zod';
+import { citationLocation } from '../../common/contracts/citation-location.contract.js';
+import { generatedRoadmapProblem } from '../domain/roadmap-draft.js';
+import type { GeneratedRoadmap } from '../domain/roadmap-draft.js';
+import { roadmapSchema } from '../domain/study.js';
+
+// Wire format of the `roadmap` field on Seymour's completed generation event.
+const candidateSchema = z
+  .object({
+    definition: roadmapSchema,
+    evidence: z
+      .array(
+        z
+          .object({
+            stepId: z.string().regex(/^[a-z0-9-]+$/),
+            sourceId: z.string().uuid(),
+            cite: z.string().min(1).max(400),
+            location: citationLocation,
+          })
+          .strict(),
+      )
+      .max(20),
+  })
+  .strict();
+
+/** Valid JSON is not enough: the definition must also meet the generated-roadmap rules. */
+export function parseGeneratedRoadmap(value: unknown): GeneratedRoadmap | null {
+  const parsed = candidateSchema.safeParse(value);
+
+  if (!parsed.success) {
+    return null;
+  }
+
+  if (generatedRoadmapProblem(parsed.data.definition) !== null) {
+    return null;
+  }
+
+  return parsed.data;
+}

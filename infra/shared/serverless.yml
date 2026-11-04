@@ -42,7 +42,7 @@ resources:
           deadLetterTargetArn: !GetAtt ChatDLQ.Arn
           maxReceiveCount: 3
 
-    # ADR-001: Seymour → Core structured evaluation results
+    # Seymour → Core structured evaluation results
     ResultsDLQ:
       Type: AWS::SQS::Queue
       Properties:

@@ -1,27 +1,6 @@
 import { z } from 'zod';
+import { citationLocation as location } from '../../common/contracts/citation-location.contract.js';
 import type { Grounding } from '../domain/grounding.js';
-
-const heading = z.string().max(300).nullable().optional();
-// Markdown chunks carry their heading path.
-const headings = z.array(z.string().max(300)).max(10).optional();
-
-const location = z.union([
-  z.object({ page: z.number().int().positive() }).strict(),
-  z
-    .object({
-      lineStart: z.number().int().positive(),
-      lineEnd: z.number().int().positive(),
-      headings,
-    })
-    .strict(),
-  z
-    .object({
-      paragraphStart: z.number().int().positive(),
-      paragraphEnd: z.number().int().positive(),
-      heading,
-    })
-    .strict(),
-]);
 
 // Wire format Seymour reports on a completed tutor event.
 const groundingSchema = z

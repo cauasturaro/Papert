@@ -5,6 +5,7 @@ import {
   connectStream,
 } from '../src/executions/infrastructure/stream-handshake.js';
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
+import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
@@ -135,6 +136,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL || !endpoint)(
           db,
           undefined,
           new PrismaAttemptProgression(),
+          new PrismaRoadmapGeneration(),
         ),
         new SqsExecutionQueue(),
         new ParserSyntaxChecker(),

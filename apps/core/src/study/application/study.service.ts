@@ -15,6 +15,10 @@ export class StudyService {
     return this.repo.fixture();
   }
 
+  roadmaps(userId: string) {
+    return this.repo.roadmaps(userId);
+  }
+
   async start(userId: string, roadmapId: string, body: unknown) {
     parse(z.object({}).strict(), body);
     parse(z.string().regex(/^[a-z0-9-]{1,100}$/), roadmapId);

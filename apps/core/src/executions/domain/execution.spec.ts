@@ -54,7 +54,7 @@ describe('Execution trust boundaries', () => {
 
     for (const changes of [
       { tokens: -1 },
-      { tokens: 8001 },
+      { tokens: 16001 },
       { index: 101 },
       { text: 'x'.repeat(4001) },
       { approved: true },

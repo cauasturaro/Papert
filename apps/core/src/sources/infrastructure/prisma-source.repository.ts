@@ -94,8 +94,24 @@ export class PrismaSourceRepository implements SourceRepository {
         FOR UPDATE
       `;
 
+      // Locks out a concurrent draft discard, which deletes every source after committing.
+      await tx.$queryRaw`
+        SELECT id
+        FROM core.workspace
+        WHERE id = ${workspaceId}::uuid
+        FOR UPDATE
+      `;
+
+      // A discarded draft accepts no uploads.
       const workspace = await tx.workspace.findFirst({
-        where: { id: workspaceId, userId },
+        where: {
+          id: workspaceId,
+          userId,
+          OR: [
+            { draft: { is: null } },
+            { draft: { status: { not: 'discarded' } } },
+          ],
+        },
         select: { id: true },
       });
 

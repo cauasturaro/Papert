@@ -21,15 +21,16 @@ model HealthCheck {
 }
 
 model User {
-  id           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email        String           @unique @db.VarChar(254)
-  passwordHash String           @map("password_hash")
-  sessions     AuthSession[]
-  roadmaps     Roadmap[]
-  workspaces   Workspace[]
-  quotas       ExecutionQuota[]
-  executions   Execution[]
-  sources      SourceDocument[]
+  id            String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email         String           @unique @db.VarChar(254)
+  passwordHash  String           @map("password_hash")
+  sessions      AuthSession[]
+  roadmaps      Roadmap[]
+  workspaces    Workspace[]
+  quotas        ExecutionQuota[]
+  executions    Execution[]
+  sources       SourceDocument[]
+  roadmapDrafts RoadmapDraft[]
 
   @@map("app_user")
   @@schema("core")
@@ -72,23 +73,43 @@ model Roadmap {
 }
 
 model Workspace {
-  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String         @map("user_id") @db.Uuid
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  roadmapId   String         @map("roadmap_id") @db.VarChar(100)
-  roadmap     Roadmap        @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  currentStep Int            @default(0) @map("current_step")
-  revision    Int            @default(0)
-  notes       String         @default("")
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roadmapId   String?          @map("roadmap_id") @db.VarChar(100)
+  roadmap     Roadmap?         @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  currentStep Int              @default(0) @map("current_step")
+  revision    Int              @default(0)
+  notes       String           @default("")
   files       Json
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   session     StudySession?
+  draft       RoadmapDraft?
   attempts    StudyAttempt[]
   executions  Execution[]
   sources     SourceDocument[]
 
   @@unique([userId, roadmapId])
   @@map("workspace")
+  @@schema("core")
+}
+
+model RoadmapDraft {
+  workspaceId String     @id @map("workspace_id") @db.Uuid
+  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId      String     @map("user_id") @db.Uuid
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  goal        String
+  level       String
+  status      String     @default("open")
+  executionId String?    @map("execution_id") @db.Uuid
+  execution   Execution? @relation(fields: [executionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  outcome     Json?
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId, status])
+  @@map("roadmap_draft")
   @@schema("core")
 }
 
@@ -160,6 +181,7 @@ model Execution {
   firstEventAt  DateTime?      @map("first_event_at") @db.Timestamptz(3)
   finishedAt    DateTime?      @map("finished_at") @db.Timestamptz(3)
   tickets       StreamTicket[]
+  drafts        RoadmapDraft[]
 
   @@unique([userId, requestKey])
   @@index([status, publishedAt])

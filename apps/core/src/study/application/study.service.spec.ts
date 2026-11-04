@@ -8,6 +8,7 @@ describe('StudyService', () => {
 
   const repo = {
     fixture: vi.fn<StudyRepository['fixture']>(),
+    roadmaps: vi.fn<StudyRepository['roadmaps']>(),
     start: vi.fn<StudyRepository['start']>(),
     workspace: vi.fn<StudyRepository['workspace']>(),
     save: vi.fn<StudyRepository['save']>(),

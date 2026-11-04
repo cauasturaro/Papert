@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
+import { Badge } from "@/components/ui/badge/badge";
 import { Button, buttonVariants } from "@/components/ui/button/button";
 import {
   Card,
@@ -10,18 +12,115 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card/card";
+import { SparklesIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { RoadmapSteps } from "./challenge/roadmap-steps";
+import {
+  LEVELS,
+  listDrafts,
+  listRoadmaps,
+  type StudyableRoadmap,
+} from "./generation/drafts-api";
+import { StudyRequestError } from "./study-api";
 import type { useStudy } from "./use-study";
 
-/** Shown until a workspace exists: loading, retry, or the roadmap to start. */
-export function StudyStart({ study }: { study: ReturnType<typeof useStudy> }) {
-  const { roadmap, busy, message, signedOut, start, retryLoad } = study;
+const DRAFT_STATUS: Record<string, string> = {
+  open: "Ready to generate",
+  generating: "Generating…",
+  failed: "Generation failed",
+};
+
+function RoadmapCard({
+  item,
+  busy,
+  onStart,
+}: {
+  item: StudyableRoadmap;
+  busy: boolean;
+  onStart: () => void;
+}) {
+  const { roadmap, workspace } = item;
+  const generated = roadmap.authorUserId !== null;
+  const level = LEVELS.find(
+    (option) => option.value === roadmap.definition.level,
+  );
 
   return (
-    <main className="flex flex-1 items-center justify-center overflow-auto bg-muted/40 p-4">
-      <div className="flex w-full max-w-xl flex-col gap-4">
-        <h1 className="sr-only">Your study space</h1>
+    <Card role="region" aria-label={roadmap.definition.title}>
+      <CardHeader>
+        <CardTitle as="h3" className="text-xl">
+          {roadmap.definition.title}
+        </CardTitle>
+        <CardDescription className="flex flex-wrap items-center gap-2">
+          {generated ? (
+            <span>Generated for you</span>
+          ) : (
+            <span>
+              Created by <strong>{roadmap.authorName}</strong>
+            </span>
+          )}
+          {level && <Badge variant="secondary">{level.label}</Badge>}
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        <p>{roadmap.definition.description}</p>
+        <RoadmapSteps
+          roadmap={roadmap}
+          currentStep={workspace?.currentStep ?? 0}
+        />
+      </CardContent>
+
+      <CardFooter>
+        <Button onClick={onStart} disabled={busy}>
+          {workspace ? "Resume study" : "Start study"}
+        </Button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+/** Study home: roadmaps to start or resume, drafts in preparation and roadmap creation. */
+export function StudyStart({
+  study,
+  onCreate,
+  onOpenDraft,
+}: {
+  study: ReturnType<typeof useStudy>;
+  onCreate: () => void;
+  onOpenDraft: (workspaceId: string) => void;
+}) {
+  const roadmaps = useQuery({
+    queryKey: ["roadmaps"],
+    queryFn: listRoadmaps,
+    retry: false,
+  });
+  const drafts = useQuery({
+    queryKey: ["drafts"],
+    queryFn: listDrafts,
+    retry: false,
+  });
+
+  const signedOut =
+    study.signedOut ||
+    (roadmaps.error instanceof StudyRequestError &&
+      roadmaps.error.status === 401);
+  const busy = study.busy || roadmaps.isPending;
+  const message = study.message || roadmaps.error?.message || "";
+
+  return (
+    <main className="flex flex-1 justify-center overflow-auto bg-muted/40 p-4 sm:p-6">
+      <div className="flex w-full max-w-3xl flex-col gap-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl font-semibold">Your study space</h1>
+
+          {!signedOut && (
+            <Button onClick={onCreate}>
+              <SparklesIcon />
+              Create a roadmap
+            </Button>
+          )}
+        </div>
 
         <p
           role="status"
@@ -37,39 +136,56 @@ export function StudyStart({ study }: { study: ReturnType<typeof useStudy> }) {
           </Link>
         )}
 
-        {!signedOut && !roadmap && !busy && (
-          <Button className="mx-auto" onClick={retryLoad}>
+        {!signedOut && roadmaps.error && !busy && (
+          <Button className="mx-auto" onClick={() => void roadmaps.refetch()}>
             Retry loading study
           </Button>
         )}
 
-        {roadmap && (
-          <Card
-            aria-label="Roadmap"
-            role="region"
-            className="shadow-xl shadow-foreground/5"
-          >
-            <CardHeader>
-              <CardTitle as="h2" className="text-2xl">
-                {roadmap.definition.title}
-              </CardTitle>
-              <CardDescription>
-                Created by <strong>{roadmap.authorName}</strong>
-              </CardDescription>
-            </CardHeader>
+        {drafts.data && drafts.data.length > 0 && (
+          <section aria-label="Roadmaps in preparation" className="space-y-2">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              In preparation
+            </h2>
 
-            <CardContent className="space-y-5">
-              <p>{roadmap.definition.description}</p>
-              <RoadmapSteps roadmap={roadmap} currentStep={0} />
-            </CardContent>
+            <ul className="space-y-2">
+              {drafts.data.map((draft) => (
+                <li
+                  key={draft.workspaceId}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate">{draft.goal}</p>
+                    <Badge
+                      size="sm"
+                      variant={
+                        draft.status === "failed" ? "destructive" : "secondary"
+                      }
+                    >
+                      {DRAFT_STATUS[draft.status] ?? draft.status}
+                    </Badge>
+                  </div>
 
-            <CardFooter>
-              <Button onClick={start} disabled={busy}>
-                Start or resume study
-              </Button>
-            </CardFooter>
-          </Card>
+                  <Button
+                    variant="outline"
+                    onClick={() => onOpenDraft(draft.workspaceId)}
+                  >
+                    Continue
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
+
+        {roadmaps.data?.map((item) => (
+          <RoadmapCard
+            key={item.roadmap.id}
+            item={item}
+            busy={study.busy}
+            onStart={() => study.start(item.roadmap.id)}
+          />
+        ))}
       </div>
     </main>
   );

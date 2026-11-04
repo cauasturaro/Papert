@@ -18,7 +18,7 @@ const include = {
 } as const;
 
 type StoredWorkspace = Prisma.WorkspaceGetPayload<{ include: typeof include }>;
-type StoredRoadmap = StoredWorkspace['roadmap'];
+type StoredRoadmap = NonNullable<StoredWorkspace['roadmap']>;
 type StoredAttempt = StoredWorkspace['attempts'][number];
 
 function roadmap(row: StoredRoadmap) {
@@ -39,8 +39,8 @@ function attempt(row: StoredAttempt) {
 }
 
 function workspace(row: StoredWorkspace) {
-  if (!row.session) {
-    throw new Error('Workspace study session is missing.');
+  if (!row.session || !row.roadmap) {
+    throw new Error('Workspace study session or roadmap is missing.');
   }
 
   return {
@@ -53,6 +53,11 @@ function workspace(row: StoredWorkspace) {
     session: row.session,
     attempts: row.attempts.map(attempt),
   };
+}
+
+// Papert's roadmaps and the ones this learner generated.
+function visibleTo(userId: string) {
+  return { OR: [{ authorUserId: null }, { authorUserId: userId }] };
 }
 
 export class PrismaStudyRepository implements StudyRepository {
@@ -76,9 +81,29 @@ export class PrismaStudyRepository implements StudyRepository {
     return roadmap(row);
   }
 
+  async roadmaps(userId: string) {
+    await this.fixture();
+
+    const rows = await this.db.roadmap.findMany({
+      where: visibleTo(userId),
+      include: {
+        workspaces: {
+          where: { userId },
+          select: { id: true, currentStep: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return rows.map((row) => ({
+      roadmap: roadmap(row),
+      workspace: row.workspaces[0] ?? null,
+    }));
+  }
+
   async start(userId: string, roadmapId: string) {
-    const original = await this.db.roadmap.findUnique({
-      where: { id: roadmapId },
+    const original = await this.db.roadmap.findFirst({
+      where: { id: roadmapId, ...visibleTo(userId) },
     });
     if (!original) {
       return null;
@@ -112,8 +137,9 @@ export class PrismaStudyRepository implements StudyRepository {
   }
 
   async workspace(userId: string, id: string) {
+    // A preparation workspace becomes studyable only once its roadmap is bound.
     const row = await this.db.workspace.findFirst({
-      where: { id, userId },
+      where: { id, userId, roadmapId: { not: null } },
       include,
     });
 
@@ -163,7 +189,7 @@ export class PrismaStudyRepository implements StudyRepository {
         where: { id, userId },
         include: { roadmap: true },
       });
-      if (!row) {
+      if (!row?.roadmap) {
         throw new StudyError('not_found', 'Workspace not found.');
       }
 

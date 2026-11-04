@@ -55,11 +55,22 @@ export const filesSchema = z
     }
   });
 
+const stepId = z.string().regex(/^[a-z0-9-]+$/);
+
+export const levelSchema = z.enum(['beginner', 'intermediate', 'advanced']);
+
 export const stepSchema = z
   .object({
-    id: z.string().regex(/^[a-z0-9-]+$/),
+    id: stepId,
     title: text,
     content: text,
+    // Optional for older roadmaps; generated ones always set them.
+    concepts: z
+      .array(z.string().trim().min(1).max(80))
+      .min(1)
+      .max(6)
+      .optional(),
+    requires: z.array(stepId).max(5).optional(),
     challenge: z
       .object({
         instructions: text,
@@ -76,6 +87,7 @@ export const roadmapSchema = z
   .object({
     title: text,
     description: text,
+    level: levelSchema.optional(),
     steps: z.array(stepSchema).min(1).max(50),
     starterFiles: filesSchema,
   })
@@ -88,6 +100,8 @@ export const roadmapSchema = z
       });
     }
 
+    const earlier = new Set<string>();
+
     for (const step of steps) {
       const ids = step.challenge.criteria.map((criterion) => criterion.id);
 
@@ -97,6 +111,18 @@ export const roadmapSchema = z
           message: 'Criterion IDs must be unique.',
         });
       }
+
+      // Prerequisites point backwards, so linear progression never meets an unmet one.
+      const unmet = (step.requires ?? []).some((id) => !earlier.has(id));
+
+      if (unmet) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Steps may only require earlier steps.',
+        });
+      }
+
+      earlier.add(step.id);
     }
   });
 
@@ -131,6 +157,8 @@ export type RoadmapDefinition = z.infer<typeof roadmapSchema>;
 export type Step = z.infer<typeof stepSchema>;
 export type WorkspaceChanges = z.infer<typeof saveSchema>;
 
+export type Level = z.infer<typeof levelSchema>;
+
 export type Roadmap = {
   id: string;
   authorName: string;
@@ -159,8 +187,15 @@ export type Workspace = {
   attempts: StudyAttempt[];
 };
 
+export type StudyableRoadmap = {
+  roadmap: Roadmap;
+  workspace: { id: string; currentStep: number } | null;
+};
+
 export interface StudyRepository {
   fixture(): Promise<Roadmap>;
+  // Papert's roadmaps plus the learner's own generated ones, with their workspace if started.
+  roadmaps(userId: string): Promise<StudyableRoadmap[]>;
 
   start(userId: string, roadmapId: string): Promise<Workspace | null>;
   workspace(userId: string, id: string): Promise<Workspace | null>;

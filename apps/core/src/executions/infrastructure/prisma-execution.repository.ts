@@ -14,6 +14,7 @@ import {
 } from '../domain/execution.js';
 import type {
   ExecutionRequest,
+  TerminalStatus,
   WorkerEvent,
   ExecutionRepository,
 } from '../domain/execution.js';
@@ -31,16 +32,30 @@ import {
   analysisOutcome,
 } from '../domain/policy.js';
 import { admitExecution } from './prisma-execution-admission.js';
+import { admitGeneration } from './prisma-generation-admission.js';
+import type {
+  ExecutionRoadmapDrafts,
+  GenerationRequest,
+} from '../domain/roadmap-drafts.js';
 import { lockWorkspace } from './execution-locks.js';
 import type { AttemptState } from '../domain/policy.js';
 
 type Transaction = Prisma.TransactionClient;
+
+type FinishedResult = {
+  text?: string;
+  evaluation?: unknown;
+  grounding?: Grounding | null;
+  roadmap?: unknown;
+  liveSourceIds?: string[];
+};
 
 export class PrismaExecutionRepository implements ExecutionRepository {
   constructor(
     private readonly db: PrismaService,
     private readonly now = () => new Date(),
     private readonly study: ExecutionStudyProgression,
+    private readonly drafts: ExecutionRoadmapDrafts,
   ) {}
 
   async quota(userId: string) {
@@ -75,6 +90,23 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       workspaceId,
       input,
       context,
+    );
+  }
+
+  createGeneration(
+    userId: string,
+    workspaceId: string,
+    input: GenerationRequest,
+    sources: TutorSource[],
+  ) {
+    return admitGeneration(
+      this.db,
+      this.drafts,
+      this.now,
+      userId,
+      workspaceId,
+      input,
+      sources,
     );
   }
 
@@ -115,7 +147,8 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         );
       }
 
-      const definition = this.study.definition(workspace.roadmap.definition);
+      const roadmap = activeStudyStep(workspace.roadmap ?? undefined);
+      const definition = this.study.definition(roadmap.definition);
       const step = activeStudyStep(definition.steps[workspace.currentStep]);
 
       const attempt = await this.study.snapshot(
@@ -183,13 +216,21 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   private async finish(
     tx: Transaction,
     job: Execution,
-    status: string,
-    text = job.text,
-    evaluation?: unknown,
-    grounding: Grounding | null = null,
+    status: TerminalStatus,
+    result: FinishedResult = {},
   ) {
+    const { text = job.text, evaluation, grounding = null } = result;
+
     await this.study.recordOutcome(tx, job, (snapshot) =>
       analysisOutcome(snapshot, job.id, status, evaluation, this.now()),
+    );
+
+    await this.drafts.recordGeneration(
+      tx,
+      job,
+      status,
+      result.roadmap,
+      result.liveSourceIds ?? [],
     );
 
     await tx.executionQuota.update({
@@ -311,7 +352,11 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     };
   }
 
-  async accept(event: WorkerEvent, grounding: Grounding | null) {
+  async accept(
+    event: WorkerEvent,
+    grounding: Grounding | null,
+    liveSourceIds: string[],
+  ) {
     const job = await this.locked(event.executionId, async (tx, record) => {
       let current = record;
       const refund = usageRefund(current, event);
@@ -346,14 +391,13 @@ export class PrismaExecutionRepository implements ExecutionRepository {
         },
       });
       if (event.status !== 'running') {
-        return this.finish(
-          tx,
-          current,
-          event.status,
-          event.text,
-          event.evaluation,
+        return this.finish(tx, current, event.status, {
+          text: event.text,
+          evaluation: event.evaluation,
           grounding,
-        );
+          roadmap: event.roadmap,
+          liveSourceIds,
+        });
       }
 
       return tx.execution.update({

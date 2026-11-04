@@ -2,7 +2,7 @@ import { DomainError } from '../../common/domain/domain-error.js';
 
 export class SourceError extends DomainError {}
 
-// Keep in sync with prisma/migrations/202611030002_sources and ADR-005.
+// Keep in sync with the source_document table checks.
 export const MAX_SOURCE_BYTES = 15 * 1024 * 1024;
 export const MAX_WORKSPACE_SOURCES = 20;
 export const MAX_DAILY_REGISTRATIONS = 30;

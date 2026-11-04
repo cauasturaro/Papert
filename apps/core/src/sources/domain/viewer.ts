@@ -1,6 +1,6 @@
 import type { SourceFormat, StoredSource } from './source.js';
 
-// Opening a source issues fresh, version-pinned links after authorization (ADR-007).
+// Opening a source issues fresh, version-pinned links after authorization.
 export const VIEW_URL_SECONDS = 300;
 
 // How the Web viewer shows each format; DOC/DOCX use ingestion's text rendition.

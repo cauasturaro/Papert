@@ -21,12 +21,22 @@ class Claim:
         if self.status != "running":
             raise RuntimeError("Execution is busy or permanently failed")
 
+        kind = self.context["kind"]
         tutor = "mode" in self.context
-        analysis = self.context.get("kind") == "analysis" and "attemptId" in self.context
-        expected_budget = 8000 if tutor or analysis else 1000
-        if self.budget != expected_budget or self.context["kind"] not in {"chat", "analysis"}:
+        analysis = kind == "analysis" and "attemptId" in self.context
+        generation = kind == "generation"
+
+        expected_budget = 1000
+        if tutor or analysis:
+            expected_budget = 8000
+        if generation:
+            expected_budget = 16000
+
+        if self.budget != expected_budget or kind not in {"chat", "analysis", "generation"}:
             raise ValueError("Invalid authorized execution context")
 
+        if generation:
+            return "generation"
         if analysis:
             return "analysis"
         if tutor:
@@ -46,3 +56,5 @@ class Result:
     evaluation: dict | None = None
     # Tutor answers in workspaces with sources: support and citations; Core re-authorizes them.
     grounding: dict | None = None
+    # Generation only: the drafted definition and private evidence; Core validates both.
+    roadmap: dict | None = None

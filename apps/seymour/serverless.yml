@@ -65,7 +65,8 @@ functions:
 
   worker:
     handler: worker_handler.handler
-    timeout: 30
+    # Roadmap generation may run up to 55 s inside Core's 60 s lease.
+    timeout: 60
     events:
       - sqs:
           arn: !Sub "arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:papert-chat"

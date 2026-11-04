@@ -29,6 +29,34 @@ describe('Study contracts', () => {
     expect(roadmapSchema.safeParse(duplicateCriteria).success).toBe(false);
   });
 
+  it('accepts concepts and prerequisites that point only to earlier steps', () => {
+    const [first, second] = fixtureDefinition.steps;
+    const linked = {
+      ...fixtureDefinition,
+      level: 'beginner',
+      steps: [
+        { ...first, concepts: ['validation'], requires: [] },
+        { ...second, concepts: ['pure functions'], requires: [first.id] },
+      ],
+    };
+
+    expect(roadmapSchema.safeParse(linked).success).toBe(true);
+
+    const forward = structuredClone(linked);
+    forward.steps[0].requires = [second.id];
+
+    expect(roadmapSchema.safeParse(forward).success).toBe(false);
+
+    const itself = structuredClone(linked);
+    itself.steps[1].requires = [second.id];
+
+    expect(roadmapSchema.safeParse(itself).success).toBe(false);
+
+    const unknownLevel = { ...linked, level: 'expert' };
+
+    expect(roadmapSchema.safeParse(unknownLevel).success).toBe(false);
+  });
+
   it('rejects traversal, unsafe path segments and excessive file payloads', () => {
     for (const path of [
       '../secret',

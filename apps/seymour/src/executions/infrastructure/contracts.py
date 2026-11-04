@@ -45,6 +45,9 @@ def encode_result(result: Result) -> dict:
     if result.grounding is not None:
         event["grounding"] = result.grounding
 
+    if result.roadmap is not None:
+        event["roadmap"] = result.roadmap
+
     return event
 
 
