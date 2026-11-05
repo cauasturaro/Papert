@@ -25,12 +25,21 @@ const facts = {
   objective: 'Learn TypeScript',
   solutionAllowed: true,
   recentResults: [{ revision: 2, result: { status: 'needs_work' } }],
-  completed: [
-    {
-      input: { kind: 'chat', mode: 'doubt', prompt: 'Earlier' },
-      text: 'A hint',
+  memory: {
+    conversationId: 'conversation',
+    summary: {
+      covered: ['Declared variables'],
+      pending: [],
+      struggles: [],
+      stepId: 'step',
     },
-  ],
+    recentTurns: [{ prompt: 'Earlier', answer: 'A hint' }],
+    foldTurns: [],
+    summaryFold: null,
+    memory: [
+      { id: 'note', kind: 'preference' as const, text: 'Short answers' },
+    ],
+  },
   sources: [{ id: 'source', filename: 'guide.pdf', format: 'pdf' as const }],
 };
 
@@ -60,9 +69,14 @@ describe('Admitted worker context', () => {
       recentResults: facts.recentResults,
       workspaceId: facts.workspaceId,
       sources: facts.sources,
+      conversationId: 'conversation',
+      summary: facts.memory.summary,
       recentTurns: [{ prompt: 'Earlier', answer: 'A hint' }],
+      foldTurns: [],
+      memory: facts.memory.memory,
     });
     expect(result).not.toHaveProperty('attemptId');
+    expect(result).not.toHaveProperty('summaryFold');
   });
 
   it('includes analysis association and syntax coverage without diagnostics', () => {

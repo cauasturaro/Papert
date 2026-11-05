@@ -16,6 +16,7 @@ export type ExecutionRequest = {
   activeFile?: string;
   selection?: { start: number; end: number };
   sourceIds?: string[];
+  conversationId?: string;
 };
 
 export type WorkerEvent = {
@@ -30,6 +31,7 @@ export type WorkerEvent = {
   grounding?: unknown;
   roadmap?: unknown;
   recommendation?: unknown;
+  memory?: unknown;
 };
 
 export type ExecutionRecord = {

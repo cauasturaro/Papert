@@ -98,6 +98,8 @@ await Promise.all([
         // The tutor searches the learner's sources in Seymour's schema.
         SEYMOUR_DATABASE_URL: process.env.SEYMOUR_DATABASE_URL,
         EMBEDDING_MODEL: process.env.EMBEDDING_MODEL,
+        // Tutor checkpoints (L2) in the sessions table.
+        SESSIONS_TABLE: process.env.SESSIONS_TABLE,
         LANGFUSE_BASE_URL: process.env.LANGFUSE_BASE_URL,
         LANGFUSE_PUBLIC_KEY: process.env.LANGFUSE_PUBLIC_KEY,
         LANGFUSE_SECRET_KEY: process.env.LANGFUSE_SECRET_KEY,

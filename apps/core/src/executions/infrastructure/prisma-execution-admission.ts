@@ -8,6 +8,7 @@ import { period } from '../domain/quota.js';
 import type { ExecutionRequest } from '../domain/execution.js';
 import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
 import type { ExecutionWorkspaces } from '../domain/ports/execution-workspaces.js';
+import type { ExecutionMemory } from '../domain/ports/execution-memory.js';
 import { assertMentionsReady } from '../domain/tutor-context.js';
 import type { TutorSource } from '../domain/tutor-context.js';
 import {
@@ -25,11 +26,13 @@ import { assertAnalysisRetry } from '../domain/analysis.js';
 import { allocateQuota } from '../domain/quota.js';
 import type { AttemptState } from '../domain/analysis.js';
 import { lockUserQuota } from './execution-locks.js';
+import { tutorMemoryContext } from './tutor-memory-context.js';
 
 export async function admitExecution(
   db: PrismaService,
   workspaces: ExecutionWorkspaces,
   study: ExecutionStudyProgression,
+  memory: ExecutionMemory,
   clock: () => Date,
   userId: string,
   workspaceId: string,
@@ -74,16 +77,6 @@ export async function admitExecution(
       : [];
     const solutionAllowed = solutionEligible(recentResults.length);
 
-    // Short-term conversation memory: the last completed exchanges of this chat.
-    const completed = input.mode
-      ? await tx.execution.findMany({
-          where: { workspaceId, userId, status: 'completed' },
-          select: { input: true, text: true },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        })
-      : [];
-
     assertMentionsReady(input.sourceIds, sources);
 
     assertSolutionEligible(input.mode, solutionAllowed);
@@ -125,6 +118,19 @@ export async function admitExecution(
 
     const reservation = allocateQuota(quota, budget, now);
 
+    // Conversation history and durable notes; deleted sources never re-enter through them.
+    const tutorMemory = input.mode
+      ? await tutorMemoryContext(
+          tx,
+          memory,
+          userId,
+          workspaceId,
+          input,
+          sources.map((source) => source.id),
+          now,
+        )
+      : undefined;
+
     await tx.executionQuota.update({
       where: { id: quota.id },
       data: { reserved: { increment: reservation } },
@@ -138,7 +144,7 @@ export async function admitExecution(
       objective: definition.description,
       solutionAllowed,
       recentResults,
-      completed,
+      memory: tutorMemory,
       sources,
       attemptId,
       syntax,
@@ -150,6 +156,7 @@ export async function admitExecution(
         workspaceId,
         quotaId: quota.id,
         requestKey: input.requestKey,
+        conversationId: tutorMemory?.conversationId,
         createdAt: now,
         deadline: new Date(now.getTime() + DEADLINE_MS),
         reserved: reservation,

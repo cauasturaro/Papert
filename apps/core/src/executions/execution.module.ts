@@ -4,6 +4,9 @@ import { AuthModule } from '../auth/auth.module.js';
 import { CommunityService } from '../community/application/community.service.js';
 import { CommunityModule } from '../community/community.module.js';
 import { PrismaService } from '../infrastructure/database/prisma.service.js';
+import { MemoryModule } from '../memory/memory.module.js';
+import { MemoryService } from '../memory/application/memory.service.js';
+import { PrismaTutorMemory } from '../memory/infrastructure/prisma-tutor-memory.js';
 import { SourceService } from '../sources/application/source.service.js';
 import { SourceModule } from '../sources/source.module.js';
 import { PrismaAttemptProgression } from '../study/infrastructure/prisma-attempt-progression.js';
@@ -18,11 +21,13 @@ import type { ExecutionRecommendationDrafts } from './domain/ports/execution-rec
 import type { ExecutionRoadmapDrafts } from './domain/ports/execution-roadmap-drafts.js';
 import type { ExecutionStudyProgression } from './domain/ports/execution-study-progression.js';
 import type { ExecutionWorkspaces } from './domain/ports/execution-workspaces.js';
+import type { ExecutionMemory } from './domain/ports/execution-memory.js';
 import { SqsExecutionQueue } from './infrastructure/aws-execution.js';
 import { CommunityRecommendationCatalog } from './infrastructure/community-catalog.js';
 import { ExecutionController } from './infrastructure/execution.controller.js';
 import { PrismaExecutionLifecycle } from './infrastructure/prisma-execution-lifecycle.js';
 import { PrismaExecutionRepository } from './infrastructure/prisma-execution-repository.js';
+import { MemoryServiceNotes } from './infrastructure/note-catalog.js';
 import { SourceServiceCatalog } from './infrastructure/source-catalog.js';
 import { createExecutionStream } from './infrastructure/stream-composition.js';
 
@@ -34,17 +39,24 @@ const STUDY_PARTICIPANTS = [
 ];
 
 @Module({
-  imports: [AuthModule, SourceModule, StudyModule, CommunityModule],
+  imports: [
+    AuthModule,
+    SourceModule,
+    StudyModule,
+    CommunityModule,
+    MemoryModule,
+  ],
   controllers: [ExecutionController],
   providers: [
     {
       provide: PrismaExecutionLifecycle,
-      inject: [PrismaService, ...STUDY_PARTICIPANTS],
+      inject: [PrismaService, ...STUDY_PARTICIPANTS, PrismaTutorMemory],
       useFactory: (
         db: PrismaService,
         study: ExecutionStudyProgression,
         drafts: ExecutionRoadmapDrafts,
         recommendations: ExecutionRecommendationDrafts,
+        memory: ExecutionMemory,
       ) =>
         new PrismaExecutionLifecycle(
           db,
@@ -52,17 +64,24 @@ const STUDY_PARTICIPANTS = [
           study,
           drafts,
           recommendations,
+          memory,
         ),
     },
     {
       provide: PrismaExecutionRepository,
-      inject: [PrismaService, PrismaWorkspaceAccess, ...STUDY_PARTICIPANTS],
+      inject: [
+        PrismaService,
+        PrismaWorkspaceAccess,
+        ...STUDY_PARTICIPANTS,
+        PrismaTutorMemory,
+      ],
       useFactory: (
         db: PrismaService,
         workspaces: ExecutionWorkspaces,
         study: ExecutionStudyProgression,
         drafts: ExecutionRoadmapDrafts,
         recommendations: ExecutionRecommendationDrafts,
+        memory: ExecutionMemory,
       ) =>
         new PrismaExecutionRepository(
           db,
@@ -71,6 +90,7 @@ const STUDY_PARTICIPANTS = [
           study,
           drafts,
           recommendations,
+          memory,
         ),
     },
     {
@@ -98,16 +118,23 @@ const STUDY_PARTICIPANTS = [
     },
     {
       provide: ExecutionWorkerService,
-      inject: [PrismaExecutionLifecycle, SourceService, CommunityService],
+      inject: [
+        PrismaExecutionLifecycle,
+        SourceService,
+        CommunityService,
+        MemoryService,
+      ],
       useFactory: (
         lifecycle: PrismaExecutionLifecycle,
         sources: SourceService,
         community: CommunityService,
+        memory: MemoryService,
       ) =>
         new ExecutionWorkerService(
           lifecycle,
           new SourceServiceCatalog(sources),
           new CommunityRecommendationCatalog(community),
+          new MemoryServiceNotes(memory),
         ),
     },
     {

@@ -43,6 +43,22 @@
       "default": true,
       "title": "Answered From Sources",
       "type": "boolean"
+    },
+    "remember_kind": {
+      "default": "none",
+      "enum": [
+        "none",
+        "preference",
+        "difficulty"
+      ],
+      "title": "Remember Kind",
+      "type": "string"
+    },
+    "remember_text": {
+      "default": "",
+      "maxLength": 200,
+      "title": "Remember Text",
+      "type": "string"
     }
   },
   "required": [
@@ -52,7 +68,9 @@
     "next_step",
     "question",
     "sources",
-    "answered_from_sources"
+    "answered_from_sources",
+    "remember_kind",
+    "remember_text"
   ],
   "title": "Guidance",
   "type": "object"

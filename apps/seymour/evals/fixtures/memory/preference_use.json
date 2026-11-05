@@ -1,0 +1,170 @@
+{
+  "version": 1,
+  "step": {
+    "stepId": "validate-input",
+    "stepTitle": "Validate the request",
+    "objective": "A practice roadmap for learning request validation and separating business rules from HTTP.",
+    "challenge": {
+      "instructions": "Design a POST /greetings endpoint that accepts a non-empty name and returns a greeting. Describe how invalid requests are handled.",
+      "criteria": [
+        {
+          "id": "valid-name",
+          "description": "Accept a non-empty string name and reject missing, empty or non-string values."
+        },
+        {
+          "id": "http-errors",
+          "description": "Return HTTP 400 for invalid input without exposing internal details."
+        },
+        {
+          "id": "greeting",
+          "description": "Return a greeting containing the validated name."
+        }
+      ]
+    },
+    "files": {
+      "src/service.ts": "// Write your service here.\n"
+    }
+  },
+  "cases": [
+    {
+      "id": "python-examples",
+      "mode": "teaching",
+      "memory": [
+        {
+          "id": "3fc59489-768e-4253-ac69-530a52ac0563",
+          "kind": "preference",
+          "text": "Use Python for illustrative code examples while keeping the workspace language unchanged."
+        }
+      ],
+      "prompt": "Show a tiny standalone example of checking the type of an input, unrelated to implementing the endpoint.",
+      "check": {
+        "type": "regex",
+        "pattern": "\\bdef\\s+\\w+\\s*\\(|\\bprint\\s*\\(|\\bisinstance\\s*\\(",
+        "flags": "i"
+      },
+      "control": false,
+      "why": "Python-specific syntax provides an observable language signal."
+    },
+    {
+      "id": "everyday-analogy",
+      "mode": "teaching",
+      "memory": [
+        {
+          "id": "9013b16c-7abf-4430-9542-831803c5a019",
+          "kind": "preference",
+          "text": "Use an everyday analogy whenever explaining a new concept."
+        }
+      ],
+      "prompt": "Explain why input validation belongs at the HTTP boundary.",
+      "check": {
+        "type": "regex",
+        "pattern": "\\b(like|imagine|think of|analogy)\\b",
+        "flags": "i"
+      },
+      "control": false,
+      "why": "An analogy cue is an observable, though imperfect, proxy for using the preference."
+    },
+    {
+      "id": "explicit-numbered-steps",
+      "mode": "teaching",
+      "memory": [
+        {
+          "id": "4516536f-b0ed-4042-9fcf-45c320c630ca",
+          "kind": "preference",
+          "text": "Present teaching explanations as a numbered list using 1. and 2. at the start of lines."
+        }
+      ],
+      "prompt": "Explain a safe order for inspecting an untrusted name.",
+      "check": {
+        "type": "regex",
+        "pattern": "(?:^|\\n)\\s*1\\.\\s+[^\\n]+\\n\\s*2\\.\\s+",
+        "flags": "i"
+      },
+      "control": false,
+      "why": "Requires two numbered lines rather than merely mentioning steps."
+    },
+    {
+      "id": "comparison-table",
+      "mode": "doubt",
+      "memory": [
+        {
+          "id": "1ec1832a-91b1-4ad8-a20c-d604c591ba63",
+          "kind": "preference",
+          "text": "Use Markdown tables with a header separator row when comparing concepts."
+        }
+      ],
+      "prompt": "Compare missing names and empty string names.",
+      "check": {
+        "type": "regex",
+        "pattern": "\\|[^\\n]+\\|\\s*\\n\\s*\\|\\s*:?-{3,}:?\\s*\\|",
+        "flags": "i"
+      },
+      "control": false,
+      "why": "A Markdown separator row objectively signals table formatting."
+    },
+    {
+      "id": "define-jargon",
+      "mode": "teaching",
+      "memory": [
+        {
+          "id": "2c8b9eb5-91ef-44cc-a070-92a5dccaa36a",
+          "kind": "preference",
+          "text": "When explaining validation, explicitly define the word untrusted before using more technical terms."
+        }
+      ],
+      "prompt": "Explain the purpose of checking incoming request data.",
+      "check": {
+        "type": "regex",
+        "pattern": "\\buntrusted\\s+(?:means|refers to|describes)\\b|\\buntrusted\\s*[:=]",
+        "flags": "i"
+      },
+      "control": false,
+      "why": "Checks that the preferred term receives an explicit definition."
+    },
+    {
+      "id": "runtime-struggle-reminder",
+      "mode": "doubt",
+      "memory": [
+        {
+          "id": "0dcdc1c9-bb61-46a2-9449-e2e8feef52ce",
+          "kind": "difficulty",
+          "text": "Repeatedly confuses TypeScript type annotations with runtime validation of incoming JSON."
+        }
+      ],
+      "prompt": "What should I check first before using the incoming name?",
+      "check": {
+        "type": "regex",
+        "pattern": "\\bruntime\\b|\\btype\\s+annotations?\\b|\\btypes?\\s+are\\s+erased\\b",
+        "flags": "i"
+      },
+      "control": false,
+      "why": "A targeted reminder of the known confusion makes difficulty use observable."
+    },
+    {
+      "id": "python-examples-control",
+      "mode": "teaching",
+      "memory": [],
+      "prompt": "Show a tiny standalone example of checking the type of an input, unrelated to implementing the endpoint.",
+      "check": {
+        "type": "regex",
+        "pattern": "\\bdef\\s+\\w+\\s*\\(|\\bprint\\s*\\(|\\bisinstance\\s*\\(",
+        "flags": "i"
+      },
+      "control": true,
+      "why": "Matched prompt and regex without active memory; compare aggregate hit rates, not guaranteed individual failures."
+    },
+    {
+      "id": "everyday-analogy-control",
+      "mode": "teaching",
+      "memory": [],
+      "prompt": "Explain why input validation belongs at the HTTP boundary.",
+      "check": {
+        "type": "regex",
+        "pattern": "\\b(like|imagine|think of|analogy)\\b",
+        "flags": "i"
+      },
+      "control": true,
+      "why": "Matched prompt and regex without active memory; compare aggregate hit rates, not guaranteed individual failures."
+    }
+  ]
+}

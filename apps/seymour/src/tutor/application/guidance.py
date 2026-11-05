@@ -1,5 +1,7 @@
 """The tutor's structured answer and how the server renders it for the learner."""
 
+from typing import Literal
+
 from pydantic import Field
 
 from src.tutor.application.quotes import attributed_cites, extract_quote, quote_supports
@@ -18,6 +20,9 @@ class Guidance(StrictModel):
     sources: list[str] = Field(default_factory=list, max_length=5)
     # False when the excerpts do not contain the answer; the server then cites nothing.
     answered_from_sources: bool = True
+    # A durable note for the learner to review; the server filters it before Core stores it.
+    remember_kind: Literal["none", "preference", "difficulty"] = "none"
+    remember_text: str = Field(default="", max_length=200)
 
 
 MAX_CITATIONS = 5

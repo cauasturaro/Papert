@@ -51,4 +51,7 @@ def encode_result(result: Result) -> dict:
     if result.recommendation is not None:
         event["recommendation"] = result.recommendation
 
+    if result.memory is not None:
+        event["memory"] = result.memory
+
     return event

@@ -14,7 +14,7 @@ import {
 import { BookmarkIcon } from "@/components/icons";
 import { listLibrary } from "./community-api";
 import { LIBRARY_KEY } from "./community-keys";
-import { LoadErrorAlert } from "./load-error-alert";
+import { LoadErrorAlert } from "@/components/app/load-error-alert";
 import { RoadmapCard } from "./roadmap-card";
 import { useCommunityActions } from "./use-community-actions";
 

@@ -5,6 +5,7 @@ import {
   Inject,
   Param,
   Post,
+  Query,
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
@@ -38,8 +39,9 @@ export class ExecutionController {
   list(
     @CurrentPrincipal() principal: Principal,
     @Param('id', ResourceIdPipe) id: string,
+    @Query('conversation') conversation: unknown,
   ) {
-    return this.executions.list(principal.user.id, id);
+    return this.executions.list(principal.user.id, id, conversation);
   }
 
   @Post('workspaces/:id')

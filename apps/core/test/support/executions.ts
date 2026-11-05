@@ -7,6 +7,8 @@ import type { SyntaxChecker } from '../../src/analysis/domain/ports/syntax-check
 import { PrismaExecutionRepository } from '../../src/executions/infrastructure/prisma-execution-repository.js';
 import { PrismaExecutionLifecycle } from '../../src/executions/infrastructure/prisma-execution-lifecycle.js';
 import type { PrismaService } from '../../src/infrastructure/database/prisma.service.js';
+import { PrismaMemoryRepository } from '../../src/memory/infrastructure/prisma-memory-repository.js';
+import { PrismaTutorMemory } from '../../src/memory/infrastructure/prisma-tutor-memory.js';
 import { PrismaAttemptProgression } from '../../src/study/infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapGeneration } from '../../src/study/infrastructure/prisma-roadmap-generation.js';
 import { PrismaRoadmapRecommendation } from '../../src/study/infrastructure/prisma-roadmap-recommendation.js';
@@ -23,6 +25,11 @@ export function createExecutions(
   const study = new PrismaAttemptProgression();
   const drafts = new PrismaRoadmapGeneration();
   const recommendations = new PrismaRoadmapRecommendation();
+  const memory = new PrismaTutorMemory(db);
+  const items = new PrismaMemoryRepository(db);
+  const notes = {
+    active: (userId: string, ids: string[]) => items.activeIds(userId, ids),
+  };
   const repository = new PrismaExecutionRepository(
     db,
     now,
@@ -30,6 +37,7 @@ export function createExecutions(
     study,
     drafts,
     recommendations,
+    memory,
   );
   const lifecycle = new PrismaExecutionLifecycle(
     db,
@@ -37,6 +45,7 @@ export function createExecutions(
     study,
     drafts,
     recommendations,
+    memory,
   );
 
   return {
@@ -48,6 +57,6 @@ export function createExecutions(
       sources,
       catalog,
     ),
-    worker: new ExecutionWorkerService(lifecycle, sources, catalog),
+    worker: new ExecutionWorkerService(lifecycle, sources, catalog, notes),
   };
 }

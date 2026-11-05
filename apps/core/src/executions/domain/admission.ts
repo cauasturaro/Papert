@@ -58,7 +58,10 @@ export function assertSameRequest(
     old.effort !== input.effort ||
     old.activeFile !== input.activeFile ||
     JSON.stringify(old.selection) !== JSON.stringify(input.selection) ||
-    JSON.stringify(old.sourceIds) !== JSON.stringify(input.sourceIds)
+    JSON.stringify(old.sourceIds) !== JSON.stringify(input.sourceIds) ||
+    // The stored snapshot names the resolved conversation even when the request omitted it.
+    (input.conversationId !== undefined &&
+      old.conversationId !== input.conversationId)
   ) {
     throw new ExecutionError(
       'conflict',

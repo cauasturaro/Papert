@@ -142,11 +142,31 @@ def test_tutor_composition_supplies_its_schema_and_safe_tool_names(monkeypatch):
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
     monkeypatch.setattr("src.shared.infrastructure.tracing.Langfuse", lambda **_: MagicMock())
-    snapshot = SimpleNamespace(sources=[])
+    monkeypatch.delenv("SESSIONS_TABLE", raising=False)
+    snapshot = SimpleNamespace(sources=[], foldTurns=[])
+    folding = SimpleNamespace(sources=[], foldTurns=[{"prompt": "a", "answer": "b"}])
 
     runtime = tutor_resources(snapshot)
+    compacting = tutor_resources(folding)
 
     assert runtime.model.response_name == "tutor_guidance"
     assert runtime.model.response_schema == guidance_schema()
     assert runtime.trace.tool_names == frozenset(TOOL_ARGUMENTS)
     assert runtime.search is None
+    assert runtime.summarizer is None
+    assert runtime.checkpoints is None
+    assert compacting.summarizer.response_name == "conversation_summary"
+
+
+def test_an_unavailable_checkpoint_store_disables_resume_instead_of_failing(monkeypatch):
+    from src.executions.infrastructure.composition import checkpoint_store
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("no region")
+
+    monkeypatch.setenv("SESSIONS_TABLE", "papert-sessions")
+    monkeypatch.setattr(
+        "src.executions.infrastructure.dynamo_checkpoints.DynamoCheckpoints.__init__", broken
+    )
+
+    assert checkpoint_store() is None

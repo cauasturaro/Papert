@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.executions.application.resources import ExecutionResources
-from src.executions.application.workflows import run_tutor_job
+from src.executions.application.tutor_workflow import run_tutor_job
 from src.shared.domain.inference import Message
 from src.tutor.domain.context import TutorContext
 
@@ -62,3 +62,40 @@ def test_tutor_workflow_accepts_provider_free_resources(context, noop_trace):
     assert published[-1].status == "completed"
     assert published[-1].tokens == 150
     assert "HTTP boundary" in published[-1].text
+
+
+def test_tutor_workflow_publishes_its_memory_outcome_and_forgets_the_checkpoint(
+    context, noop_trace
+):
+    model = MagicMock()
+    model.complete.return_value = response(
+        json.dumps(
+            {
+                "explanation": "Validate at the HTTP boundary.",
+                "next_step": "Check the type of name.",
+                "question": "What should happen for an empty string?",
+                "remember_kind": "preference",
+                "remember_text": "Prefers short answers",
+            }
+        )
+    )
+    store = MagicMock()
+    store.load.return_value = None
+    runtime = ExecutionResources(model, noop_trace, lambda: 100.0, checkpoints=store)
+    control = MagicMock()
+    control.active.return_value = True
+    published = []
+    request = {
+        **context.model_dump(),
+        "prompt": "Keep answers short from now on, please.",
+        "mode": "doubt",
+        "solutionAllowed": False,
+    }
+
+    run_tutor_job("execution", "lease", request, 8000, control, published.append, lambda _: runtime)
+
+    final = published[-1]
+    assert final.status == "completed"
+    assert final.memory == {"proposal": {"kind": "preference", "text": "Prefers short answers"}}
+    store.load.assert_called_once_with("execution")
+    store.delete.assert_called_once_with("execution")

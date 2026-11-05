@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.executions.application.resources import ExecutionResources
-from src.executions.application.workflows import run_tutor_job
+from src.executions.application.tutor_workflow import run_tutor_job
 from src.shared.domain.inference import Message
 
 pytestmark = pytest.mark.unit

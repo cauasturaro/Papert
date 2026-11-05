@@ -15,6 +15,7 @@ provider:
   memorySize: 1024
   timeout: 30
   environment:
+    SESSIONS_TABLE: papert-sessions
     RESULTS_QUEUE_URL: !Sub "https://sqs.${AWS::Region}.amazonaws.com/${AWS::AccountId}/papert-results"
     CORE_EXECUTION_CONTROL_FUNCTION: papert-core-${self:provider.stage}-executionControl
     ENVIRONMENT: ${self:provider.stage}
@@ -29,6 +30,16 @@ provider:
   iam:
     role:
       statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+          Resource: !Sub "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/papert-sessions"
+          Condition:
+            ForAllValues:StringLike:
+              dynamodb:LeadingKeys:
+                - "CHECKPOINT#*"
         - Effect: Allow
           Action:
             - sqs:ReceiveMessage

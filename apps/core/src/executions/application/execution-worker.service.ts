@@ -1,7 +1,9 @@
 import { authorizedGrounding, liveSourceIds } from '../domain/grounding.js';
 import type { ExecutionLifecycle } from '../domain/ports/execution-lifecycle.js';
 import type { RecommendationCatalog } from '../domain/ports/recommendation-catalog.js';
+import type { TutorNoteCatalog } from '../domain/ports/tutor-note-catalog.js';
 import type { TutorSourceCatalog } from '../domain/ports/tutor-source-catalog.js';
+import { admittedNoteIds, withLiveNotes } from '../domain/tutor-context.js';
 import { parseGrounding } from './contracts/grounding.contract.js';
 import { workerEvent } from './contracts/worker-event.contract.js';
 import { executionView } from './execution-presentation.js';
@@ -13,10 +15,25 @@ export class ExecutionWorkerService {
     private readonly lifecycle: ExecutionLifecycle,
     private readonly sources: TutorSourceCatalog,
     private readonly catalog: RecommendationCatalog,
+    private readonly notes: TutorNoteCatalog,
   ) {}
 
-  claim(id: string) {
-    return this.lifecycle.claim(id);
+  /** A worker receives only the durable notes that still exist when it claims the job. */
+  async claim(id: string) {
+    const claim = await this.lifecycle.claim(id);
+    if (claim.status !== 'running') {
+      return claim;
+    }
+
+    const noteIds = admittedNoteIds(claim.input);
+    if (noteIds.length === 0) {
+      return claim;
+    }
+
+    const scope = await this.lifecycle.sourceScope(id);
+    const live = scope ? await this.notes.active(scope.userId, noteIds) : [];
+
+    return { ...claim, input: withLiveNotes(claim.input, live) };
   }
 
   failed(id: string, lease: string) {

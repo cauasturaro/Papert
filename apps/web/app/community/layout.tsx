@@ -1,7 +1,7 @@
-import { CommunityShell } from "./community-shell";
+import { PageShell } from "@/components/app/page-shell";
 
 export default function CommunityLayout({
   children,
 }: LayoutProps<"/community">) {
-  return <CommunityShell>{children}</CommunityShell>;
+  return <PageShell>{children}</PageShell>;
 }

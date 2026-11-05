@@ -63,3 +63,11 @@ def test_roadmap_travels_only_on_events_that_carry_it():
 
     assert event["roadmap"] == roadmap
     assert "roadmap" not in encode_result(Result("execution", "lease", 1, "running", "", 0))
+
+
+def test_memory_travels_only_on_events_that_carry_it():
+    memory = {"summary": {"covered": ["ports"], "pending": [], "struggles": []}}
+    event = encode_result(Result("execution", "lease", 100, "completed", "text", 10, memory=memory))
+
+    assert event["memory"] == memory
+    assert "memory" not in encode_result(Result("execution", "lease", 1, "running", "", 0))

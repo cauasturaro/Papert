@@ -19,6 +19,8 @@ export const workerEvent: z.ZodType<WorkerEvent> = z
     roadmap: z.unknown().optional(),
     // Untrusted; Study keeps only offered roadmaps that are still published.
     recommendation: z.unknown().optional(),
+    // Untrusted; Memory validates the summary and proposal of a completed chat.
+    memory: z.unknown().optional(),
   })
   .strict()
   .refine(
@@ -26,6 +28,7 @@ export const workerEvent: z.ZodType<WorkerEvent> = z
       (event.evaluation === undefined &&
         event.grounding === undefined &&
         event.roadmap === undefined &&
-        event.recommendation === undefined) ||
+        event.recommendation === undefined &&
+        event.memory === undefined) ||
       event.status === 'completed',
   );

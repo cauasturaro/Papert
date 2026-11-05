@@ -6,6 +6,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager
 from typing import Protocol, TypeVar
 
+from src.executions.domain.checkpoint import Checkpoint
 from src.executions.domain.execution import Claim, Result
 
 T = TypeVar("T")
@@ -17,6 +18,17 @@ class Control(Protocol):
     def failed(self, execution_id: str, lease: str) -> None: ...
     def live_sources(self, execution_id: str, lease: str) -> list[str]:
         """Snapshot sources that are still ready now; deleted ones drop out mid-run."""
+
+
+class Checkpoints(Protocol):
+    """Best-effort store: an unavailable store behaves as empty and never raises."""
+
+    def load(self, execution_id: str) -> Checkpoint | None: ...
+
+    def save(self, checkpoint: Checkpoint) -> bool:
+        """Stores the checkpoint unless a step at least as high is stored; False when skipped."""
+
+    def delete(self, execution_id: str) -> None: ...
 
 
 class Publisher(Protocol):

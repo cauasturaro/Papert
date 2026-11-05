@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from functools import partial
@@ -22,6 +23,7 @@ def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
     from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
     from src.shared.infrastructure.tracing import ExecutionTrace
     from src.tutor.application.guidance import guidance_schema
+    from src.tutor.application.summary import SUMMARY_OUTPUT_LIMITS, summary_schema
     from src.tutor.application.tools import TOOL_ARGUMENTS
 
     trace = ExecutionTrace(TOOL_ARGUMENTS)
@@ -51,7 +53,41 @@ def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
         guidance_schema(),
     )
 
-    return ExecutionResources(model, trace, time.monotonic, search)
+    summarizer = None
+    if snapshot.foldTurns:
+        summarizer = OpenAIModel(
+            os.environ["OPENAI_API_KEY"],
+            os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
+            trace.generation,
+            "conversation_summary",
+            summary_schema(),
+            SUMMARY_OUTPUT_LIMITS,
+        )
+
+    return ExecutionResources(
+        model,
+        trace,
+        time.monotonic,
+        search,
+        summarizer=summarizer,
+        checkpoints=checkpoint_store(),
+    )
+
+
+def checkpoint_store():
+    """DynamoDB checkpoints when the sessions table is configured; tests and evals run without."""
+    if not os.environ.get("SESSIONS_TABLE"):
+        return None
+
+    from src.executions.infrastructure.dynamo_checkpoints import DynamoCheckpoints
+
+    # A misconfigured store must cost the resume ability, never the answer.
+    try:
+        return DynamoCheckpoints()
+    except Exception:
+        logging.getLogger(__name__).warning("checkpoint_store_unavailable")
+
+        return None
 
 
 def evaluation_resources() -> ExecutionResources:
@@ -123,11 +159,8 @@ def recommendation_resources() -> RecommendationResources:
 def run_job(message, control, publish, pause=time.sleep):
     # Keep graph/Pydantic imports out of the deterministic worker's cold-start path.
     from src.executions.application.recommendation_workflow import run_recommendation_job
-    from src.executions.application.workflows import (
-        run_analysis_job,
-        run_generation_job,
-        run_tutor_job,
-    )
+    from src.executions.application.tutor_workflow import run_tutor_job
+    from src.executions.application.workflows import run_analysis_job, run_generation_job
 
     execution = decode_execution(message)
     controller = RpcControl(control)

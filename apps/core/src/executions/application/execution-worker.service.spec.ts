@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ExecutionWorkerService } from './execution-worker.service.js';
 import type { ExecutionRecord } from '../domain/execution.js';
+import type { TutorNoteCatalog } from '../domain/ports/tutor-note-catalog.js';
 import type { ExecutionLifecycle } from '../domain/ports/execution-lifecycle.js';
 
 const execution: ExecutionRecord = {
@@ -45,9 +46,17 @@ function setup() {
     candidates: vi.fn().mockResolvedValue([]),
     publishedIds: vi.fn().mockResolvedValue(['kept-roadmap']),
   };
-  const service = new ExecutionWorkerService(lifecycle, sources, catalog);
+  const notes = {
+    active: vi.fn<TutorNoteCatalog['active']>().mockResolvedValue([]),
+  } satisfies TutorNoteCatalog;
+  const service = new ExecutionWorkerService(
+    lifecycle,
+    sources,
+    catalog,
+    notes,
+  );
 
-  return { service, lifecycle, sources, catalog };
+  return { service, lifecycle, sources, catalog, notes };
 }
 
 describe('ExecutionWorkerService with fake ports', () => {
@@ -128,5 +137,48 @@ describe('ExecutionWorkerService with fake ports', () => {
       liveSourceIds: [],
       publishedIds: ['kept-roadmap'],
     });
+  });
+
+  it('gives a claiming worker only the durable notes that still exist', async () => {
+    const { service, lifecycle, notes } = setup();
+    lifecycle.claim.mockResolvedValue({
+      status: 'running',
+      lease: 'lease',
+      budget: 8000,
+      input: {
+        kind: 'chat',
+        mode: 'doubt',
+        memory: [
+          { id: 'kept', kind: 'preference', text: 'Short answers' },
+          { id: 'deleted', kind: 'difficulty', text: 'Closures' },
+        ],
+      },
+    });
+    notes.active.mockResolvedValue(['kept']);
+
+    const claim = await service.claim('execution');
+
+    expect(notes.active).toHaveBeenCalledWith('user', ['kept', 'deleted']);
+    expect(claim.input).toEqual({
+      kind: 'chat',
+      mode: 'doubt',
+      memory: [{ id: 'kept', kind: 'preference', text: 'Short answers' }],
+    });
+  });
+
+  it('leaves claims without notes untouched', async () => {
+    const { service, lifecycle, notes } = setup();
+    const claimed = {
+      status: 'running',
+      lease: 'lease',
+      budget: 8000,
+      input: { kind: 'analysis' },
+    };
+    lifecycle.claim.mockResolvedValue(claimed);
+
+    const claim = await service.claim('execution');
+
+    expect(claim).toBe(claimed);
+    expect(notes.active).not.toHaveBeenCalled();
   });
 });

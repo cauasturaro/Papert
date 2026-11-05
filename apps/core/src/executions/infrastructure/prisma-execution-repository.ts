@@ -26,6 +26,9 @@ import type {
   RecommendationRequest,
 } from '../domain/recommendation.js';
 import type { AttemptState } from '../domain/analysis.js';
+import type { ExecutionMemory } from '../domain/ports/execution-memory.js';
+
+const CONVERSATION_TRANSCRIPT = 100;
 
 export class PrismaExecutionRepository implements ExecutionRepository {
   constructor(
@@ -35,6 +38,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     private readonly study: ExecutionStudyProgression,
     private readonly drafts: ExecutionRoadmapDrafts,
     private readonly recommendations: ExecutionRecommendationDrafts,
+    private readonly memory: ExecutionMemory,
   ) {}
 
   async quota(userId: string) {
@@ -65,6 +69,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       this.db,
       this.workspaces,
       this.study,
+      this.memory,
       this.now,
       userId,
       workspaceId,
@@ -172,15 +177,20 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     return job;
   }
 
-  async list(userId: string, workspaceId: string) {
+  async list(userId: string, workspaceId: string, conversationId?: string) {
     if (!(await this.workspaces.owns(userId, workspaceId))) {
       throw new ExecutionError('not_found', 'Workspace not found.');
     }
 
+    // A conversation lists its whole transcript; the workspace view keeps the latest jobs.
     const jobs = await this.db.execution.findMany({
-      where: { userId, workspaceId },
+      where: {
+        userId,
+        workspaceId,
+        ...(conversationId ? { conversationId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
-      take: 20,
+      take: conversationId ? CONVERSATION_TRANSCRIPT : 20,
     });
 
     return jobs;

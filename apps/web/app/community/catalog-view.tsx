@@ -23,7 +23,7 @@ import {
 } from "./catalog-state";
 import { listCatalog, type CatalogQuery } from "./community-api";
 import { catalogKey } from "./community-keys";
-import { LoadErrorAlert } from "./load-error-alert";
+import { LoadErrorAlert } from "@/components/app/load-error-alert";
 import { RoadmapCard } from "./roadmap-card";
 import { useCommunityActions } from "./use-community-actions";
 

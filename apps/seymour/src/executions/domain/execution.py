@@ -64,3 +64,5 @@ class Result:
     roadmap: dict | None = None
     # Recommendation only: published roadmaps close to the goal; Core re-authorizes them.
     recommendation: dict | None = None
+    # Tutor only: a folded conversation summary and a durable-note proposal; Core validates both.
+    memory: dict | None = None

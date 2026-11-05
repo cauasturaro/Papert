@@ -1,8 +1,12 @@
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import type { ExecutionRequest } from '../domain/execution.js';
 import type { ProgressionStep } from '../domain/ports/execution-study-progression.js';
-import { recentTurns } from '../domain/tutor-context.js';
-import type { TutorSource } from '../domain/tutor-context.js';
+import type { SummaryFold } from '../domain/conversation-window.js';
+import type {
+  TutorNote,
+  TutorSummary,
+} from '../domain/ports/execution-memory.js';
+import type { TutorSource, TutorTurn } from '../domain/tutor-context.js';
 import type {
   GenerationLevel,
   GenerationRequest,
@@ -11,6 +15,17 @@ import type {
   RecommendationCandidate,
   RecommendationRequest,
 } from '../domain/recommendation.js';
+
+/** L2 and L3 context of a tutor request, chosen by Core at admission. */
+export type TutorMemoryContext = {
+  conversationId: string;
+  summary: TutorSummary | null;
+  recentTurns: TutorTurn[];
+  foldTurns: TutorTurn[];
+  // Core-only cursor of the folded turns; Seymour ignores it, settlement reads it back.
+  summaryFold: SummaryFold | null;
+  memory: TutorNote[];
+};
 
 export function buildWorkerContext(
   input: ExecutionRequest,
@@ -22,13 +37,13 @@ export function buildWorkerContext(
     objective: string;
     solutionAllowed: boolean;
     recentResults: { revision: number; result: unknown }[];
-    completed: { input: unknown; text: string }[];
+    memory?: TutorMemoryContext;
     sources: TutorSource[];
     attemptId?: string;
     syntax?: SyntaxReport;
   },
 ) {
-  const { step, syntax, attemptId } = facts;
+  const { step, syntax, attemptId, memory } = facts;
 
   return {
     ...input,
@@ -44,7 +59,18 @@ export function buildWorkerContext(
           recentResults: facts.recentResults,
           workspaceId: facts.workspaceId,
           sources: facts.sources,
-          recentTurns: recentTurns(facts.completed),
+          ...(memory
+            ? {
+                conversationId: memory.conversationId,
+                recentTurns: memory.recentTurns,
+                foldTurns: memory.foldTurns,
+                memory: memory.memory,
+                ...(memory.summary ? { summary: memory.summary } : {}),
+                ...(memory.summaryFold
+                  ? { summaryFold: memory.summaryFold }
+                  : {}),
+              }
+            : {}),
         }
       : {}),
     ...(attemptId && syntax

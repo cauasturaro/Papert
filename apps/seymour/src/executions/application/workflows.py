@@ -11,7 +11,6 @@ from src.executions.domain.ports import Control, Publisher
 
 if TYPE_CHECKING:
     from src.roadmap.domain.roadmap import GenerationContext
-    from src.tutor.domain.context import TutorContext
 
 
 def live_search(runtime: ExecutionResources, control: Control, execution_id, lease):
@@ -32,74 +31,6 @@ def live_search(runtime: ExecutionResources, control: Control, execution_id, lea
         return runtime.trace.retrieval(lambda: source_search(query, allowed))
 
     return search
-
-
-def run_tutor_job(
-    execution_id,
-    lease,
-    context,
-    budget,
-    control: Control,
-    publish: Publisher,
-    resources: Callable[[TutorContext], ExecutionResources],
-):
-    from src.tutor.application.tutor import run_tutor
-    from src.tutor.domain.context import TutorContext
-
-    snapshot = TutorContext.model_validate(
-        {key: context[key] for key in TutorContext.model_fields if key in context}
-    )
-
-    runtime = resources(snapshot)
-    index = 0
-
-    def active():
-        return control.active(execution_id, lease)
-
-    search = live_search(runtime, control, execution_id, lease)
-
-    def progress(text, tokens):
-        nonlocal index
-        index += 1
-
-        publish(Result(execution_id, lease, index, "running", text, tokens))
-
-    with runtime.trace.execution(execution_id, snapshot.sessionId) as span:
-        result = run_tutor(
-            snapshot,
-            context["prompt"],
-            context["mode"],
-            context.get("effort", "low"),
-            context["solutionAllowed"],
-            budget,
-            runtime.model,
-            active,
-            progress,
-            runtime.trace.tool,
-            search,
-            clock=runtime.clock,
-        )
-        sources = result["grounding"]
-
-        span.record_metadata(
-            {
-                "calls": result["calls"],
-                "tokens": result["tokens"],
-                **grounding_measurements(sources),
-            }
-        )
-
-        publish(
-            Result(
-                execution_id,
-                lease,
-                100,
-                "completed",
-                result["text"],
-                result["tokens"],
-                grounding=sources,
-            )
-        )
 
 
 def grounding_measurements(grounding: dict | None) -> dict:

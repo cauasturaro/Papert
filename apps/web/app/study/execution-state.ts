@@ -5,6 +5,10 @@ export type Execution = {
   workspaceId: string;
   kind: "chat" | "analysis" | "generation";
   prompt: string | null;
+  // The tutor conversation of a chat; null for analysis and older jobs.
+  conversationId?: string | null;
+  // Durable memories Core sent with this request.
+  memoryUsed?: number;
   status: string;
   text: string;
   // Present on tutor answers in workspaces with sources (older answers lack it).

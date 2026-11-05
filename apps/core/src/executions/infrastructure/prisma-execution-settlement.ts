@@ -1,12 +1,14 @@
 import type { Execution, Prisma } from '@prisma/client';
 import { parseEvaluation } from '../application/contracts/evaluation.contract.js';
 import { analysisOutcome } from '../domain/analysis.js';
+import { completedTurn } from '../domain/conversation-window.js';
 import type { TerminalStatus } from '../domain/execution.js';
 import type { Grounding } from '../domain/grounding.js';
 import type { DraftScope } from '../domain/ports/execution-lifecycle.js';
 import type { ExecutionRecommendationDrafts } from '../domain/ports/execution-recommendation-drafts.js';
 import type { ExecutionRoadmapDrafts } from '../domain/ports/execution-roadmap-drafts.js';
 import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
+import type { ExecutionMemory } from '../domain/ports/execution-memory.js';
 import { lockQuota } from './execution-locks.js';
 
 type Transaction = Prisma.TransactionClient;
@@ -17,12 +19,14 @@ export type FinishedResult = {
   grounding?: Grounding | null;
   roadmap?: unknown;
   recommendation?: unknown;
+  memory?: unknown;
   scope?: DraftScope;
 };
 
 /**
- * Moves a locked execution to a terminal status and records its result in Study. The quota
- * row is locked before Study locks the workspace, the same quota → workspace order admissions use.
+ * Moves a locked execution to a terminal status and records its result in Study and Memory. The
+ * quota row is locked before Study locks the workspace, the same quota → workspace order admissions
+ * use.
  */
 export class PrismaExecutionSettlement {
   constructor(
@@ -30,6 +34,7 @@ export class PrismaExecutionSettlement {
     private readonly study: ExecutionStudyProgression,
     private readonly drafts: ExecutionRoadmapDrafts,
     private readonly recommendations: ExecutionRecommendationDrafts,
+    private readonly memory: ExecutionMemory,
   ) {}
 
   async finish(
@@ -72,6 +77,12 @@ export class PrismaExecutionSettlement {
       result.recommendation,
       result.scope?.publishedIds ?? [],
     );
+
+    // Locks the conversation after the quota row, the order admissions use.
+    const turn = completedTurn(job, status);
+    if (turn) {
+      await this.memory.recordTurn(tx, turn, result.memory, this.now());
+    }
 
     await tx.executionQuota.update({
       where: { id: job.quotaId },

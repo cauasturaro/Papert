@@ -34,6 +34,8 @@ model User {
   publications   RoadmapPublication[]
   votes          RoadmapVote[]
   libraryEntries LibraryEntry[]
+  conversations  TutorConversation[]
+  memoryItems    MemoryItem[]
 
   @@map("app_user")
   @@schema("core")
@@ -77,21 +79,22 @@ model Roadmap {
 }
 
 model Workspace {
-  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String           @map("user_id") @db.Uuid
-  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  roadmapId   String?          @map("roadmap_id") @db.VarChar(100)
-  roadmap     Roadmap?         @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
-  currentStep Int              @default(0) @map("current_step")
-  revision    Int              @default(0)
-  notes       String           @default("")
-  files       Json
-  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  session     StudySession?
-  draft       RoadmapDraft?
-  attempts    StudyAttempt[]
-  executions  Execution[]
-  sources     SourceDocument[]
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String              @map("user_id") @db.Uuid
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roadmapId     String?             @map("roadmap_id") @db.VarChar(100)
+  roadmap       Roadmap?            @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  currentStep   Int                 @default(0) @map("current_step")
+  revision      Int                 @default(0)
+  notes         String              @default("")
+  files         Json
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  session       StudySession?
+  draft         RoadmapDraft?
+  attempts      StudyAttempt[]
+  executions    Execution[]
+  sources       SourceDocument[]
+  conversations TutorConversation[]
 
   @@unique([userId, roadmapId])
   @@map("workspace")
@@ -159,36 +162,39 @@ model ExecutionQuota {
 }
 
 model Execution {
-  id            String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId        String         @map("user_id") @db.Uuid
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  workspaceId   String         @map("workspace_id") @db.Uuid
-  workspace     Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  quotaId       String         @map("quota_id") @db.Uuid
-  quota         ExecutionQuota @relation(fields: [quotaId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  requestKey    String         @map("request_key") @db.Uuid
-  input         Json
-  status        String         @default("queued")
-  text          String         @default("")
-  grounding     Json?
-  sequence      Int            @default(0)
-  eventIndex    Int            @default(0) @map("event_index")
-  attempts      Int            @default(0)
-  reserved      Int            @default(3000)
-  leases        String[]       @default([]) @db.Uuid
-  settledLeases String[]       @default([]) @map("settled_leases") @db.Uuid
-  charged       Int            @default(0)
-  lease         String?        @db.Uuid
-  leaseUntil    DateTime?      @map("lease_until") @db.Timestamptz(3)
-  publishedAt   DateTime?      @map("published_at") @db.Timestamptz(3)
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  deadline      DateTime       @db.Timestamptz(3)
-  firstEventAt  DateTime?      @map("first_event_at") @db.Timestamptz(3)
-  finishedAt    DateTime?      @map("finished_at") @db.Timestamptz(3)
-  tickets       StreamTicket[]
-  drafts        RoadmapDraft[]
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaceId    String             @map("workspace_id") @db.Uuid
+  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quotaId        String             @map("quota_id") @db.Uuid
+  quota          ExecutionQuota     @relation(fields: [quotaId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversationId String?            @map("conversation_id") @db.Uuid
+  conversation   TutorConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  requestKey     String             @map("request_key") @db.Uuid
+  input          Json
+  status         String             @default("queued")
+  text           String             @default("")
+  grounding      Json?
+  sequence       Int                @default(0)
+  eventIndex     Int                @default(0) @map("event_index")
+  attempts       Int                @default(0)
+  reserved       Int                @default(3000)
+  leases         String[]           @default([]) @db.Uuid
+  settledLeases  String[]           @default([]) @map("settled_leases") @db.Uuid
+  charged        Int                @default(0)
+  lease          String?            @db.Uuid
+  leaseUntil     DateTime?          @map("lease_until") @db.Timestamptz(3)
+  publishedAt    DateTime?          @map("published_at") @db.Timestamptz(3)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  deadline       DateTime           @db.Timestamptz(3)
+  firstEventAt   DateTime?          @map("first_event_at") @db.Timestamptz(3)
+  finishedAt     DateTime?          @map("finished_at") @db.Timestamptz(3)
+  tickets        StreamTicket[]
+  drafts         RoadmapDraft[]
 
   @@unique([userId, requestKey])
+  @@index([conversationId, createdAt])
   @@index([status, publishedAt])
   @@index([userId, createdAt])
   @@map("execution")
@@ -293,5 +299,44 @@ model LibraryEntry {
   @@id([userId, roadmapId])
   @@index([userId, createdAt(sort: Desc)])
   @@map("library_entry")
+  @@schema("core")
+}
+
+model TutorConversation {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String      @map("workspace_id") @db.Uuid
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId           String      @map("user_id") @db.Uuid
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  title            String?
+  summary          Json?
+  summaryThroughId String?     @map("summary_through_id") @db.Uuid
+  summaryThroughAt DateTime?   @map("summary_through_at") @db.Timestamptz(3)
+  summarySourceIds String[]    @default([]) @map("summary_source_ids") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastActiveAt     DateTime    @default(now()) @map("last_active_at") @db.Timestamptz(3)
+  executions       Execution[]
+
+  @@index([workspaceId, lastActiveAt(sort: Desc)])
+  @@index([userId])
+  @@map("tutor_conversation")
+  @@schema("core")
+}
+
+model MemoryItem {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  kind        String
+  text        String
+  status      String
+  origin      String
+  executionId String?   @unique @map("execution_id") @db.Uuid
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@map("memory_item")
   @@schema("core")
 }

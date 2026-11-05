@@ -2,6 +2,7 @@ import { PrismaExecutionLifecycle } from '../src/executions/infrastructure/prism
 import { PrismaAttemptProgression } from '../src/study/infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapGeneration } from '../src/study/infrastructure/prisma-roadmap-generation.js';
 import { PrismaRoadmapRecommendation } from '../src/study/infrastructure/prisma-roadmap-recommendation.js';
+import { PrismaTutorMemory } from '../src/memory/infrastructure/prisma-tutor-memory.js';
 import {
   FIRST_CRITERIA,
   evaluationHarness,
@@ -64,6 +65,7 @@ describe.skipIf(!process.env.AUTH_TEST_DATABASE_URL)(
         progression,
         new PrismaRoadmapGeneration(),
         new PrismaRoadmapRecommendation(),
+        new PrismaTutorMemory(context.db),
       );
 
       await expect(

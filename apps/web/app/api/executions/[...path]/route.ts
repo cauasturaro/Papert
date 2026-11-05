@@ -16,7 +16,14 @@ async function proxy(
     return Response.json({ message: "Not found." }, { status: 404 });
   }
 
-  return proxyCore(request, `executions/${resource}`);
+  // A workspace's list may be narrowed to one conversation.
+  const conversation = request.nextUrl.searchParams.get("conversation");
+  const query =
+    conversation && /^workspaces\//.test(resource)
+      ? `?conversation=${encodeURIComponent(conversation)}`
+      : "";
+
+  return proxyCore(request, `executions/${resource}${query}`);
 }
 
 export {

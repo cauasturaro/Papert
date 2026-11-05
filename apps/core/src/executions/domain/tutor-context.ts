@@ -1,12 +1,10 @@
 import { ExecutionError } from './execution.js';
 
-// Context the tutor receives besides the saved workspace: sources and recent exchanges.
+// Context the tutor receives besides the saved workspace: sources, history and durable notes.
 
 export type TutorSource = { id: string; filename: string; format: string };
 
 export type TutorTurn = { prompt: string; answer: string };
-
-export const RECENT_TURNS = 3;
 
 /** @-mentions may only name sources that are ready in the workspace. */
 export function assertMentionsReady(
@@ -25,25 +23,31 @@ export function assertMentionsReady(
 }
 
 /**
- * Short-term memory: the last completed tutor exchanges, oldest first.
- * `completed` is newest first and may include analysis or transport jobs.
+ * Drops durable notes deleted after admission, so a queued or retried job never sends them.
+ * Other kinds of input are returned unchanged.
  */
-export function recentTurns(
-  completed: { input: unknown; text: string }[],
-): TutorTurn[] {
-  const chats = completed.filter((execution) => {
-    const request = execution.input as Record<string, unknown>;
+export function withLiveNotes(input: unknown, liveIds: string[]) {
+  const snapshot = input as { memory?: { id: string }[] };
 
-    return request.kind === 'chat' && !!request.mode;
-  });
+  if (!Array.isArray(snapshot.memory)) {
+    return input;
+  }
 
-  return chats
-    .slice(0, RECENT_TURNS)
-    .reverse()
-    .map((execution) => {
-      const request = execution.input as Record<string, unknown>;
-      const prompt = typeof request.prompt === 'string' ? request.prompt : '';
+  const live = new Set(liveIds);
+  const memory = snapshot.memory.filter((note) => live.has(note.id));
 
-      return { prompt, answer: execution.text };
-    });
+  return { ...snapshot, memory };
+}
+
+/** Ids of the durable notes snapshotted into a tutor execution. */
+export function admittedNoteIds(input: unknown) {
+  const snapshot = input as { memory?: { id?: unknown }[] };
+
+  if (!Array.isArray(snapshot.memory)) {
+    return [];
+  }
+
+  return snapshot.memory
+    .map((note) => note.id)
+    .filter((id): id is string => typeof id === 'string');
 }

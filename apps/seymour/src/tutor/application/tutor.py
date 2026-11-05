@@ -1,7 +1,7 @@
 """A bounded tutor graph. Only Core decides mode eligibility and progression."""
 
-import json
 from collections.abc import Callable
+from dataclasses import asdict
 from typing import Literal, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -9,12 +9,15 @@ from langgraph.graph import END, START, StateGraph
 from src.retrieval.application.grounding import grounding
 from src.retrieval.domain.ports import Search
 from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
-from src.tutor.application.conversation import recent_turns, search_query
+from src.tutor.application.conversation import search_query
 from src.tutor.application.guidance import Guidance, render
 from src.tutor.application.guidance import grounding as answer_grounding
 from src.tutor.application.prompts import system_prompt
+from src.tutor.application.request import tutor_request
+from src.tutor.application.summary import summarize
 from src.tutor.application.tools import call_tool, tool_definitions
 from src.tutor.domain.context import ToolResult, TutorContext
+from src.tutor.domain.memory import SummaryContent, proposal
 
 
 class State(TypedDict):
@@ -25,6 +28,47 @@ class State(TypedDict):
     stopped: bool
     # Set only for valid guidance: support and citations of the learner's sources.
     grounding: dict | None
+    # A filtered durable-note proposal from valid guidance.
+    proposal: dict | None
+
+
+# Checkpoint steps: 1 after the summary, then 1 + calls after every tool round.
+SUMMARY_STEP = 1
+
+Save = Callable[[int, dict], None]
+
+
+def _current_summary(
+    context: TutorContext,
+    summarizer: Model | None,
+    budget: int,
+    deadline: float,
+    active: Callable[[], bool],
+    resume: dict,
+) -> tuple[SummaryContent | None, int, dict]:
+    """The summary to show this run (folded now, restored from a checkpoint or Core's), the
+    tokens this attempt spent on it and trace-safe facts about how it was obtained."""
+    if context.foldTurns and "summary" in resume:
+        restored = resume["summary"]
+        content = SummaryContent.model_validate(restored) if restored else None
+
+        return content, 0, {"summarized": True, "summaryFallback": False}
+
+    if context.foldTurns:
+        content, tokens, fallback = summarize(context, summarizer, budget, deadline, active)
+
+        return content, tokens, {"summarized": True, "summaryFallback": fallback}
+
+    if context.summary is not None:
+        content = SummaryContent(
+            covered=context.summary.covered,
+            pending=context.summary.pending,
+            struggles=context.summary.struggles,
+        )
+
+        return content, 0, {"summarized": False, "summaryFallback": False}
+
+    return None, 0, {"summarized": False, "summaryFallback": False}
 
 
 def run_tutor(
@@ -41,7 +85,10 @@ def run_tutor(
     search: Search | None = None,
     *,
     clock: Callable[[], float],
-) -> State:
+    summarizer: Model | None = None,
+    resume: dict | None = None,
+    save: Save | None = None,
+) -> dict:
     if mode not in {"doubt", "teaching", "solution", "review"} or effort not in {
         "low",
         "medium",
@@ -55,18 +102,35 @@ def run_tutor(
     if type(budget) is not int or not 1 <= budget <= 8000:
         raise ValueError("Invalid tutor budget")
 
-    system = system_prompt(mode, bool(context.sources), bool(context.recentTurns))
-    working = context.working_context(4000)
-    request = {"request": prompt, "working_context": working}
+    resume = resume or {}
+    deadline = clock() + 20
 
-    if context.recentTurns:
-        request["recent_turns"] = recent_turns(context)
+    def checkpoint(step: int, state: dict) -> None:
+        if save is not None:
+            save(step, state)
+
+    # L2 compaction runs first so the answer sees the merged summary.
+    folding = bool(context.foldTurns) and "summary" not in resume
+    if folding:
+        progress("Seymour is reviewing the earlier conversation…", 0)
+
+    summary, summary_tokens, summary_facts = _current_summary(
+        context, summarizer, budget, deadline, active, resume
+    )
+    new_summary = summary.model_dump() if context.foldTurns and summary else None
+
+    if folding:
+        checkpoint(SUMMARY_STEP, {"summary": new_summary})
+
+    has_history = bool(context.recentTurns) or summary is not None
+    system = system_prompt(mode, bool(context.sources), has_history, bool(context.memory))
 
     # Every excerpt shown to the model in this run; quotes and cites are checked against it.
-    retrieved: list[dict] = []
+    retrieved: list[dict] = list(resume.get("retrieved", []))
+    excerpts = None
 
-    if context.sources and search is not None:
-        progress("Seymour is searching your sources…", 0)
+    if "messages" not in resume and context.sources and search is not None:
+        progress("Seymour is searching your sources…", summary_tokens)
 
         # Best effort: the search_sources tool remains if this lookup fails.
         try:
@@ -76,16 +140,15 @@ def run_tutor(
         except Exception:
             excerpts = []
 
-        request["source_excerpts"] = [
-            {"cite": excerpt["cite"], "text": excerpt["text"]} for excerpt in excerpts
-        ]
         retrieved.extend(excerpts)
 
-    messages = [
-        Message(role="system", content=system),
-        Message(role="user", content=json.dumps(request)),
-    ]
-    deadline = clock() + 20
+    if "messages" in resume:
+        messages = [Message(**message) for message in resume["messages"]]
+    else:
+        messages = [
+            Message(role="system", content=system),
+            Message(role="user", content=tutor_request(context, prompt, summary, excerpts)),
+        ]
 
     def infer(state: State):
         if not active():
@@ -124,6 +187,7 @@ def run_tutor(
 
         guidance_text = final_text(response)
         sources = None
+        suggestion = None
 
         try:
             guidance = Guidance.model_validate_json(guidance_text)
@@ -132,6 +196,7 @@ def run_tutor(
                 raise ValueError("Guidance exceeds the transport limit")
 
             sources = answer_grounding(bool(context.sources), citations)
+            suggestion = proposal(guidance.remember_kind, guidance.remember_text)
         except (ValueError, TypeError):
             text = (
                 "The tutor could not produce valid guidance. Please narrow the question and retry."
@@ -144,6 +209,7 @@ def run_tutor(
             "text": text,
             "stopped": True,
             "grounding": sources,
+            "proposal": suggestion,
         }
 
     def tools(state: State):
@@ -186,7 +252,18 @@ def run_tutor(
         )
         progress(status, state["tokens"])
 
-        return {"messages": state["messages"] + results}
+        messages = state["messages"] + results
+        checkpoint(
+            SUMMARY_STEP + state["calls"],
+            {
+                "summary": new_summary,
+                "messages": [asdict(message) for message in messages],
+                "calls": state["calls"],
+                "retrieved": retrieved,
+            },
+        )
+
+        return {"messages": messages}
 
     graph = StateGraph(State)
     graph.add_node("model", infer)
@@ -195,14 +272,24 @@ def run_tutor(
     graph.add_conditional_edges("model", lambda state: END if state["stopped"] else "tools")
     graph.add_conditional_edges("tools", lambda state: END if state["stopped"] else "model")
 
-    return graph.compile().invoke(
+    final = graph.compile().invoke(
         {
             "messages": messages,
-            "tokens": 0,
-            "calls": 0,
+            "tokens": summary_tokens,
+            # Carried over on resume so the three-call limit holds across attempts.
+            "calls": resume.get("calls", 0),
             "text": "",
             "stopped": False,
             "grounding": None,
+            "proposal": None,
         },
         {"recursion_limit": 8, "callbacks": []},
     )
+
+    return {
+        **final,
+        **summary_facts,
+        "summary": new_summary,
+        "retrieved": retrieved,
+        "resumed": bool(resume),
+    }

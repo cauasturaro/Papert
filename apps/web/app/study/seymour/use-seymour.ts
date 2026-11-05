@@ -19,24 +19,30 @@ type SeymourRequest = {
   activeFile?: string;
   selection?: CodeSelection;
   sourceIds?: string[];
+  conversationId?: string;
 };
 
 /**
- * Seymour chat jobs for one workspace: restores the latest job, follows it
+ * Seymour chat jobs of one conversation: restores its latest job, follows it
  * over WebSocket with HTTP polling as the recovery path, and tracks the quota.
+ * `conversationId` is undefined while conversations load and null before the first one.
  */
 export function useSeymour({
   workspaceId,
+  conversationId,
   revision,
   activeFile,
   selection,
   sources,
+  onCreated,
 }: {
   workspaceId: string;
+  conversationId: string | null | undefined;
   revision: number;
   activeFile?: string;
   selection?: CodeSelection;
   sources: MentionTarget[];
+  onCreated: (execution: Execution) => void;
 }) {
   const [execution, setExecution] = useState<Execution | null>(null);
   const [history, setHistory] = useState<Execution[]>([]);
@@ -50,12 +56,20 @@ export function useSeymour({
   const [pending, setPending] = useState<SeymourRequest | null>(null);
 
   useEffect(() => {
+    if (conversationId === undefined) {
+      return;
+    }
+
     let disposed = false;
 
-    Promise.all([
-      request<Execution[]>(`workspaces/${workspaceId}`),
-      request<Quota>("quota"),
-    ])
+    // Before the first conversation exists there is no transcript to load.
+    const transcript = conversationId
+      ? request<Execution[]>(
+          `workspaces/${workspaceId}?conversation=${conversationId}`,
+        )
+      : Promise.resolve([]);
+
+    Promise.all([transcript, request<Quota>("quota")])
       .then(([jobs, currentQuota]) => {
         if (!disposed) {
           // Jobs arrive newest first; only the latest one is followed live.
@@ -76,7 +90,7 @@ export function useSeymour({
     return () => {
       disposed = true;
     };
-  }, [workspaceId, retry]);
+  }, [workspaceId, conversationId, retry]);
 
   const executionId = execution?.id;
   const running = isRunning(execution);
@@ -194,6 +208,7 @@ export function useSeymour({
       activeFile,
       selection,
       sourceIds: sourceIds.length > 0 ? sourceIds : undefined,
+      conversationId: conversationId ?? undefined,
     };
     setPending(payload);
     setBusy(true);
@@ -211,6 +226,7 @@ export function useSeymour({
       setExecution(created);
       setPending(null);
       setPrompt("");
+      onCreated(created);
 
       const currentQuota = await request<Quota>("quota");
       setQuota(currentQuota);

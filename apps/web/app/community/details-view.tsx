@@ -17,7 +17,7 @@ import { getDetails, type CatalogDetails } from "./community-api";
 import { detailsKey } from "./community-keys";
 import { FavoriteButton } from "./favorite-button";
 import { publishedDate } from "./format";
-import { LoadErrorAlert } from "./load-error-alert";
+import { LoadErrorAlert } from "@/components/app/load-error-alert";
 import { useCommunityActions } from "./use-community-actions";
 import { VoteControl } from "./vote-control";
 

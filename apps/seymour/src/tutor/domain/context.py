@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from pydantic import Field, model_validator
 
 from src.shared.domain.workspace import Challenge, StrictModel, validate_workspace
+from src.tutor.domain.memory import Note, Summary
 
 
 class Selection(StrictModel):
@@ -25,7 +26,7 @@ class SourceRef(StrictModel):
 
 
 class Turn(StrictModel):
-    """A previous exchange of this workspace's chat, captured by Core."""
+    """A previous exchange of this conversation, captured by Core."""
 
     prompt: Annotated[str, Field(max_length=2000)]
     answer: Annotated[str, Field(max_length=4000)]
@@ -45,7 +46,13 @@ class TutorContext(StrictModel):
     workspaceId: str | None = None
     sources: Annotated[list[SourceRef], Field(max_length=20)] = Field(default_factory=list)
     sourceIds: Annotated[list[str], Field(max_length=5)] = Field(default_factory=list)
-    recentTurns: Annotated[list[Turn], Field(max_length=3)] = Field(default_factory=list)
+    # L2: the conversation's summary, its newest turns and the oldest turns to fold now.
+    conversationId: str | None = None
+    summary: Summary | None = None
+    recentTurns: Annotated[list[Turn], Field(max_length=4)] = Field(default_factory=list)
+    foldTurns: Annotated[list[Turn], Field(max_length=3)] = Field(default_factory=list)
+    # L3: durable notes the learner approved.
+    memory: Annotated[list[Note], Field(max_length=10)] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_workspace(self):

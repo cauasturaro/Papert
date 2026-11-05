@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import { AppNav } from "@/components/app/app-nav";
 import { Navbar } from "@/components/app/navbar";
 
-/** Navbar and scrolling page body shared by the catalog, details and library layouts. */
-export function CommunityShell({ children }: { children: ReactNode }) {
+/** Navbar and scrolling page body shared by pages outside the study workspace. */
+export function PageShell({ children }: { children: ReactNode }) {
   return (
     <>
       <Navbar>

@@ -3,6 +3,7 @@ import type { SyntaxChecker } from '../../analysis/domain/ports/syntax-checker.j
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import { ExecutionError } from '../domain/execution.js';
 import {
+  conversationFilter,
   executionRequest,
   parse,
 } from './contracts/execution-request.contract.js';
@@ -173,8 +174,10 @@ export class ExecutionService {
     return this.repo.owned(userId, id);
   }
 
-  async list(userId: string, workspaceId: string) {
-    const jobs = await this.repo.list(userId, workspaceId);
+  async list(userId: string, workspaceId: string, conversation?: unknown) {
+    const conversationId = parse(conversationFilter, conversation);
+
+    const jobs = await this.repo.list(userId, workspaceId, conversationId);
 
     return jobs.map((job) => this.snapshot(job));
   }

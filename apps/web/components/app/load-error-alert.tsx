@@ -9,14 +9,16 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button/button";
 import { RequestError } from "@/lib/api/request";
 
-/** A failed community load: signed-out learners get a sign-in link, others a retry. */
+/** A failed page load: signed-out learners get a sign-in link, others a retry. */
 export function LoadErrorAlert({
   error,
   title,
+  signedOutTitle = "Sign in to explore",
   onRetry,
 }: {
   error: Error;
   title: string;
+  signedOutTitle?: string;
   onRetry: () => void;
 }) {
   const signedOut = error instanceof RequestError && error.status === 401;
@@ -37,7 +39,7 @@ export function LoadErrorAlert({
 
   return (
     <Alert variant="destructive" role="alert">
-      <AlertTitle>{signedOut ? "Sign in to explore" : title}</AlertTitle>
+      <AlertTitle>{signedOut ? signedOutTitle : title}</AlertTitle>
 
       <AlertDescription className="flex flex-wrap items-center gap-3">
         <span>{error.message}</span>

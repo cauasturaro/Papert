@@ -49,7 +49,11 @@ export interface ExecutionRepository {
     syntax: SyntaxReport,
   ): Promise<{ id: string; revision: number; stepId: string; result: unknown }>;
   owned(userId: string, id: string): Promise<ExecutionRecord>;
-  list(userId: string, workspaceId: string): Promise<ExecutionRecord[]>;
+  list(
+    userId: string,
+    workspaceId: string,
+    conversationId?: string,
+  ): Promise<ExecutionRecord[]>;
   markPublished(id: string): Promise<void>;
   pending(): Promise<ExecutionRecord[]>;
 }

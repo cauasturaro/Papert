@@ -1,5 +1,9 @@
 import { ExecutionError } from './execution.js';
-import { assertMentionsReady, recentTurns } from './tutor-context.js';
+import {
+  admittedNoteIds,
+  assertMentionsReady,
+  withLiveNotes,
+} from './tutor-context.js';
 
 const ready = [{ id: 'a', filename: 'guide.pdf', format: 'pdf' }];
 
@@ -10,22 +14,23 @@ describe('tutor context rules', () => {
     expect(() => assertMentionsReady(['b'], ready)).toThrow(ExecutionError);
   });
 
-  it('keeps the last three tutor exchanges, oldest first', () => {
-    const newestFirst = [
-      { input: { kind: 'chat', mode: 'doubt', prompt: 'fourth' }, text: '4' },
-      { input: { kind: 'analysis' }, text: 'ignored analysis' },
-      { input: { kind: 'chat', mode: 'teaching', prompt: 'third' }, text: '3' },
-      { input: { kind: 'chat', prompt: 'transport job' }, text: 'ignored' },
-      { input: { kind: 'chat', mode: 'doubt', prompt: 'second' }, text: '2' },
-      { input: { kind: 'chat', mode: 'doubt', prompt: 'first' }, text: '1' },
-    ];
+  it('drops durable notes that no longer exist and leaves other input alone', () => {
+    const input = {
+      kind: 'chat',
+      memory: [
+        { id: 'kept', kind: 'preference', text: 'Short answers' },
+        { id: 'deleted', kind: 'difficulty', text: 'Closures' },
+      ],
+    };
 
-    const turns = recentTurns(newestFirst);
+    const filtered = withLiveNotes(input, ['kept']);
+    const analysis = withLiveNotes({ kind: 'analysis' }, []);
 
-    expect(turns).toEqual([
-      { prompt: 'second', answer: '2' },
-      { prompt: 'third', answer: '3' },
-      { prompt: 'fourth', answer: '4' },
-    ]);
+    expect(admittedNoteIds(input)).toEqual(['kept', 'deleted']);
+    expect(filtered).toEqual({
+      kind: 'chat',
+      memory: [{ id: 'kept', kind: 'preference', text: 'Short answers' }],
+    });
+    expect(analysis).toEqual({ kind: 'analysis' });
   });
 });
