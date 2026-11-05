@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { ExecutionService } from './execution.service.js';
 import type { ExecutionRecord } from '../domain/execution.js';
+import type { ExecutionLifecycle } from '../domain/ports/execution-lifecycle.js';
 import type { ExecutionRepository } from '../domain/ports/execution-repository.js';
 import type { Position } from '../../analysis/domain/syntax.js';
 
@@ -21,10 +23,6 @@ const execution: ExecutionRecord = {
   finishedAt: null,
   publishedAt: null,
 };
-const KEPT = '11111111-1111-4111-8111-111111111111';
-const DELETED = '22222222-2222-4222-8222-222222222222';
-const EXECUTION_ID = '33333333-3333-4333-8333-333333333333';
-const LEASE = '44444444-4444-4444-8444-444444444444';
 
 const request = {
   requestKey: '4ca755d9-108c-497c-b9a0-1dab240cb901',
@@ -50,35 +48,47 @@ function setup() {
       }),
     owned: vi.fn<ExecutionRepository['owned']>().mockResolvedValue(execution),
     list: vi.fn<ExecutionRepository['list']>().mockResolvedValue([execution]),
-    cancel: vi
-      .fn<ExecutionRepository['cancel']>()
-      .mockResolvedValue({ ...execution, status: 'cancelled' }),
     createGeneration: vi
       .fn<ExecutionRepository['createGeneration']>()
       .mockResolvedValue(execution),
-    claim: vi.fn<ExecutionRepository['claim']>(),
-    failed: vi.fn<ExecutionRepository['failed']>(),
-    active: vi.fn<ExecutionRepository['active']>(),
-    accept: vi.fn<ExecutionRepository['accept']>().mockResolvedValue(execution),
+    createRecommendation: vi
+      .fn<ExecutionRepository['createRecommendation']>()
+      .mockResolvedValue(execution),
     markPublished: vi.fn<ExecutionRepository['markPublished']>(),
     pending: vi
       .fn<ExecutionRepository['pending']>()
       .mockResolvedValue([execution]),
-    expire: vi.fn<ExecutionRepository['expire']>().mockResolvedValue(2),
-    sourceScope: vi.fn<ExecutionRepository['sourceScope']>().mockResolvedValue({
-      userId: 'user',
-      workspaceId: 'workspace',
-      sourceIds: [KEPT, DELETED],
-    }),
   } satisfies ExecutionRepository;
+  const lifecycle = {
+    cancel: vi
+      .fn<ExecutionLifecycle['cancel']>()
+      .mockResolvedValue({ ...execution, status: 'cancelled' }),
+    claim: vi.fn<ExecutionLifecycle['claim']>(),
+    failed: vi.fn<ExecutionLifecycle['failed']>(),
+    active: vi.fn<ExecutionLifecycle['active']>(),
+    accept: vi.fn<ExecutionLifecycle['accept']>(),
+    sourceScope: vi.fn<ExecutionLifecycle['sourceScope']>(),
+    expire: vi.fn<ExecutionLifecycle['expire']>().mockResolvedValue(2),
+  } satisfies ExecutionLifecycle;
   const queue = { publish: vi.fn().mockResolvedValue(undefined) };
   const syntax = {
     check: vi.fn<() => Promise<Position[]>>().mockResolvedValue([]),
   };
   const sources = { ready: vi.fn().mockResolvedValue([]) };
-  const service = new ExecutionService(repo, queue, syntax, sources);
+  const catalog = {
+    candidates: vi.fn().mockResolvedValue([]),
+    publishedIds: vi.fn().mockResolvedValue([]),
+  };
+  const service = new ExecutionService(
+    repo,
+    lifecycle,
+    queue,
+    syntax,
+    sources,
+    catalog,
+  );
 
-  return { service, repo, queue, syntax, sources };
+  return { service, repo, lifecycle, queue, syntax, sources, catalog };
 }
 
 describe('ExecutionService with fake ports', () => {
@@ -212,58 +222,28 @@ describe('ExecutionService with fake ports', () => {
     expect(queue.publish).not.toHaveBeenCalled();
   });
 
-  it('lets Seymour search only admitted sources that are still ready', async () => {
-    const { service, repo, sources } = setup();
-    repo.active.mockResolvedValue(true);
-    sources.ready.mockResolvedValue([
-      { id: KEPT, filename: 'a.pdf', format: 'pdf' },
-    ]);
-
-    const live = await service.liveSources(EXECUTION_ID, LEASE);
-
-    repo.active.mockResolvedValue(false);
-    const stale = await service.liveSources(EXECUTION_ID, LEASE);
-
-    expect(live).toEqual([KEPT]);
-    expect(stale).toEqual([]);
-    expect(sources.ready).toHaveBeenCalledWith('user', 'workspace');
-  });
-
-  it('re-authorizes citations before storing a completed answer', async () => {
-    const { service, repo, sources } = setup();
-    sources.ready.mockResolvedValue([
-      { id: KEPT, filename: 'a.pdf', format: 'pdf' },
-    ]);
-
-    const citation = (sourceId: string) => ({
-      sourceId,
-      cite: 'a.pdf, p. 1',
-      location: { page: 1 },
-      excerpt: 'text',
-      quote: null,
-    });
-    const event = {
-      version: 1,
-      executionId: EXECUTION_ID,
-      lease: LEASE,
-      index: 100,
-      status: 'completed',
-      text: 'Answer',
-      tokens: 10,
-      grounding: {
-        support: 'cited',
-        citations: [citation(DELETED), citation(KEPT)],
-      },
+  it('snapshots catalog candidates when a draft asks for recommendations', async () => {
+    const { service, repo, queue, catalog } = setup();
+    const candidate = {
+      roadmapId: 'kept-roadmap',
+      title: 'Hexagonal NestJS',
+      description: 'Ports and adapters.',
+      level: 'intermediate',
+      concepts: ['ports'],
+      steps: ['Define ports'],
     };
-    const malformed = { ...event, grounding: { support: 'maybe' } };
+    catalog.candidates.mockResolvedValue([candidate]);
+    const body = { requestKey: randomUUID(), kind: 'recommendation' };
 
-    await service.accept(event);
-    await service.accept(malformed);
+    await service.submit('user', 'workspace', body);
 
-    expect(repo.accept.mock.calls[0][1]).toEqual({
-      support: 'cited',
-      citations: [citation(KEPT)],
-    });
-    expect(repo.accept.mock.calls[1][1]).toBeNull();
+    expect(catalog.candidates).toHaveBeenCalledWith('user');
+    expect(repo.createRecommendation).toHaveBeenCalledWith(
+      'user',
+      'workspace',
+      body,
+      [candidate],
+    );
+    expect(queue.publish).toHaveBeenCalled();
   });
 });

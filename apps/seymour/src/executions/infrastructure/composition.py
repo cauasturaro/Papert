@@ -8,8 +8,8 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from src.executions.application.contracts.transport import decode_execution, encode_result
+from src.executions.application.resources import ExecutionResources, RecommendationResources
 from src.executions.application.worker import run_execution
-from src.executions.domain.ports import ExecutionResources
 from src.executions.infrastructure.rpc_control import RpcControl
 
 if TYPE_CHECKING:
@@ -112,8 +112,17 @@ def generation_resources(snapshot: GenerationContext) -> ExecutionResources:
     return ExecutionResources(model, trace, time.monotonic, search)
 
 
+def recommendation_resources() -> RecommendationResources:
+    from src.recommendation.infrastructure.openai_embedder import OpenAITextEmbedder
+    from src.recommendation.infrastructure.pg_embedding_cache import PgEmbeddingCache
+    from src.shared.infrastructure.tracing import ExecutionTrace
+
+    return RecommendationResources(OpenAITextEmbedder(), PgEmbeddingCache(), ExecutionTrace())
+
+
 def run_job(message, control, publish, pause=time.sleep):
     # Keep graph/Pydantic imports out of the deterministic worker's cold-start path.
+    from src.executions.application.recommendation_workflow import run_recommendation_job
     from src.executions.application.workflows import (
         run_analysis_job,
         run_generation_job,
@@ -133,5 +142,6 @@ def run_job(message, control, publish, pause=time.sleep):
         partial(run_tutor_job, resources=tutor_resources),
         partial(run_analysis_job, resources=evaluation_resources),
         partial(run_generation_job, resources=generation_resources),
+        partial(run_recommendation_job, resources=recommendation_resources),
         pause,
     )

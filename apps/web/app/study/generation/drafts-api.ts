@@ -1,6 +1,7 @@
+import type { Level } from "@/lib/roadmap";
 import { executionRequest } from "../execution-api";
 import type { Execution } from "../execution-state";
-import { studyRequest, type Level, type Roadmap } from "../study-api";
+import { studyRequest, type Roadmap } from "../study-api";
 import type { CitationLocation } from "../viewer/citations";
 
 export type DraftStatus = "open" | "generating" | "generated" | "failed";
@@ -23,7 +24,19 @@ export type RoadmapDraft = {
   evidence: Evidence[];
   // Ready sources Core gave Seymour for the generation, named as they were then.
   consulted: { id: string; filename: string }[];
+  recommendation: DraftRecommendation | null;
+  // Core's rule: the community check finished with no matches, or the learner declined.
+  canGenerate: boolean;
   roadmap: Roadmap | null;
+};
+
+/** The community check every draft goes through before a paid generation. */
+export type DraftRecommendation = {
+  executionId: string;
+  status: "searching" | "ready" | "failed";
+  matches: { roadmapId: string; similarity: number }[];
+  // The learner chose to generate their own roadmap anyway.
+  declined: boolean;
 };
 
 export type StudyableRoadmap = {
@@ -31,23 +44,10 @@ export type StudyableRoadmap = {
   workspace: { id: string; currentStep: number } | null;
 };
 
-export const LEVELS: { value: Level; label: string; hint: string }[] = [
-  {
-    value: "beginner",
-    label: "Beginner",
-    hint: "New to this stack; small steps and explained vocabulary.",
-  },
-  {
-    value: "intermediate",
-    label: "Intermediate",
-    hint: "Writes basic code here; focus on structure and contracts.",
-  },
-  {
-    value: "advanced",
-    label: "Advanced",
-    hint: "Fluent with the basics; focus on design trade-offs.",
-  },
-];
+/** Cache key of one draft, shared by its page and its community check. */
+export function draftKey(workspaceId: string) {
+  return ["draft", workspaceId];
+}
 
 export function listRoadmaps() {
   return studyRequest<StudyableRoadmap[]>("roadmaps");
@@ -75,6 +75,22 @@ export function startGeneration(workspaceId: string, requestKey: string) {
     requestKey,
     kind: "generation",
   });
+}
+
+// Same request-key retry rule as generation; Seymour compares the goal with the catalog.
+export function startRecommendation(workspaceId: string, requestKey: string) {
+  return executionRequest<Execution>(`workspaces/${workspaceId}`, {
+    requestKey,
+    kind: "recommendation",
+  });
+}
+
+export function declineRecommendation(workspaceId: string) {
+  return studyRequest<RoadmapDraft>(
+    `drafts/${workspaceId}/recommendation/decline`,
+    "POST",
+    {},
+  );
 }
 
 export function readExecution(executionId: string) {

@@ -45,7 +45,6 @@ export function UserMenu() {
         <DropdownMenuSeparator />
 
         <DropdownMenuLink href="/study">Study space</DropdownMenuLink>
-        <DropdownMenuLink href="/account">Account</DropdownMenuLink>
         <DropdownMenuSeparator />
 
         <DropdownMenuItem disabled={signingOut} onSelect={() => void logout()}>

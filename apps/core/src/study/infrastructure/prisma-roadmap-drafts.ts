@@ -14,6 +14,8 @@ import {
   levelSchema,
   roadmapSchema,
 } from '../application/contracts/study.contract.js';
+import { parseStoredRecommendation } from '../application/contracts/recommendation.contract.js';
+import { assertDeclineAllowed } from '../domain/draft-recommendation.js';
 import type { Level } from '../domain/study.js';
 
 const include = { workspace: { include: { roadmap: true } } } as const;
@@ -40,6 +42,7 @@ export function draftRecord(row: StoredDraft): RoadmapDraft {
     status: row.status as DraftStatus,
     executionId: row.executionId,
     outcome: row.outcome as DraftOutcome | null,
+    recommendation: parseStoredRecommendation(row.recommendation),
     roadmap,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -100,6 +103,47 @@ export class PrismaRoadmapDrafts implements RoadmapDraftRepository {
     });
 
     return row ? draftRecord(row) : null;
+  }
+
+  async byRoadmap(userId: string, roadmapId: string) {
+    const row = await this.db.roadmapDraft.findFirst({
+      where: { userId, workspace: { roadmapId } },
+      include,
+    });
+
+    return row ? draftRecord(row) : null;
+  }
+
+  async declineRecommendation(userId: string, workspaceId: string) {
+    return this.db.$transaction(async (tx) => {
+      // Same lock as admissions, so a decline cannot race a new check or a generation.
+      await tx.$queryRaw`
+        SELECT id
+        FROM core.workspace
+        WHERE id = ${workspaceId}::uuid
+          AND user_id = ${userId}::uuid
+        FOR UPDATE
+      `;
+
+      const row = await tx.roadmapDraft.findFirst({
+        where: { workspaceId, userId },
+      });
+      const status = (row?.status as DraftStatus | undefined) ?? null;
+      const recommendation = parseStoredRecommendation(row?.recommendation);
+
+      assertDeclineAllowed(status, recommendation);
+
+      const declined = await tx.roadmapDraft.update({
+        where: { workspaceId },
+        data: {
+          recommendation: { ...recommendation, declined: true },
+          updatedAt: new Date(),
+        },
+        include,
+      });
+
+      return draftRecord(declined);
+    });
   }
 
   async discard(userId: string, workspaceId: string) {

@@ -13,6 +13,7 @@ function draft(overrides: Partial<RoadmapDraft> = {}): RoadmapDraft {
     status: 'open',
     executionId: null,
     outcome: null,
+    recommendation: null,
     roadmap: null,
     createdAt,
     updatedAt,
@@ -33,10 +34,25 @@ describe('draftView', () => {
       failure: null,
       evidence: [],
       consulted: [],
+      recommendation: null,
+      canGenerate: false,
       roadmap: null,
       createdAt,
       updatedAt,
     });
+  });
+
+  it('unlocks generation once the community check is settled', () => {
+    const settled = draft({
+      recommendation: {
+        executionId: 'execution-1',
+        status: 'ready',
+        matches: [],
+        declined: false,
+      },
+    });
+
+    expect(draftView(settled).canGenerate).toBe(true);
   });
 
   it('explains a failure reason and falls back to the generic message', () => {

@@ -1,8 +1,6 @@
-import Link from "next/link";
 import type { ComponentType } from "react";
 import { Navbar } from "@/components/app/navbar";
 import { Badge } from "@/components/ui/badge/badge";
-import { buttonVariants } from "@/components/ui/button/button";
 import {
   Card,
   CardDescription,
@@ -15,7 +13,7 @@ import {
   RouteIcon,
   SparklesIcon,
 } from "@/components/icons";
-import { cn } from "@/lib/utils";
+import { HeroActions } from "./hero-actions";
 
 const features: {
   title: string;
@@ -62,22 +60,7 @@ export default function Home() {
               Seymour, your AI tutor.
             </p>
 
-            <div className="flex flex-wrap gap-3">
-              <Link
-                className={cn(buttonVariants({ size: "lg" }))}
-                href="/study"
-              >
-                Open your study space
-              </Link>
-              <Link
-                className={cn(
-                  buttonVariants({ size: "lg", variant: "outline" }),
-                )}
-                href="/account"
-              >
-                Sign in or create an account
-              </Link>
-            </div>
+            <HeroActions />
           </div>
 
           <ProductPreview />

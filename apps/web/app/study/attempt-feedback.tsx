@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { Badge, type BadgeProps } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
-import type { AttemptResult, Challenge, SyntaxReport } from "./study-api";
+import type { Challenge } from "@/lib/roadmap";
+import type { AttemptResult, SyntaxReport } from "./study-api";
 
 const statusLabels: Record<AttemptResult["status"], string> = {
   not_evaluated: "Not evaluated",

@@ -1,3 +1,4 @@
+import { choiceMade } from '../domain/draft-recommendation.js';
 import type { RoadmapDraft } from '../domain/roadmap-draft.js';
 
 const FAILURE_MESSAGES: Record<string, string> = {
@@ -42,6 +43,9 @@ export function draftView(draft: RoadmapDraft) {
     failure,
     evidence,
     consulted,
+    recommendation: draft.recommendation,
+    // The community check is settled; Core still checks the draft status on generation.
+    canGenerate: choiceMade(draft.recommendation),
     roadmap: draft.roadmap,
     createdAt: draft.createdAt,
     updatedAt: draft.updatedAt,

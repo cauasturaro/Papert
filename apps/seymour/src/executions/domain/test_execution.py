@@ -12,3 +12,12 @@ def test_claims_route_generation_only_with_its_budget():
 
     with pytest.raises(ValueError):
         Claim("running", "lease", snapshot, 8000).workflow()
+
+
+def test_claims_route_recommendation_only_with_its_budget():
+    snapshot = {"kind": "recommendation"}
+
+    assert Claim("running", "lease", snapshot, 8000).workflow() == "recommendation"
+
+    with pytest.raises(ValueError):
+        Claim("running", "lease", snapshot, 16000).workflow()

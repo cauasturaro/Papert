@@ -1,9 +1,5 @@
-export type Challenge = {
-  instructions: string;
-  criteria: { id: string; description: string }[];
-};
-
-export type Level = "beginner" | "intermediate" | "advanced";
+import { createJsonRequest, RequestError } from "@/lib/api/request";
+import type { Challenge, Level } from "@/lib/roadmap";
 
 type Roadmap = {
   id: string;
@@ -86,42 +82,13 @@ export type Workspace = {
   }[];
 };
 
-export class StudyRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
+// Study callers already catch this name; it is the shared request error.
+export { RequestError as StudyRequestError };
 
-export async function studyRequest<T>(
-  path: string,
-  method = "GET",
-  body?: unknown,
-): Promise<T> {
-  const response = await fetch(`/api/study/${path}`, {
-    method,
-    cache: "no-store",
-    headers: body === undefined ? {} : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new StudyRequestError(
-      response.status,
-      response.status === 401
-        ? "Please sign in to start or resume your study."
-        : (data.message ?? "Unable to load your study. Please try again."),
-    );
-  }
-
-  return data;
-}
+export const studyRequest = createJsonRequest({
+  base: "/api/study",
+  unauthorized: "Please sign in to start or resume your study.",
+  unavailable: "Unable to load your study. Please try again.",
+});
 
 export type { Roadmap };

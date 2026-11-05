@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from src.evaluation.domain.evaluation import AnalysisContext
-from src.executions.domain.ports import ExecutionResources
+from src.executions.application.resources import ExecutionResources
 from src.executions.infrastructure.composition import run_job
 from src.shared.domain.inference import Message
 

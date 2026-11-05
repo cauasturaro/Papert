@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { attemptBudget, retriesExhausted, usageRefund } from './quota.js';
 
-import { MAX_ATTEMPTS } from './quota.js';
+import { MAX_ATTEMPTS, RECOMMENDATION_ATTEMPT_BUDGET } from './quota.js';
 import type { WorkerEvent } from './execution.js';
 
 const now = new Date('2026-11-03T23:59:59Z');
@@ -83,5 +83,14 @@ describe('quota', () => {
 
   it('uses UTC dates for the daily quota period', () => {
     expect(period(new Date('2026-11-02T23:30:00-03:00'))).toBe('2026-11-03');
+  });
+
+  it('charges a recommendation attempt its own embedding budget', () => {
+    const recommendation = { kind: 'recommendation', requestKey: 'key' };
+
+    expect(attemptBudget(recommendation)).toBe(RECOMMENDATION_ATTEMPT_BUDGET);
+    expect(RECOMMENDATION_ATTEMPT_BUDGET * MAX_ATTEMPTS).toBeLessThan(
+      DAILY_LIMIT,
+    );
   });
 });

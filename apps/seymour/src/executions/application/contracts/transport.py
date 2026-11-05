@@ -48,4 +48,7 @@ def encode_result(result: Result) -> dict:
     if result.roadmap is not None:
         event["roadmap"] = result.roadmap
 
+    if result.recommendation is not None:
+        event["recommendation"] = result.recommendation
+
     return event

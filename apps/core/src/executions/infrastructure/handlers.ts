@@ -4,6 +4,7 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { z } from 'zod';
 import { AppModule } from '../../app.module.js';
 import { ExecutionService } from '../application/execution.service.js';
+import { ExecutionWorkerService } from '../application/execution-worker.service.js';
 import { ExecutionStreamService } from '../application/execution-stream.service.js';
 
 let context: Promise<INestApplicationContext> | undefined;
@@ -14,6 +15,7 @@ async function services() {
 
   return {
     executions: app.get(ExecutionService),
+    worker: app.get(ExecutionWorkerService),
     stream: app.get(ExecutionStreamService),
   };
 }
@@ -48,14 +50,14 @@ const rpcSchema = z.discriminatedUnion('action', [
 // This Lambda has no HTTP event. Only the Seymour role may invoke it through IAM.
 export async function workerControl(event: unknown) {
   const request = rpcSchema.parse(event);
-  const { executions } = await services();
+  const { worker } = await services();
 
   if (request.action === 'claim') {
-    return executions.claim(request.executionId);
+    return worker.claim(request.executionId);
   }
 
   if (request.action === 'failed') {
-    const result = await executions.failed(request.executionId, request.lease);
+    const result = await worker.failed(request.executionId, request.lease);
     console.info(
       JSON.stringify({
         metric: 'execution_attempt_failure',
@@ -69,27 +71,24 @@ export async function workerControl(event: unknown) {
 
   if (request.action === 'sources') {
     return {
-      sourceIds: await executions.liveSources(
-        request.executionId,
-        request.lease,
-      ),
+      sourceIds: await worker.liveSources(request.executionId, request.lease),
     };
   }
 
   return {
-    active: await executions.active(request.executionId, request.lease),
+    active: await worker.active(request.executionId, request.lease),
   };
 }
 
 export async function results(event: {
   Records: { messageId: string; body: string }[];
 }) {
-  const { executions, stream } = await services();
+  const { worker, stream } = await services();
   const batchItemFailures: { itemIdentifier: string }[] = [];
 
   for (const record of event.Records) {
     try {
-      const snapshot = await executions.accept(JSON.parse(record.body));
+      const snapshot = await worker.accept(JSON.parse(record.body));
       console.info(
         JSON.stringify({
           metric: 'execution_update',

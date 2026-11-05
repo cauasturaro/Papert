@@ -6,6 +6,7 @@ import { isRunning } from "../execution-state";
 import {
   cancelExecution,
   discardDraft,
+  draftKey,
   getDraft,
   readExecution,
   startGeneration,
@@ -17,15 +18,22 @@ const EXECUTION_POLL_MS = 1000;
 /** One preparation workspace: its draft, the running generation and its actions. */
 export function useDraft(workspaceId: string) {
   const queryClient = useQueryClient();
-  const draftKey = ["draft", workspaceId];
+  const key = draftKey(workspaceId);
   // Kept until Core accepts the request, so a retried click cannot start a second run.
   const requestKey = useRef<string | null>(null);
 
   const draftQuery = useQuery({
-    queryKey: draftKey,
+    queryKey: key,
     queryFn: () => getDraft(workspaceId),
-    refetchInterval: (query) =>
-      query.state.data?.status === "generating" ? DRAFT_POLL_MS : false,
+    // Core settles generations and community checks on the draft; poll while either runs.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      const running =
+        data?.status === "generating" ||
+        data?.recommendation?.status === "searching";
+
+      return running ? DRAFT_POLL_MS : false;
+    },
   });
 
   const draft = draftQuery.data;
@@ -45,7 +53,7 @@ export function useDraft(workspaceId: string) {
   // Core settles the draft in the same transaction that finishes the execution.
   useEffect(() => {
     if (settled) {
-      void queryClient.invalidateQueries({ queryKey: draftKey });
+      void queryClient.invalidateQueries({ queryKey: key });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settled, execution?.id]);
@@ -59,14 +67,14 @@ export function useDraft(workspaceId: string) {
     onSuccess: () => {
       requestKey.current = null;
 
-      void queryClient.invalidateQueries({ queryKey: draftKey });
+      void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 
   const cancellation = useMutation({
     mutationFn: () => cancelExecution(runningId!),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: draftKey });
+      void queryClient.invalidateQueries({ queryKey: key });
     },
   });
 

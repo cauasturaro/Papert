@@ -8,6 +8,9 @@ export const ATTEMPT_BUDGET = 1000;
 export const TUTOR_ATTEMPT_BUDGET = 8000;
 // Must match Seymour's GENERATION_BUDGET.
 export const GENERATION_ATTEMPT_BUDGET = 16000;
+// Embeddings only: the goal plus candidates missing from Seymour's cache. Seymour receives it
+// with the claim and stops comparing when the next candidate would not fit.
+export const RECOMMENDATION_ATTEMPT_BUDGET = 8000;
 export const MAX_ATTEMPTS = 3;
 export const RESERVATION = ATTEMPT_BUDGET * MAX_ATTEMPTS;
 export const RATE_LIMIT = 10;
@@ -15,12 +18,15 @@ export const RATE_LIMIT = 10;
 export const period = (now: Date) => utcDayKey(now);
 export const resetsAt = (now: Date) => nextUtcDayStart(now).getTime();
 
-// Tutor, analysis and generation snapshots use the model; older transport jobs do not.
+// Tutor, analysis, generation and recommendation use a model; older transport jobs do not.
 export function usesModel(input: unknown) {
   const snapshot = input as Record<string, unknown>;
 
   return (
-    !!snapshot.mode || !!snapshot.attemptId || snapshot.kind === 'generation'
+    !!snapshot.mode ||
+    !!snapshot.attemptId ||
+    snapshot.kind === 'generation' ||
+    snapshot.kind === 'recommendation'
   );
 }
 
@@ -29,6 +35,10 @@ export function attemptBudget(input: unknown) {
 
   if (snapshot.kind === 'generation') {
     return GENERATION_ATTEMPT_BUDGET;
+  }
+
+  if (snapshot.kind === 'recommendation') {
+    return RECOMMENDATION_ATTEMPT_BUDGET;
   }
 
   return usesModel(input) ? TUTOR_ATTEMPT_BUDGET : ATTEMPT_BUDGET;

@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
+from src.executions.application.resources import ExecutionResources
 from src.executions.domain.execution import Result
-from src.executions.domain.ports import Control, ExecutionResources, Publisher
+from src.executions.domain.ports import Control, Publisher
 
 if TYPE_CHECKING:
     from src.roadmap.domain.roadmap import GenerationContext

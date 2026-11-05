@@ -17,12 +17,15 @@ export const workerEvent: z.ZodType<WorkerEvent> = z
     grounding: z.unknown().optional(),
     // Untrusted; Study validates it.
     roadmap: z.unknown().optional(),
+    // Untrusted; Study keeps only offered roadmaps that are still published.
+    recommendation: z.unknown().optional(),
   })
   .strict()
   .refine(
     (event) =>
       (event.evaluation === undefined &&
         event.grounding === undefined &&
-        event.roadmap === undefined) ||
+        event.roadmap === undefined &&
+        event.recommendation === undefined) ||
       event.status === 'completed',
   );

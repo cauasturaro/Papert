@@ -22,9 +22,10 @@
 
 /*
  * The study IDE fills the viewport and scrolls inside its panels. Body-level
- * nodes (editor overlays, portals) must not make the page itself scroll.
+ * nodes (editor overlays, portals) must not make the page itself scroll. The
+ * study page sets this attribute while it is visible.
  */
-html:has([data-viewport-app]) {
+html[data-viewport-app] {
   overflow: hidden;
 }
 

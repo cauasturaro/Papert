@@ -6,8 +6,12 @@ import { SourceModule } from '../sources/source.module.js';
 import { RoadmapDraftService } from './application/roadmap-draft.service.js';
 import { StudyService } from './application/study.service.js';
 import { DraftController } from './infrastructure/draft.controller.js';
+import { PrismaAttemptProgression } from './infrastructure/prisma-attempt-progression.js';
 import { PrismaRoadmapDrafts } from './infrastructure/prisma-roadmap-drafts.js';
+import { PrismaRoadmapGeneration } from './infrastructure/prisma-roadmap-generation.js';
+import { PrismaRoadmapRecommendation } from './infrastructure/prisma-roadmap-recommendation.js';
 import { PrismaStudyRepository } from './infrastructure/prisma-study-repository.js';
+import { PrismaWorkspaceAccess } from './infrastructure/prisma-workspace-access.js';
 import { SourceServiceRemoval } from './infrastructure/source-removal.js';
 import { StudyController } from './infrastructure/study.controller.js';
 
@@ -34,6 +38,23 @@ import { StudyController } from './infrastructure/study.controller.js';
         return new RoadmapDraftService(drafts, removal);
       },
     },
+    // Driven by executions inside its own transactions.
+    {
+      provide: PrismaWorkspaceAccess,
+      inject: [PrismaService],
+      useFactory: (db: PrismaService) => new PrismaWorkspaceAccess(db),
+    },
+    PrismaAttemptProgression,
+    PrismaRoadmapGeneration,
+    PrismaRoadmapRecommendation,
+  ],
+  exports: [
+    StudyService,
+    RoadmapDraftService,
+    PrismaWorkspaceAccess,
+    PrismaAttemptProgression,
+    PrismaRoadmapGeneration,
+    PrismaRoadmapRecommendation,
   ],
 })
 export class StudyModule {}

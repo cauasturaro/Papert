@@ -10,6 +10,9 @@ describe('RoadmapDraftService', () => {
     create: vi.fn<RoadmapDraftRepository['create']>(),
     list: vi.fn<RoadmapDraftRepository['list']>(),
     find: vi.fn<RoadmapDraftRepository['find']>(),
+    byRoadmap: vi.fn<RoadmapDraftRepository['byRoadmap']>(),
+    declineRecommendation:
+      vi.fn<RoadmapDraftRepository['declineRecommendation']>(),
     discard: vi.fn<RoadmapDraftRepository['discard']>(),
   };
   const sources = {
@@ -27,6 +30,7 @@ describe('RoadmapDraftService', () => {
       status: 'open',
       executionId: null,
       outcome: null,
+      recommendation: null,
       roadmap: null,
       createdAt: new Date('2026-11-01T10:00:00Z'),
       updatedAt: new Date('2026-11-01T10:00:00Z'),
@@ -130,5 +134,28 @@ describe('RoadmapDraftService', () => {
 
     expect(drafts.discard).toHaveBeenCalledTimes(1);
     expect(sources.removeAll).not.toHaveBeenCalled();
+  });
+  it('reports the filenames a generated roadmap consulted, and nothing for others', async () => {
+    const generated: RoadmapDraft = {
+      ...draft,
+      status: 'generated',
+      outcome: {
+        roadmapId: 'roadmap-1',
+        executionId: 'execution-1',
+        evidence: [],
+        consulted: [{ id: 'source-1', filename: 'team-notes.md' }],
+      },
+    };
+    drafts.byRoadmap.mockResolvedValueOnce(generated);
+    drafts.byRoadmap.mockResolvedValueOnce(null);
+
+    const origin = await service.origin('student', 'roadmap-1');
+    const unknown = await service.origin('student', 'roadmap-2');
+
+    expect(origin).toEqual({
+      workspaceId: 'workspace-1',
+      consulted: ['team-notes.md'],
+    });
+    expect(unknown).toBeNull();
   });
 });

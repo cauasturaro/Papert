@@ -25,16 +25,20 @@ class Claim:
         tutor = "mode" in self.context
         analysis = kind == "analysis" and "attemptId" in self.context
         generation = kind == "generation"
+        recommendation = kind == "recommendation"
 
         expected_budget = 1000
-        if tutor or analysis:
+        if tutor or analysis or recommendation:
             expected_budget = 8000
         if generation:
             expected_budget = 16000
 
-        if self.budget != expected_budget or kind not in {"chat", "analysis", "generation"}:
+        kinds = {"chat", "analysis", "generation", "recommendation"}
+        if self.budget != expected_budget or kind not in kinds:
             raise ValueError("Invalid authorized execution context")
 
+        if recommendation:
+            return "recommendation"
         if generation:
             return "generation"
         if analysis:
@@ -58,3 +62,5 @@ class Result:
     grounding: dict | None = None
     # Generation only: the drafted definition and private evidence; Core validates both.
     roadmap: dict | None = None
+    # Recommendation only: published roadmaps close to the goal; Core re-authorizes them.
+    recommendation: dict | None = None

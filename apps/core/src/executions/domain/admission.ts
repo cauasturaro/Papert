@@ -23,11 +23,11 @@ export function activeStudyStep<T>(
   return step;
 }
 
-/** A retried generation request key must name the same draft and settings. */
-export function assertSameGeneration(
+/** A retried draft request key (generation or recommendation) must name the same draft and settings. */
+export function assertSameDraftRequest(
   previous: { workspaceId: string; input: unknown },
   workspaceId: string,
-  input: { kind: 'generation'; effort?: string },
+  input: { kind: 'generation' | 'recommendation'; effort?: string },
 ) {
   const old = previous.input as Record<string, unknown>;
 

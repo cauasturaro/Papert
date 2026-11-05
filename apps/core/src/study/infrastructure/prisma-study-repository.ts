@@ -5,6 +5,7 @@ import {
   DEFAULT_ROADMAP_ID,
   defaultRoadmapDefinition,
 } from '../domain/default-roadmap.js';
+import { SHOWCASE_ROADMAPS } from '../domain/showcase-roadmaps.js';
 import {
   filesSchema,
   roadmapSchema,
@@ -59,24 +60,34 @@ function workspace(row: StoredWorkspace) {
   };
 }
 
-// Papert's roadmaps and the ones this learner generated.
-function visibleTo(userId: string) {
-  return { OR: [{ authorUserId: null }, { authorUserId: userId }] };
+// Papert's roadmaps, the learner's own and any roadmap they already study.
+function startableBy(userId: string) {
+  return {
+    OR: [
+      { authorUserId: null },
+      { authorUserId: userId },
+      { workspaces: { some: { userId } } },
+    ],
+  };
 }
+
+// The study home: what the learner generated or started; the catalog lists the rest.
+function studiedBy(userId: string) {
+  return {
+    OR: [{ authorUserId: userId }, { workspaces: { some: { userId } } }],
+  };
+}
+
+const PAPERT_ROADMAPS = [
+  { id: DEFAULT_ROADMAP_ID, definition: defaultRoadmapDefinition },
+  ...SHOWCASE_ROADMAPS,
+];
 
 export class PrismaStudyRepository implements StudyRepository {
   constructor(private readonly db: PrismaService) {}
 
   async fixture() {
-    // Insert once; later application versions must not overwrite a student's roadmap.
-    await this.db.roadmap.createMany({
-      data: {
-        id: DEFAULT_ROADMAP_ID,
-        authorName: 'Papert',
-        definition: defaultRoadmapDefinition,
-      },
-      skipDuplicates: true,
-    });
+    await this.ensurePapertRoadmaps();
 
     const row = await this.db.roadmap.findUniqueOrThrow({
       where: { id: DEFAULT_ROADMAP_ID },
@@ -85,11 +96,37 @@ export class PrismaStudyRepository implements StudyRepository {
     return roadmap(row);
   }
 
-  async roadmaps(userId: string) {
-    await this.fixture();
+  async papertRoadmaps() {
+    await this.ensurePapertRoadmaps();
 
     const rows = await this.db.roadmap.findMany({
-      where: visibleTo(userId),
+      where: { id: { in: PAPERT_ROADMAPS.map((item) => item.id) } },
+      orderBy: { id: 'asc' },
+    });
+
+    return rows.map(roadmap);
+  }
+
+  async findMany(ids: string[]) {
+    const rows = await this.db.roadmap.findMany({
+      where: { id: { in: ids } },
+    });
+
+    return rows.map(roadmap);
+  }
+
+  async startedOf(userId: string, roadmapIds: string[]) {
+    const rows = await this.db.workspace.findMany({
+      where: { userId, roadmapId: { in: roadmapIds } },
+      select: { roadmapId: true },
+    });
+
+    return rows.flatMap((row) => (row.roadmapId ? [row.roadmapId] : []));
+  }
+
+  async roadmaps(userId: string) {
+    const rows = await this.db.roadmap.findMany({
+      where: studiedBy(userId),
       include: {
         workspaces: {
           where: { userId },
@@ -107,12 +144,29 @@ export class PrismaStudyRepository implements StudyRepository {
 
   async start(userId: string, roadmapId: string) {
     const original = await this.db.roadmap.findFirst({
-      where: { id: roadmapId, ...visibleTo(userId) },
+      where: { id: roadmapId, ...startableBy(userId) },
     });
     if (!original) {
       return null;
     }
 
+    return this.provision(userId, original);
+  }
+
+  async enroll(userId: string, roadmapId: string) {
+    const original = await this.db.roadmap.findUnique({
+      where: { id: roadmapId },
+    });
+    if (!original) {
+      return null;
+    }
+
+    return this.provision(userId, original);
+  }
+
+  // Creates the learner's workspace once, from the starter files, or resumes it.
+  private provision(userId: string, original: StoredRoadmap) {
+    const roadmapId = original.id;
     const definition = roadmapSchema.parse(original.definition);
 
     return this.db.$transaction(async (tx) => {
@@ -137,6 +191,18 @@ export class PrismaStudyRepository implements StudyRepository {
       });
 
       return workspace(resumed);
+    });
+  }
+
+  // Insert once; later application versions must not overwrite a student's roadmap.
+  private async ensurePapertRoadmaps() {
+    await this.db.roadmap.createMany({
+      data: PAPERT_ROADMAPS.map((item) => ({
+        id: item.id,
+        authorName: 'Papert',
+        definition: item.definition,
+      })),
+      skipDuplicates: true,
     });
   }
 

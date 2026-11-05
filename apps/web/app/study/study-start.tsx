@@ -13,10 +13,12 @@ import {
   CardTitle,
 } from "@/components/ui/card/card";
 import { SparklesIcon } from "@/components/icons";
+import { levelLabel } from "@/lib/roadmap";
 import { cn } from "@/lib/utils";
+import { PublishAction } from "../community/publish-action";
+import { Discover, NoRoadmaps } from "./study-home-sections";
 import { RoadmapSteps } from "./challenge/roadmap-steps";
 import {
-  LEVELS,
   listDrafts,
   listRoadmaps,
   type StudyableRoadmap,
@@ -30,7 +32,7 @@ const DRAFT_STATUS: Record<string, string> = {
   failed: "Generation failed",
 };
 
-function RoadmapCard({
+function StudyRoadmapCard({
   item,
   busy,
   onStart,
@@ -41,9 +43,7 @@ function RoadmapCard({
 }) {
   const { roadmap, workspace } = item;
   const generated = roadmap.authorUserId !== null;
-  const level = LEVELS.find(
-    (option) => option.value === roadmap.definition.level,
-  );
+  const level = levelLabel(roadmap.definition.level);
 
   return (
     <Card role="region" aria-label={roadmap.definition.title}>
@@ -59,7 +59,7 @@ function RoadmapCard({
               Created by <strong>{roadmap.authorName}</strong>
             </span>
           )}
-          {level && <Badge variant="secondary">{level.label}</Badge>}
+          {level && <Badge variant="secondary">{level}</Badge>}
         </CardDescription>
       </CardHeader>
 
@@ -71,10 +71,16 @@ function RoadmapCard({
         />
       </CardContent>
 
-      <CardFooter>
+      <CardFooter className="flex flex-wrap items-center gap-3">
         <Button onClick={onStart} disabled={busy}>
-          {workspace ? "Resume study" : "Start study"}
+          {workspace ? "Resume studying" : "Start studying"}
         </Button>
+
+        {generated && (
+          <PublishAction
+            roadmap={{ id: roadmap.id, title: roadmap.definition.title }}
+          />
+        )}
       </CardFooter>
     </Card>
   );
@@ -178,14 +184,28 @@ export function StudyStart({
           </section>
         )}
 
-        {roadmaps.data?.map((item) => (
-          <RoadmapCard
-            key={item.roadmap.id}
-            item={item}
-            busy={study.busy}
-            onStart={() => study.start(item.roadmap.id)}
-          />
-        ))}
+        {!signedOut && <Discover />}
+
+        {roadmaps.data && roadmaps.data.length === 0 && (
+          <NoRoadmaps onCreate={onCreate} />
+        )}
+
+        {roadmaps.data && roadmaps.data.length > 0 && (
+          <section aria-label="Your roadmaps" className="space-y-3">
+            <h2 className="text-sm font-medium text-muted-foreground">
+              Your roadmaps
+            </h2>
+
+            {roadmaps.data.map((item) => (
+              <StudyRoadmapCard
+                key={item.roadmap.id}
+                item={item}
+                busy={study.busy}
+                onStart={() => study.start(item.roadmap.id)}
+              />
+            ))}
+          </section>
+        )}
       </div>
     </main>
   );

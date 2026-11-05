@@ -4,15 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol, TypeVar
 
 from src.executions.domain.execution import Claim, Result
 
-if TYPE_CHECKING:
-    from src.retrieval.domain.ports import Passage, Search
-    from src.shared.domain.inference import Model
-    from src.tutor.domain.context import ToolResult
+T = TypeVar("T")
 
 
 class Control(Protocol):
@@ -47,6 +43,10 @@ class GenerationRunner(TutorRunner, Protocol):
     pass
 
 
+class RecommendationRunner(TutorRunner, Protocol):
+    pass
+
+
 Pause = Callable[[float], None]
 
 
@@ -59,16 +59,6 @@ class ExecutionTracer(Protocol):
         self, execution_id: str, session_id: str, name: str = "seymour-tutor"
     ) -> AbstractContextManager[ExecutionMeasurements]: ...
 
-    def tool(self, name: str, action: Callable[[], ToolResult]) -> ToolResult: ...
+    def tool(self, name: str, action: Callable[[], T]) -> T: ...
 
-    def retrieval(
-        self, action: Callable[[], tuple[list[Passage], int]]
-    ) -> tuple[list[Passage], int]: ...
-
-
-@dataclass(frozen=True)
-class ExecutionResources:
-    model: Model
-    trace: ExecutionTracer
-    clock: Callable[[], float]
-    search: Search | None = None
+    def retrieval(self, action: Callable[[], T]) -> T: ...

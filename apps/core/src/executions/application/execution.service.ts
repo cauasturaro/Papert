@@ -1,41 +1,36 @@
-import type { z } from 'zod';
 import { lintWorkspace } from '../../analysis/domain/syntax.js';
 import type { SyntaxChecker } from '../../analysis/domain/ports/syntax-checker.js';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
-import { validate } from '../../common/application/validation.js';
 import { ExecutionError } from '../domain/execution.js';
-import { executionRequest } from './contracts/execution-request.contract.js';
-import { workerEvent } from './contracts/worker-event.contract.js';
+import {
+  executionRequest,
+  parse,
+} from './contracts/execution-request.contract.js';
 import type { ExecutionRequest, ExecutionRecord } from '../domain/execution.js';
 import type { ExecutionQueue } from '../domain/ports/execution-queue.js';
+import type { ExecutionLifecycle } from '../domain/ports/execution-lifecycle.js';
 import type { ExecutionRepository } from '../domain/ports/execution-repository.js';
 import type { TutorSourceCatalog } from '../domain/ports/tutor-source-catalog.js';
-import { authorizedGrounding, liveSourceIds } from '../domain/grounding.js';
-import { parseGrounding } from './contracts/grounding.contract.js';
 import {
   generationRequest,
   isGenerationBody,
 } from './contracts/generation.contract.js';
+import {
+  isRecommendationBody,
+  recommendationRequest,
+} from './contracts/recommendation.contract.js';
+import type { RecommendationCatalog } from '../domain/ports/recommendation-catalog.js';
+import { executionView } from './execution-presentation.js';
 
-// Same response body executions have always returned for invalid input.
-function parseRequest<T>(schema: z.ZodType<T>, body: unknown) {
-  return validate(
-    schema,
-    body,
-    () =>
-      new ExecutionError(
-        'invalid',
-        'Invalid study request. Check the fields and limits.',
-      ),
-  );
-}
-
+/** Learner-facing executions: admission, reads, cancellation and the publication outbox. */
 export class ExecutionService {
   constructor(
     private readonly repo: ExecutionRepository,
+    private readonly lifecycle: ExecutionLifecycle,
     private readonly queue: ExecutionQueue,
     private readonly syntax: SyntaxChecker,
     private readonly sources: TutorSourceCatalog,
+    private readonly catalog: RecommendationCatalog,
   ) {}
 
   quota(userId: string) {
@@ -48,7 +43,11 @@ export class ExecutionService {
       return this.generate(userId, workspaceId, body);
     }
 
-    const input = parseRequest(executionRequest, body);
+    if (isRecommendationBody(body)) {
+      return this.recommend(userId, workspaceId, body);
+    }
+
+    const input = parse(executionRequest, body);
     if (input.kind === 'analysis') {
       return this.analyze(userId, workspaceId, input);
     }
@@ -57,7 +56,7 @@ export class ExecutionService {
   }
 
   async create(userId: string, workspaceId: string, body: unknown) {
-    const input = parseRequest(executionRequest, body);
+    const input = parse(executionRequest, body);
     if (input.kind === 'analysis') {
       throw new ExecutionError(
         'invalid',
@@ -98,7 +97,7 @@ export class ExecutionService {
 
   /** Drafts a roadmap from the preparation workspace's goal, level and ready sources. */
   async generate(userId: string, workspaceId: string, body: unknown) {
-    const input = parseRequest(generationRequest, body);
+    const input = parse(generationRequest, body);
 
     // Only ready sources are snapshotted.
     const sources = await this.sources.ready(userId, workspaceId);
@@ -108,6 +107,28 @@ export class ExecutionService {
       workspaceId,
       input,
       sources,
+    );
+
+    try {
+      await this.publish(execution);
+    } catch {
+      // The execution row is the durable outbox; the scheduled sweep retries publication.
+    }
+
+    return this.snapshot(execution);
+  }
+
+  /** Asks Seymour which published roadmaps fit the draft's goal before any generation. */
+  async recommend(userId: string, workspaceId: string, body: unknown) {
+    const input = parse(recommendationRequest, body);
+
+    const candidates = await this.catalog.candidates(userId);
+
+    const execution = await this.repo.createRecommendation(
+      userId,
+      workspaceId,
+      input,
+      candidates,
     );
 
     try {
@@ -145,25 +166,7 @@ export class ExecutionService {
   }
 
   snapshot(job: ExecutionRecord) {
-    const input = job.input as { kind?: string; prompt?: string };
-
-    return {
-      id: job.id,
-      workspaceId: job.workspaceId,
-      kind: input.kind ?? 'chat',
-      prompt: input.prompt ?? null,
-      status: job.status,
-      text: job.text,
-      grounding: job.grounding ?? null,
-      sequence: job.sequence,
-      attempts: job.attempts,
-      charged: job.charged,
-      reserved: job.reserved,
-      createdAt: job.createdAt,
-      firstEventAt: job.firstEventAt,
-      finishedAt: job.finishedAt,
-      deadline: job.deadline,
-    };
+    return executionView(job);
   }
 
   owned(userId: string, id: string) {
@@ -177,77 +180,9 @@ export class ExecutionService {
   }
 
   async cancel(userId: string, id: string) {
-    const job = await this.repo.cancel(userId, id);
+    const job = await this.lifecycle.cancel(userId, id);
 
     return this.snapshot(job);
-  }
-
-  claim(id: string) {
-    return this.repo.claim(id);
-  }
-
-  failed(id: string, lease: string) {
-    return this.repo.failed(id, lease);
-  }
-
-  active(id: string, lease: string) {
-    return this.repo.active(id, lease);
-  }
-
-  /** Sources Seymour may still search for this leased execution; deleted ones drop out. */
-  async liveSources(id: string, lease: string) {
-    const active = await this.repo.active(id, lease);
-
-    if (!active) {
-      return [];
-    }
-
-    return this.admittedAndReady(id);
-  }
-
-  async accept(body: unknown) {
-    const event = parseRequest(workerEvent, body);
-
-    const grounding = await this.authorizeGrounding(
-      event.executionId,
-      event.grounding,
-    );
-
-    // Drop evidence from sources deleted during the run.
-    let liveSourceIds: string[] = [];
-    if (event.roadmap !== undefined) {
-      liveSourceIds = await this.admittedAndReady(event.executionId);
-    }
-
-    const job = await this.repo.accept(event, grounding, liveSourceIds);
-
-    return this.snapshot(job);
-  }
-
-  private async authorizeGrounding(id: string, value: unknown) {
-    const grounding = value === undefined ? null : parseGrounding(value);
-
-    if (!grounding) {
-      return null;
-    }
-
-    const live = await this.admittedAndReady(id);
-
-    return authorizedGrounding(grounding, live);
-  }
-
-  // Sources the execution was admitted with that are still ready in its workspace now.
-  private async admittedAndReady(id: string) {
-    const scope = await this.repo.sourceScope(id);
-
-    if (!scope || scope.sourceIds.length === 0) {
-      return [];
-    }
-
-    const ready = await this.sources.ready(scope.userId, scope.workspaceId);
-    const readyIds = ready.map((source) => source.id);
-
-    return liveSourceIds(scope.sourceIds, readyIds);
   }
 
   private async publish(job: ExecutionRecord) {
@@ -261,7 +196,7 @@ export class ExecutionService {
   }
 
   async sweep() {
-    const expired = await this.repo.expire();
+    const expired = await this.lifecycle.expire();
     const pending = await this.repo.pending();
     let published = 0;
 

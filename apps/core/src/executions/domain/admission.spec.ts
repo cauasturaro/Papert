@@ -4,6 +4,7 @@ import {
   activeStudyStep,
   admissionBudget,
   assertRateLimit,
+  assertSameDraftRequest,
   assertSameRequest,
   assertSavedRevision,
   assertSavedSelection,
@@ -97,5 +98,25 @@ describe('admission', () => {
   it('enforces the execution rate limit', () => {
     expect(() => assertRateLimit(9)).not.toThrow();
     expect(() => assertRateLimit(10)).toThrow('one minute');
+  });
+
+  it('reuses a draft request key only for the same kind, effort and workspace', () => {
+    const previous = {
+      workspaceId: 'workspace',
+      input: { kind: 'recommendation', requestKey: 'key' },
+    };
+
+    expect(() =>
+      assertSameDraftRequest(previous, 'workspace', {
+        kind: 'recommendation',
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertSameDraftRequest(previous, 'workspace', { kind: 'generation' }),
+    ).toThrow('different request');
+    expect(() =>
+      assertSameDraftRequest(previous, 'other', { kind: 'recommendation' }),
+    ).toThrow('different request');
   });
 });

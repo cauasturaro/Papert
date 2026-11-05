@@ -1,58 +1,40 @@
-import { parseEvaluation } from '../application/contracts/evaluation.contract.js';
-import { randomUUID } from 'node:crypto';
-import type { Execution, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service.js';
 import type { SyntaxReport } from '../../analysis/domain/syntax.js';
 import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
-import { ExecutionError, terminal } from '../domain/execution.js';
+import type { ExecutionWorkspaces } from '../domain/ports/execution-workspaces.js';
+import { ExecutionError } from '../domain/execution.js';
 import {
   DAILY_LIMIT,
   period,
   resetsAt,
   TUTOR_ATTEMPT_BUDGET,
 } from '../domain/quota.js';
-import { LEASE_MS } from '../domain/lease.js';
-import type {
-  ExecutionRequest,
-  TerminalStatus,
-  WorkerEvent,
-} from '../domain/execution.js';
+import type { ExecutionRequest } from '../domain/execution.js';
 import type { ExecutionRepository } from '../domain/ports/execution-repository.js';
 import type { TutorSource } from '../domain/tutor-context.js';
-import { admittedSourceIds } from '../domain/grounding.js';
-import type { Grounding } from '../domain/grounding.js';
-import { attemptBudget, usageRefund } from '../domain/quota.js';
 import { activeStudyStep } from '../domain/admission.js';
-import {
-  activeLease,
-  claimDecision,
-  failureDecision,
-  acceptsEvent,
-} from '../domain/lease.js';
-import { analysisOutcome } from '../domain/analysis.js';
 import { admitExecution } from './prisma-execution-admission.js';
-import { admitGeneration } from './prisma-generation-admission.js';
+import {
+  admitGeneration,
+  admitRecommendation,
+} from './prisma-draft-admission.js';
+import type { ExecutionRecommendationDrafts } from '../domain/ports/execution-recommendation-drafts.js';
 import type { ExecutionRoadmapDrafts } from '../domain/ports/execution-roadmap-drafts.js';
 import type { GenerationRequest } from '../domain/roadmap-drafts.js';
-import { lockWorkspace } from './execution-locks.js';
+import type {
+  RecommendationCandidate,
+  RecommendationRequest,
+} from '../domain/recommendation.js';
 import type { AttemptState } from '../domain/analysis.js';
-
-type Transaction = Prisma.TransactionClient;
-
-type FinishedResult = {
-  text?: string;
-  evaluation?: unknown;
-  grounding?: Grounding | null;
-  roadmap?: unknown;
-  liveSourceIds?: string[];
-};
 
 export class PrismaExecutionRepository implements ExecutionRepository {
   constructor(
     private readonly db: PrismaService,
     private readonly now = () => new Date(),
+    private readonly workspaces: ExecutionWorkspaces,
     private readonly study: ExecutionStudyProgression,
     private readonly drafts: ExecutionRoadmapDrafts,
+    private readonly recommendations: ExecutionRecommendationDrafts,
   ) {}
 
   async quota(userId: string) {
@@ -81,6 +63,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   ) {
     return admitExecution(
       this.db,
+      this.workspaces,
       this.study,
       this.now,
       userId,
@@ -98,6 +81,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   ) {
     return admitGeneration(
       this.db,
+      this.workspaces,
       this.drafts,
       this.now,
       userId,
@@ -107,10 +91,26 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     );
   }
 
+  createRecommendation(
+    userId: string,
+    workspaceId: string,
+    input: RecommendationRequest,
+    candidates: RecommendationCandidate[],
+  ) {
+    return admitRecommendation(
+      this.db,
+      this.workspaces,
+      this.recommendations,
+      this.now,
+      userId,
+      workspaceId,
+      input,
+      candidates,
+    );
+  }
+
   async analysisFiles(userId: string, workspaceId: string, revision: number) {
-    const workspace = await this.db.workspace.findFirst({
-      where: { id: workspaceId, userId },
-    });
+    const workspace = await this.workspaces.saved(userId, workspaceId);
     if (!workspace) {
       throw new ExecutionError('not_found', 'Workspace not found.');
     }
@@ -119,7 +119,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       return null;
     }
 
-    return workspace.files as Record<string, string>;
+    return workspace.files;
   }
 
   async rejectSyntax(
@@ -129,14 +129,10 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     syntax: SyntaxReport,
   ) {
     return this.db.$transaction(async (tx) => {
-      if (!(await lockWorkspace(tx, workspaceId, userId))) {
+      const workspace = await this.workspaces.lock(tx, userId, workspaceId);
+      if (!workspace) {
         throw new ExecutionError('not_found', 'Workspace not found.');
       }
-
-      const workspace = await tx.workspace.findUniqueOrThrow({
-        where: { id: workspaceId },
-        include: { roadmap: true },
-      });
       if (workspace.revision !== revision) {
         throw new ExecutionError(
           'conflict',
@@ -177,10 +173,7 @@ export class PrismaExecutionRepository implements ExecutionRepository {
   }
 
   async list(userId: string, workspaceId: string) {
-    const workspace = await this.db.workspace.findFirst({
-      where: { id: workspaceId, userId },
-    });
-    if (!workspace) {
+    if (!(await this.workspaces.owns(userId, workspaceId))) {
       throw new ExecutionError('not_found', 'Workspace not found.');
     }
 
@@ -191,230 +184,6 @@ export class PrismaExecutionRepository implements ExecutionRepository {
     });
 
     return jobs;
-  }
-
-  private async locked<T>(
-    id: string,
-    action: (tx: Transaction, job: Execution) => Promise<T>,
-  ) {
-    return this.db.$transaction(async (tx) => {
-      const records = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM core.execution WHERE id = ${id}::uuid FOR UPDATE`;
-      if (!records.length) {
-        throw new ExecutionError('not_found', 'Execution not found.');
-      }
-
-      const job = await tx.execution.findUniqueOrThrow({ where: { id } });
-
-      return action(tx, job);
-    });
-  }
-
-  private async finish(
-    tx: Transaction,
-    job: Execution,
-    status: TerminalStatus,
-    result: FinishedResult = {},
-  ) {
-    const { text = job.text, evaluation, grounding = null } = result;
-
-    await this.study.recordOutcome(tx, job, (snapshot) => {
-      const parsedEvaluation =
-        status === 'completed' && evaluation !== undefined
-          ? parseEvaluation(evaluation)
-          : undefined;
-
-      return analysisOutcome(
-        snapshot,
-        job.id,
-        status,
-        parsedEvaluation,
-        this.now(),
-      );
-    });
-
-    await this.drafts.recordGeneration(
-      tx,
-      job,
-      status,
-      result.roadmap,
-      result.liveSourceIds ?? [],
-    );
-
-    await tx.executionQuota.update({
-      where: { id: job.quotaId },
-      data: {
-        reserved: { decrement: job.reserved },
-      },
-    });
-
-    return tx.execution.update({
-      where: { id: job.id },
-      data: {
-        status,
-        text,
-        grounding: grounding ?? undefined,
-        reserved: 0,
-        finishedAt: this.now(),
-        sequence: { increment: 1 },
-      },
-    });
-  }
-
-  async cancel(userId: string, id: string) {
-    await this.owned(userId, id);
-
-    const job = await this.locked(id, async (tx, current) => {
-      if (terminal(current.status)) {
-        return current;
-      }
-
-      // An interrupted attempt keeps its bounded charge until usage is known.
-      return this.finish(tx, current, 'cancelled');
-    });
-
-    return job;
-  }
-
-  async claim(id: string) {
-    return this.locked(id, async (tx, job) => {
-      const now = this.now();
-      const decision = claimDecision(job, now);
-      if (decision.action === 'finish') {
-        await this.finish(tx, job, decision.status);
-      }
-      if (decision.action !== 'claim') {
-        return { status: decision.status };
-      }
-
-      const lease = randomUUID();
-      const budget = attemptBudget(job.input);
-      await tx.executionQuota.update({
-        where: { id: job.quotaId },
-        data: {
-          reserved: { decrement: budget },
-          used: { increment: budget },
-        },
-      });
-      await tx.execution.update({
-        where: { id },
-        data: {
-          status: 'running',
-          lease,
-          leases: { push: lease },
-          leaseUntil: new Date(now.getTime() + LEASE_MS),
-          attempts: { increment: 1 },
-          reserved: { decrement: budget },
-          charged: { increment: budget },
-          text: '',
-          eventIndex: 0,
-          sequence: { increment: 1 },
-        },
-      });
-
-      return {
-        status: 'running',
-        lease,
-        input: job.input,
-        budget,
-      };
-    });
-  }
-
-  async failed(id: string, lease: string) {
-    return this.locked(id, async (tx, job) => {
-      const decision = failureDecision(job, lease);
-      if (decision.action === 'finish') {
-        await this.finish(tx, job, decision.status);
-      }
-      if (decision.action !== 'release') {
-        return { status: decision.status };
-      }
-
-      await tx.execution.update({
-        where: { id },
-        data: { leaseUntil: this.now() },
-      });
-
-      return { status: 'retry' };
-    });
-  }
-
-  async active(id: string, lease: string) {
-    const job = await this.db.execution.findUnique({ where: { id } });
-
-    return !!job && activeLease(job, lease, this.now(), this.now());
-  }
-
-  async sourceScope(id: string) {
-    const job = await this.db.execution.findUnique({ where: { id } });
-
-    if (!job) {
-      return null;
-    }
-
-    return {
-      userId: job.userId,
-      workspaceId: job.workspaceId,
-      sourceIds: admittedSourceIds(job.input),
-    };
-  }
-
-  async accept(
-    event: WorkerEvent,
-    grounding: Grounding | null,
-    liveSourceIds: string[],
-  ) {
-    const job = await this.locked(event.executionId, async (tx, record) => {
-      let current = record;
-      const refund = usageRefund(current, event);
-      if (refund !== null) {
-        await tx.executionQuota.update({
-          where: { id: current.quotaId },
-          data: { used: { decrement: refund } },
-        });
-
-        current = await tx.execution.update({
-          where: { id: current.id },
-          data: {
-            settledLeases: { push: event.lease },
-            charged: { decrement: refund },
-            sequence: { increment: 1 },
-          },
-        });
-      }
-
-      if (!acceptsEvent(current, event)) {
-        return current;
-      }
-      if (current.deadline <= this.now()) {
-        return this.finish(tx, current, 'timed_out');
-      }
-
-      await tx.execution.update({
-        where: { id: current.id },
-        data: {
-          eventIndex: event.index,
-          firstEventAt: current.firstEventAt ?? this.now(),
-        },
-      });
-      if (event.status !== 'running') {
-        return this.finish(tx, current, event.status, {
-          text: event.text,
-          evaluation: event.evaluation,
-          grounding,
-          roadmap: event.roadmap,
-          liveSourceIds,
-        });
-      }
-
-      return tx.execution.update({
-        where: { id: current.id },
-        data: { text: event.text, sequence: { increment: 1 } },
-      });
-    });
-
-    return job;
   }
 
   async markPublished(id: string) {
@@ -434,29 +203,5 @@ export class PrismaExecutionRepository implements ExecutionRepository {
       orderBy: { createdAt: 'asc' },
       take: 100,
     });
-  }
-
-  async expire() {
-    const overdue = await this.db.execution.findMany({
-      where: {
-        status: { in: ['queued', 'running'] },
-        deadline: { lte: this.now() },
-      },
-      take: 100,
-    });
-
-    for (const job of overdue) {
-      await this.locked(job.id, async (tx, current) => {
-        if (!terminal(current.status)) {
-          await this.finish(tx, current, 'timed_out');
-        }
-      });
-    }
-
-    await this.db.streamTicket.deleteMany({
-      where: { expiresAt: { lte: this.now() } },
-    });
-
-    return overdue.length;
   }
 }

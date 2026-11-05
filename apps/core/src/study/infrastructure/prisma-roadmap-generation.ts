@@ -10,7 +10,8 @@ import {
   GENERATED_AUTHOR_NAME,
 } from '../domain/roadmap-draft.js';
 import type { DraftStatus, GenerationStatus } from '../domain/roadmap-draft.js';
-import { levelSchema } from '../application/contracts/study.contract.js';
+import { assertChoiceMade } from '../domain/draft-recommendation.js';
+import { draftAdmissionFacts } from './draft-admission-facts.js';
 
 function consultedSources(input: unknown) {
   const snapshot = input as { sources?: { id: string; filename: string }[] };
@@ -33,22 +34,11 @@ export class PrismaRoadmapGeneration implements RoadmapGeneration {
     const tx = context as Prisma.TransactionClient;
 
     // The caller already locked this user's workspace row.
-    const draft = await tx.roadmapDraft.findFirst({
-      where: { workspaceId, userId },
-      include: { workspace: { include: { session: true } } },
-    });
-    assertGenerationAllowed((draft?.status as DraftStatus | undefined) ?? null);
+    const draft = await draftAdmissionFacts(tx, userId, workspaceId);
+    assertGenerationAllowed(draft.status);
+    assertChoiceMade(draft.recommendation);
 
-    const session = draft!.workspace.session;
-    if (!session) {
-      throw new Error('Draft study session is missing.');
-    }
-
-    return {
-      goal: draft!.goal,
-      level: levelSchema.parse(draft!.level),
-      sessionId: session.id,
-    };
+    return draft.facts();
   }
 
   async markGenerating(

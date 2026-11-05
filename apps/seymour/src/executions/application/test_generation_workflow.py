@@ -4,8 +4,8 @@ from uuid import uuid4
 
 import pytest
 
+from src.executions.application.resources import ExecutionResources
 from src.executions.application.workflows import run_generation_job
-from src.executions.domain.ports import ExecutionResources
 from src.roadmap.application.generator import (
     GENERATION_BUDGET,
 )

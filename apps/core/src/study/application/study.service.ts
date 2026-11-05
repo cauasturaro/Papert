@@ -19,6 +19,37 @@ export class StudyService {
     return this.repo.roadmaps(userId);
   }
 
+  papertRoadmaps() {
+    return this.repo.papertRoadmaps();
+  }
+
+  /** No authorization: callers expose only roadmaps they authorized, such as published ones. */
+  definitionsOf(ids: string[]) {
+    if (ids.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.repo.findMany(ids);
+  }
+
+  startedOf(userId: string, roadmapIds: string[]) {
+    if (roadmapIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.repo.startedOf(userId, roadmapIds);
+  }
+
+  /** No authorization: for modules that authorized the roadmap themselves, such as the community. */
+  async enrollAuthorized(userId: string, roadmapId: string) {
+    const workspace = await this.repo.enroll(userId, roadmapId);
+    if (!workspace) {
+      throw new StudyError('not_found', 'Roadmap not found.');
+    }
+
+    return workspace;
+  }
+
   async start(userId: string, roadmapId: string, body: unknown) {
     parse(z.object({}).strict(), body);
     parse(z.string().regex(/^[a-z0-9-]{1,100}$/), roadmapId);

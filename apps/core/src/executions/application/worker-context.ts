@@ -7,6 +7,10 @@ import type {
   GenerationLevel,
   GenerationRequest,
 } from '../domain/roadmap-drafts.js';
+import type {
+  RecommendationCandidate,
+  RecommendationRequest,
+} from '../domain/recommendation.js';
 
 export function buildWorkerContext(
   input: ExecutionRequest,
@@ -76,5 +80,24 @@ export function buildGenerationContext(
     goal: facts.goal,
     level: facts.level,
     sources: facts.sources,
+  };
+}
+
+/** Seymour's RecommendationContext: the draft's goal/level and public catalog text only. */
+export function buildRecommendationContext(
+  input: RecommendationRequest,
+  facts: {
+    sessionId: string;
+    goal: string;
+    level: GenerationLevel;
+    candidates: RecommendationCandidate[];
+  },
+) {
+  return {
+    ...input,
+    sessionId: facts.sessionId,
+    goal: facts.goal,
+    level: facts.level,
+    candidates: facts.candidates,
   };
 }

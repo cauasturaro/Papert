@@ -38,6 +38,33 @@ export class RoadmapDraftService {
     return draftView(draft);
   }
 
+  async declineRecommendation(
+    userId: string,
+    workspaceId: string,
+    body: unknown,
+  ) {
+    parse(emptyBodySchema, body);
+
+    const draft = await this.drafts.declineRecommendation(userId, workspaceId);
+
+    return draftView(draft);
+  }
+
+  /** Where a roadmap the user generated came from: its workspace and the sources it consulted. */
+  async origin(userId: string, roadmapId: string) {
+    const draft = await this.drafts.byRoadmap(userId, roadmapId);
+    if (!draft) {
+      return null;
+    }
+
+    let consulted: string[] = [];
+    if (draft.outcome && 'roadmapId' in draft.outcome) {
+      consulted = draft.outcome.consulted.map((source) => source.filename);
+    }
+
+    return { workspaceId: draft.workspaceId, consulted };
+  }
+
   async discard(userId: string, workspaceId: string, body: unknown) {
     parse(emptyBodySchema, body);
 

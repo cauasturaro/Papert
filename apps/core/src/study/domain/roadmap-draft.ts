@@ -1,4 +1,5 @@
 import type { CitationLocation } from '../../common/domain/citation-location.js';
+import type { DraftRecommendation } from './draft-recommendation.js';
 import { StudyError } from './study.js';
 import type { Level, Roadmap, RoadmapDefinition } from './study.js';
 
@@ -41,6 +42,8 @@ export type RoadmapDraft = {
   status: DraftStatus;
   executionId: string | null;
   outcome: DraftOutcome | null;
+  // Community check that must settle before a generation; null until one runs.
+  recommendation: DraftRecommendation | null;
   // Set once the roadmap is generated.
   roadmap: Roadmap | null;
   createdAt: Date;

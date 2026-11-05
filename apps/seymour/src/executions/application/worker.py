@@ -9,6 +9,7 @@ from src.executions.domain.ports import (
     GenerationRunner,
     Pause,
     Publisher,
+    RecommendationRunner,
     TutorRunner,
 )
 
@@ -20,6 +21,7 @@ def run_execution(
     tutor_runner: TutorRunner,
     evaluation_runner: EvaluationRunner,
     generation_runner: GenerationRunner,
+    recommendation_runner: RecommendationRunner,
     pause: Pause = time.sleep,
 ) -> None:
     execution_id = execution.id
@@ -33,6 +35,12 @@ def run_execution(
     try:
         if workflow == "analysis":
             evaluation_runner(execution_id, lease, claim.context, claim.budget, control, publish)
+            return
+
+        if workflow == "recommendation":
+            recommendation_runner(
+                execution_id, lease, claim.context, claim.budget, control, publish
+            )
             return
 
         if workflow == "generation":

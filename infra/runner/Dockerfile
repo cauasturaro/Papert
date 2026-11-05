@@ -11,6 +11,9 @@ WORKDIR /workspace
 RUN apt-get update && apt-get install -y --no-install-recommends libstdc++6 gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 COPY apps/seymour/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+# Bake the embedding tokenizer into the image so token counting never downloads it at runtime.
+ENV TIKTOKEN_CACHE_DIR=/opt/tiktoken
+RUN python -c "import tiktoken; tiktoken.encoding_for_model('text-embedding-3-small')"
 COPY apps/ingestion/requirements.txt ./apps/ingestion/requirements.txt
 RUN pip install --no-cache-dir -r apps/ingestion/requirements.txt
 COPY --from=core /usr/local/bin/node /usr/local/bin/node

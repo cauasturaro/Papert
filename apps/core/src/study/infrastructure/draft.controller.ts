@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Inject,
   Param,
   Post,
@@ -43,6 +44,16 @@ export class DraftController {
     @Param('id', ResourceIdPipe) id: string,
   ) {
     return this.drafts.find(principal.user.id, id);
+  }
+
+  @Post(':id/recommendation/decline')
+  @HttpCode(200)
+  declineRecommendation(
+    @CurrentPrincipal() principal: Principal,
+    @Param('id', ResourceIdPipe) id: string,
+    @Body() body: unknown,
+  ) {
+    return this.drafts.declineRecommendation(principal.user.id, id, body);
   }
 
   @Delete(':id')

@@ -18,9 +18,9 @@ import {
   FormMessage,
 } from "@/components/ui/form-field/form-field";
 import { Textarea } from "@/components/ui/textarea/textarea";
+import { LEVELS, type Level } from "@/lib/roadmap";
 import { cn } from "@/lib/utils";
-import type { Level } from "../study-api";
-import { createDraft, LEVELS } from "./drafts-api";
+import { createDraft } from "./drafts-api";
 
 const GOAL_MIN = 10;
 const GOAL_MAX = 500;

@@ -1,4 +1,4 @@
-// What executions need from Study to run a roadmap generation.
+// What executions need from Study to run draft executions.
 
 export type GenerationRequest = {
   requestKey: string;

@@ -1,15 +1,9 @@
 """pgvector queries over seymour.source_chunk; tombstoned documents are excluded."""
 
 import json
-import os
-
-import psycopg
 
 from src.retrieval.domain.ports import Passage
-
-
-def _vector(values):
-    return "[" + ",".join(repr(float(value)) for value in values) + "]"
+from src.shared.infrastructure.postgres import connect, vector_literal
 
 
 def _passage(row) -> Passage:
@@ -25,12 +19,6 @@ def _passage(row) -> Passage:
     }
 
 
-def connect():
-    url = os.environ["SEYMOUR_DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://", 1)
-
-    return psycopg.connect(url, connect_timeout=5)
-
-
 class PgvectorPassageIndex:
     def __init__(self, connect=connect):
         self.connect = connect
@@ -38,7 +26,7 @@ class PgvectorPassageIndex:
     def nearest(
         self, workspace_id: str, document_ids: list[str], vector: list[float], limit: int
     ) -> list[Passage]:
-        literal = _vector(vector)
+        literal = vector_literal(vector)
 
         with self.connect() as connection, connection.cursor() as cursor:
             cursor.execute(

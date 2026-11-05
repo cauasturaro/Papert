@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { validate } from '../../../common/application/validation.js';
+import { ExecutionError } from '../../domain/execution.js';
 import type { ExecutionRequest } from '../../domain/execution.js';
 
 export const executionRequest: z.ZodType<ExecutionRequest> = z
@@ -36,3 +38,16 @@ export const executionRequest: z.ZodType<ExecutionRequest> = z
       input.mode ||
       (!input.effort && !input.activeFile && !input.selection),
   );
+
+// Same response body executions have always returned for invalid input.
+export function parse<T>(schema: z.ZodType<T>, body: unknown) {
+  return validate(
+    schema,
+    body,
+    () =>
+      new ExecutionError(
+        'invalid',
+        'Invalid study request. Check the fields and limits.',
+      ),
+  );
+}

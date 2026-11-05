@@ -55,38 +55,49 @@ export function useStudy() {
     }
   }
 
+  // Shows a loaded workspace, restoring this tab's unsaved draft when one exists.
+  function adopt(saved: Workspace) {
+    let recovered: Recovery | null = null;
+
+    try {
+      recovered = readRecovery(saved.id);
+    } catch {
+      setMessage(
+        "Could not read the browser draft. Download any open draft before closing this tab.",
+      );
+    }
+
+    const restored = restoreDraft(saved, recovered);
+    const { draft: next, conflict: hasConflict } = restored;
+
+    current.current = {
+      workspace: saved,
+      draft: next,
+      conflict: hasConflict,
+    };
+
+    setWorkspace(saved);
+    setDraft(next);
+    setConflict(hasConflict);
+    setStatus(
+      restored.differs ? "Recovered unsaved draft." : "All changes saved.",
+    );
+    queryClient.setQueryData(["study", saved.id], saved);
+  }
+
   // Resumes the learner's existing workspace, including a generated roadmap's draft workspace.
   const startMutation = useMutation({
     mutationFn: async (roadmapId: string) =>
       studyRequest<Workspace>(`roadmaps/${roadmapId}/start`, "POST", {}),
-    onSuccess: (saved) => {
-      let recovered: Recovery | null = null;
+    onSuccess: adopt,
+    onError: (error) => setMessage(error.message),
+  });
 
-      try {
-        recovered = readRecovery(saved.id);
-      } catch {
-        setMessage(
-          "Could not read the browser draft. Download any open draft before closing this tab.",
-        );
-      }
-
-      const restored = restoreDraft(saved, recovered);
-      const { draft: next, conflict: hasConflict } = restored;
-
-      current.current = {
-        workspace: saved,
-        draft: next,
-        conflict: hasConflict,
-      };
-
-      setWorkspace(saved);
-      setDraft(next);
-      setConflict(hasConflict);
-      setStatus(
-        restored.differs ? "Recovered unsaved draft." : "All changes saved.",
-      );
-      queryClient.setQueryData(["study", saved.id], saved);
-    },
+  // Opens a workspace another page already created, such as a started community roadmap.
+  const openMutation = useMutation({
+    mutationFn: async (workspaceId: string) =>
+      studyRequest<Workspace>(`workspaces/${workspaceId}`),
+    onSuccess: adopt,
     onError: (error) => setMessage(error.message),
   });
 
@@ -282,9 +293,9 @@ export function useStudy() {
     }
   }
 
+  const loadError = startMutation.error ?? openMutation.error;
   const signedOut =
-    startMutation.error instanceof StudyRequestError &&
-    startMutation.error.status === 401;
+    loadError instanceof StudyRequestError && loadError.status === 401;
 
   return {
     workspace,
@@ -294,7 +305,7 @@ export function useStudy() {
       updateDraft({ ...current.current.draft, files }),
     setNotes: (notes: string) =>
       updateDraft({ ...current.current.draft, notes }),
-    busy: startMutation.isPending,
+    busy: startMutation.isPending || openMutation.isPending,
     message,
     status:
       dirty && status === "All changes saved." ? "Unsaved changes." : status,
@@ -303,6 +314,7 @@ export function useStudy() {
     dirty,
     signedOut,
     start: (roadmapId: string) => startMutation.mutate(roadmapId),
+    open: (workspaceId: string) => openMutation.mutate(workspaceId),
     save,
     reload,
     download: () => downloadDraft(current.current.draft),

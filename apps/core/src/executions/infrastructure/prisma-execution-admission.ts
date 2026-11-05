@@ -7,6 +7,7 @@ import { DEADLINE_MS } from '../domain/admission.js';
 import { period } from '../domain/quota.js';
 import type { ExecutionRequest } from '../domain/execution.js';
 import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
+import type { ExecutionWorkspaces } from '../domain/ports/execution-workspaces.js';
 import { assertMentionsReady } from '../domain/tutor-context.js';
 import type { TutorSource } from '../domain/tutor-context.js';
 import {
@@ -23,10 +24,11 @@ import {
 import { assertAnalysisRetry } from '../domain/analysis.js';
 import { allocateQuota } from '../domain/quota.js';
 import type { AttemptState } from '../domain/analysis.js';
-import { lockUserQuota, lockWorkspace } from './execution-locks.js';
+import { lockUserQuota } from './execution-locks.js';
 
 export async function admitExecution(
   db: PrismaService,
+  workspaces: ExecutionWorkspaces,
   study: ExecutionStudyProgression,
   clock: () => Date,
   userId: string,
@@ -50,16 +52,10 @@ export async function admitExecution(
       return previous;
     }
 
-    if (!(await lockWorkspace(tx, workspaceId, userId))) {
+    const workspace = await workspaces.lock(tx, userId, workspaceId);
+    if (!workspace) {
       throw new ExecutionError('not_found', 'Workspace not found.');
     }
-    const workspace = await tx.workspace.findUniqueOrThrow({
-      where: { id: workspaceId },
-      include: {
-        roadmap: true,
-        session: true,
-      },
-    });
     assertSavedRevision(workspace.revision, input.revision);
 
     // A draft workspace has no step to tutor or analyze.
@@ -67,10 +63,10 @@ export async function admitExecution(
     const definition = study.definition(roadmap.definition);
     const step = activeStudyStep(
       definition.steps[workspace.currentStep],
-      !!workspace.session,
+      !!workspace.sessionId,
     );
 
-    const files = workspace.files as Record<string, string>;
+    const { files } = workspace;
     assertSavedSelection(input, files);
 
     const recentResults = input.mode
@@ -135,7 +131,7 @@ export async function admitExecution(
     });
 
     const snapshot = buildWorkerContext(input, {
-      sessionId: workspace.session!.id,
+      sessionId: workspace.sessionId!,
       workspaceId,
       files,
       step,

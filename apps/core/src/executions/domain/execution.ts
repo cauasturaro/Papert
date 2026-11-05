@@ -29,6 +29,7 @@ export type WorkerEvent = {
   evaluation?: unknown;
   grounding?: unknown;
   roadmap?: unknown;
+  recommendation?: unknown;
 };
 
 export type ExecutionRecord = {

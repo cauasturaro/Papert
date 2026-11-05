@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { Navbar } from "@/components/app/navbar";
-import { Button, buttonVariants } from "@/components/ui/button/button";
+import { Button } from "@/components/ui/button/button";
 import {
   Card,
   CardContent,
@@ -18,6 +19,7 @@ import { Input } from "@/components/ui/input/input";
 import { useAccount } from "./use-account";
 
 export default function Account() {
+  const router = useRouter();
   const {
     user,
     register,
@@ -25,17 +27,26 @@ export default function Account() {
     busy,
     message,
     submitCredentials,
-    logout,
     toggleRegistration,
   } = useAccount();
 
+  // Signed-in users have nothing to do here, so send them to their study space.
+  useEffect(() => {
+    if (user) {
+      router.replace("/study");
+    }
+  }, [user, router]);
+
   let title = "Welcome back";
+  let status = loading ? "Checking your session…" : message;
   let submitLabel = register ? "Create account" : "Sign in";
 
-  if (user) {
-    title = "Your account";
-  } else if (register) {
+  if (register) {
     title = "Create your account";
+  }
+
+  if (user) {
+    status = "Opening your study space…";
   }
 
   if (busy) {
@@ -51,29 +62,9 @@ export default function Account() {
           <CardHeader>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             <CardDescription role="status" aria-live="polite">
-              {loading ? "Checking your session…" : message}
+              {status}
             </CardDescription>
           </CardHeader>
-
-          {!loading && user && (
-            <CardContent>
-              <section
-                className="flex flex-col gap-4"
-                aria-label="Protected account"
-              >
-                <p>
-                  Signed in as <strong>{user.email}</strong>
-                </p>
-
-                <Link className={buttonVariants()} href="/study">
-                  Start or resume your study
-                </Link>
-                <Button variant="outline" onClick={logout} disabled={busy}>
-                  {busy ? "Signing out…" : "Sign out"}
-                </Button>
-              </section>
-            </CardContent>
-          )}
 
           {!loading && !user && (
             <CardContent>

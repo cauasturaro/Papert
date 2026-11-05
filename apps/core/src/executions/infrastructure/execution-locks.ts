@@ -1,20 +1,5 @@
 import type { Prisma } from '@prisma/client';
 
-export async function lockWorkspace(
-  tx: Prisma.TransactionClient,
-  id: string,
-  userId?: string,
-) {
-  const records = userId
-    ? await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM core.workspace WHERE id = ${id}::uuid
-        AND user_id = ${userId}::uuid FOR UPDATE`
-    : await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM core.workspace WHERE id = ${id}::uuid FOR UPDATE`;
-
-  return records.length > 0;
-}
-
 /** Locks the user, then today's quota row, serializing all of a user's admissions. */
 export async function lockUserQuota(
   tx: Prisma.TransactionClient,
@@ -34,4 +19,10 @@ export async function lockUserQuota(
       WHERE user_id = ${userId}::uuid AND period = ${today} FOR UPDATE`;
 
   return quotas[0];
+}
+
+/** Locks a quota row by id; finishing takes it before Study locks the workspace. */
+export async function lockQuota(tx: Prisma.TransactionClient, id: string) {
+  await tx.$queryRaw`
+      SELECT id FROM core.execution_quota WHERE id = ${id}::uuid FOR UPDATE`;
 }

@@ -12,8 +12,12 @@ describe('StudyService', () => {
 
   const repo = {
     fixture: vi.fn<StudyRepository['fixture']>(),
+    papertRoadmaps: vi.fn<StudyRepository['papertRoadmaps']>(),
+    findMany: vi.fn<StudyRepository['findMany']>(),
+    startedOf: vi.fn<StudyRepository['startedOf']>(),
     roadmaps: vi.fn<StudyRepository['roadmaps']>(),
     start: vi.fn<StudyRepository['start']>(),
+    enroll: vi.fn<StudyRepository['enroll']>(),
     workspace: vi.fn<StudyRepository['workspace']>(),
     save: vi.fn<StudyRepository['save']>(),
     recordAttempt: vi.fn<StudyRepository['recordAttempt']>(),

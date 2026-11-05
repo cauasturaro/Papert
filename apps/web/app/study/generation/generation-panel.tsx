@@ -10,11 +10,14 @@ import { AlertDialog } from "@/components/ui/alert-dialog/alert-dialog";
 import { Badge } from "@/components/ui/badge/badge";
 import { Button } from "@/components/ui/button/button";
 import { SparklesIcon, StopIcon } from "@/components/icons";
+import { levelLabel } from "@/lib/roadmap";
+import { PublishAction } from "../../community/publish-action";
 import { useSources } from "../sources/use-sources";
-import { LEVELS } from "./drafts-api";
+import { RecommendationPanel } from "./recommendation-panel";
 import { RoadmapPreview } from "./roadmap-preview";
 import { pendingSources, sourceUses, type SourceUse } from "./source-use";
 import type { useDraft } from "./use-draft";
+import { useDraftRecommendation } from "./use-draft-recommendation";
 
 const TONE_CLASS: Record<SourceUse["tone"], string> = {
   used: "text-success",
@@ -58,13 +61,16 @@ export function GenerationPanel({
   const sources = useSources(workspaceId);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const draft = state.draft!;
+  const recommendation = useDraftRecommendation(draft);
 
   const roadmap = draft.roadmap;
   const stepIds = roadmap?.definition.steps.map((step) => step.id) ?? [];
   const uses = sourceUses(sources.sources, { ...draft, stepIds });
   const pending = pendingSources(sources.sources);
-  const level = LEVELS.find((option) => option.value === draft.level);
+  const level = levelLabel(draft.level);
   const generated = draft.status === "generated";
+  // Core rejects a generation until the learner has seen the community options.
+  const chosen = draft.canGenerate;
 
   async function discard() {
     try {
@@ -79,7 +85,7 @@ export function GenerationPanel({
     <section aria-label="Roadmap generation" className="space-y-6">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{level?.label}</Badge>
+          <Badge variant="secondary">{level}</Badge>
           {generated && <Badge variant="success">Generated</Badge>}
         </div>
         <p className="text-lg">{draft.goal}</p>
@@ -90,8 +96,17 @@ export function GenerationPanel({
         <SourceUseList uses={uses} />
       </div>
 
+      {!generated && <RecommendationPanel recommendation={recommendation} />}
+
       {!generated && (
         <div className="space-y-3">
+          {!chosen && draft.status !== "generating" && (
+            <p className="text-sm text-muted-foreground">
+              Generating unlocks after the community check, once you choose to
+              create your own.
+            </p>
+          )}
+
           {pending > 0 && (
             <p className="text-sm text-muted-foreground">
               Wait until every source finishes processing, or remove it, before
@@ -112,7 +127,7 @@ export function GenerationPanel({
             ) : (
               <Button
                 onClick={() => void state.generate().catch(() => undefined)}
-                disabled={state.generating || pending > 0}
+                disabled={state.generating || pending > 0 || !chosen}
               >
                 <SparklesIcon />
                 {draft.status === "failed" ? "Try again" : "Generate roadmap"}
@@ -161,9 +176,15 @@ export function GenerationPanel({
         <>
           <RoadmapPreview roadmap={roadmap} evidence={draft.evidence} />
 
-          <Button size="lg" onClick={onStudy}>
-            Start studying
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="lg" onClick={onStudy}>
+              Start studying
+            </Button>
+
+            <PublishAction
+              roadmap={{ id: roadmap.id, title: roadmap.definition.title }}
+            />
+          </div>
         </>
       )}
 
