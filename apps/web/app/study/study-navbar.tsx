@@ -9,6 +9,7 @@ import {
   DownloadIcon,
   SparklesIcon,
 } from "@/components/icons";
+import { StreakChip } from "../profile/streak-chip";
 import type { Workspace } from "./study-api";
 
 type StudyNavbarProps = {
@@ -64,6 +65,8 @@ export function StudyNavbar(props: StudyNavbarProps) {
 
   const actions = workspace && (
     <>
+      <StreakChip className="max-md:hidden" />
+
       <Badge
         size="sm"
         variant={state.variant}

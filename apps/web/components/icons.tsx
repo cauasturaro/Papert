@@ -337,3 +337,21 @@ export function MemoryIcon(props: IconProps) {
     </Icon>
   );
 }
+
+export function AwardIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="12" cy="9" r="6" />
+      <path d="m8.5 14 -1.5 7 5-2.5 5 2.5-1.5-7" />
+      <path d="m10 9 1.5 1.5L14.5 7.5" />
+    </Icon>
+  );
+}
+
+export function FlameIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 21a6 6 0 0 0 6-6c0-3.5-2.5-6-4-8.5-.5 2-1.5 3.5-3 4.5 0-2-1-4-2.5-5.5C7.5 8.5 6 11.5 6 15a6 6 0 0 0 6 6Z" />
+    </Icon>
+  );
+}

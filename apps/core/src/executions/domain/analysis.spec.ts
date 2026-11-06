@@ -1,7 +1,11 @@
 import type { Evaluation } from './evaluation.js';
 import { describe, expect, it } from 'vitest';
 
-import { analysisOutcome, assertAnalysisRetry } from './analysis.js';
+import {
+  analysisOutcome,
+  assertAnalysisRetry,
+  evaluatedAnalysis,
+} from './analysis.js';
 
 const now = new Date('2026-11-03T23:59:59Z');
 
@@ -107,5 +111,53 @@ describe('analysis', () => {
       approved: false,
       result: { reason: 'invalid_output' },
     });
+  });
+});
+
+describe('evaluated analysis', () => {
+  const execution = {
+    id: 'execution',
+    userId: 'learner',
+    workspaceId: 'workspace',
+  };
+  const completedRoadmap = {
+    roadmapId: 'roadmap',
+    workspaceId: 'workspace',
+    title: 'Roadmap',
+    stepCount: 2,
+    concepts: [],
+  };
+
+  it.each(['approved', 'needs_work'] as const)(
+    'reports an evaluation Core accepted as study activity: %s',
+    (status) => {
+      const recorded = { status, completedRoadmap: null };
+
+      const analysis = evaluatedAnalysis(execution, recorded, now);
+
+      expect(analysis).toEqual({
+        userId: 'learner',
+        executionId: 'execution',
+        workspaceId: 'workspace',
+        approved: status === 'approved',
+        evaluatedAt: now,
+        completedRoadmap: null,
+      });
+    },
+  );
+
+  it('carries the completion Study recorded', () => {
+    const recorded = { status: 'approved' as const, completedRoadmap };
+
+    const analysis = evaluatedAnalysis(execution, recorded, now);
+
+    expect(analysis?.completedRoadmap).toBe(completedRoadmap);
+  });
+
+  it.each([
+    null,
+    { status: 'analysis_failed' as const, completedRoadmap: null },
+  ])('ignores a failed or unrelated outcome: %j', (recorded) => {
+    expect(evaluatedAnalysis(execution, recorded, now)).toBeNull();
   });
 });

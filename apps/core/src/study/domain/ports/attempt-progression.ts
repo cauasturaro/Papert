@@ -3,6 +3,7 @@ import type {
   ProgressionStep,
   OutcomeSnapshot,
   AttemptOutcome,
+  RecordedOutcome,
 } from '../attempt-progression.js';
 
 export interface AttemptProgression {
@@ -28,5 +29,5 @@ export interface AttemptProgression {
     tx: ProgressionTransaction,
     execution: { id: string; workspaceId: string; input: unknown },
     assess: (snapshot: OutcomeSnapshot) => AttemptOutcome,
-  ): Promise<void>;
+  ): Promise<RecordedOutcome | null>;
 }

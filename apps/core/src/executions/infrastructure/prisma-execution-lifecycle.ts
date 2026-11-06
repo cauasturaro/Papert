@@ -23,6 +23,7 @@ import type { ExecutionRecommendationDrafts } from '../domain/ports/execution-re
 import type { ExecutionRoadmapDrafts } from '../domain/ports/execution-roadmap-drafts.js';
 import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
 import type { ExecutionMemory } from '../domain/ports/execution-memory.js';
+import type { ExecutionEngagement } from '../domain/ports/execution-engagement.js';
 
 type Transaction = Prisma.TransactionClient;
 
@@ -37,6 +38,7 @@ export class PrismaExecutionLifecycle implements ExecutionLifecycle {
     drafts: ExecutionRoadmapDrafts,
     recommendations: ExecutionRecommendationDrafts,
     memory: ExecutionMemory,
+    engagement: ExecutionEngagement,
   ) {
     this.settlement = new PrismaExecutionSettlement(
       now,
@@ -44,6 +46,7 @@ export class PrismaExecutionLifecycle implements ExecutionLifecycle {
       drafts,
       recommendations,
       memory,
+      engagement,
     );
   }
 

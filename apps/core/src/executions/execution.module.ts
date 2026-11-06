@@ -3,6 +3,8 @@ import { ParserSyntaxChecker } from '../analysis/infrastructure/parser-syntax-ch
 import { AuthModule } from '../auth/auth.module.js';
 import { CommunityService } from '../community/application/community.service.js';
 import { CommunityModule } from '../community/community.module.js';
+import { EngagementModule } from '../engagement/engagement.module.js';
+import { PrismaAnalysisActivity } from '../engagement/infrastructure/prisma-analysis-activity.js';
 import { PrismaService } from '../infrastructure/database/prisma.service.js';
 import { MemoryModule } from '../memory/memory.module.js';
 import { MemoryService } from '../memory/application/memory.service.js';
@@ -22,6 +24,7 @@ import type { ExecutionRoadmapDrafts } from './domain/ports/execution-roadmap-dr
 import type { ExecutionStudyProgression } from './domain/ports/execution-study-progression.js';
 import type { ExecutionWorkspaces } from './domain/ports/execution-workspaces.js';
 import type { ExecutionMemory } from './domain/ports/execution-memory.js';
+import type { ExecutionEngagement } from './domain/ports/execution-engagement.js';
 import { SqsExecutionQueue } from './infrastructure/aws-execution.js';
 import { CommunityRecommendationCatalog } from './infrastructure/community-catalog.js';
 import { ExecutionController } from './infrastructure/execution.controller.js';
@@ -45,18 +48,25 @@ const STUDY_PARTICIPANTS = [
     StudyModule,
     CommunityModule,
     MemoryModule,
+    EngagementModule,
   ],
   controllers: [ExecutionController],
   providers: [
     {
       provide: PrismaExecutionLifecycle,
-      inject: [PrismaService, ...STUDY_PARTICIPANTS, PrismaTutorMemory],
+      inject: [
+        PrismaService,
+        ...STUDY_PARTICIPANTS,
+        PrismaTutorMemory,
+        PrismaAnalysisActivity,
+      ],
       useFactory: (
         db: PrismaService,
         study: ExecutionStudyProgression,
         drafts: ExecutionRoadmapDrafts,
         recommendations: ExecutionRecommendationDrafts,
         memory: ExecutionMemory,
+        engagement: ExecutionEngagement,
       ) =>
         new PrismaExecutionLifecycle(
           db,
@@ -65,6 +75,7 @@ const STUDY_PARTICIPANTS = [
           drafts,
           recommendations,
           memory,
+          engagement,
         ),
     },
     {

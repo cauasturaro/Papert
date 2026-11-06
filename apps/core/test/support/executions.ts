@@ -7,6 +7,7 @@ import type { SyntaxChecker } from '../../src/analysis/domain/ports/syntax-check
 import { PrismaExecutionRepository } from '../../src/executions/infrastructure/prisma-execution-repository.js';
 import { PrismaExecutionLifecycle } from '../../src/executions/infrastructure/prisma-execution-lifecycle.js';
 import type { PrismaService } from '../../src/infrastructure/database/prisma.service.js';
+import { PrismaAnalysisActivity } from '../../src/engagement/infrastructure/prisma-analysis-activity.js';
 import { PrismaMemoryRepository } from '../../src/memory/infrastructure/prisma-memory-repository.js';
 import { PrismaTutorMemory } from '../../src/memory/infrastructure/prisma-tutor-memory.js';
 import { PrismaAttemptProgression } from '../../src/study/infrastructure/prisma-attempt-progression.js';
@@ -46,6 +47,7 @@ export function createExecutions(
     drafts,
     recommendations,
     memory,
+    new PrismaAnalysisActivity(),
   );
 
   return {

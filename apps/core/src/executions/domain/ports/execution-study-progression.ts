@@ -15,9 +15,26 @@ export type OutcomeSnapshot = {
   criteria: string[];
 };
 
+export type OutcomeStatus = 'approved' | 'needs_work' | 'analysis_failed';
+
 export type AttemptOutcome = {
   approved: boolean;
+  status: OutcomeStatus;
   result: Record<string, unknown>;
+};
+
+export type CompletedRoadmap = {
+  roadmapId: string;
+  workspaceId: string;
+  title: string;
+  stepCount: number;
+  concepts: string[];
+};
+
+/** The attempt status Study wrote, and the roadmap this outcome completed, if it did. */
+export type RecordedOutcome = {
+  status: OutcomeStatus;
+  completedRoadmap: CompletedRoadmap | null;
 };
 
 // Only infrastructure may unwrap this caller-owned transaction; no nested transaction is started.
@@ -42,9 +59,10 @@ export interface ExecutionStudyProgression {
     id: string,
     result: Record<string, unknown>,
   ): Promise<{ id: string; revision: number; stepId: string; result: unknown }>;
+  // Null when the execution is not the pending analysis of an attempt.
   recordOutcome(
     tx: ProgressionTransaction,
     execution: { id: string; workspaceId: string; input: unknown },
     assess: (snapshot: OutcomeSnapshot) => AttemptOutcome,
-  ): Promise<void>;
+  ): Promise<RecordedOutcome | null>;
 }

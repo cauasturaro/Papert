@@ -4,6 +4,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert/alert";
 import { Badge } from "@/components/ui/badge/badge";
+import { CompletionAchievement } from "../../profile/completion-achievement";
 import type { Workspace } from "../study-api";
 import { RoadmapSteps } from "./roadmap-steps";
 
@@ -25,6 +26,8 @@ export function StepOverview({ workspace }: { workspace: Workspace }) {
           </AlertDescription>
         </Alert>
       )}
+
+      {completed && <CompletionAchievement roadmapId={workspace.roadmap.id} />}
 
       {step && (
         <section aria-label="Current challenge" className="space-y-4">

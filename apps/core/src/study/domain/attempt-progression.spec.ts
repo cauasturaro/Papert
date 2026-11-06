@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { attemptOutcomeDecision } from './attempt-progression.js';
+import {
+  attemptOutcomeDecision,
+  completedRoadmap,
+} from './attempt-progression.js';
 
 const attempt = {
   workspaceId: 'workspace',
@@ -27,6 +30,7 @@ describe('Study outcome progression', () => {
       applies: false,
       advance: false,
       nextStep: null,
+      completes: false,
     });
   });
 
@@ -38,8 +42,18 @@ describe('Study outcome progression', () => {
       { ...position, currentStep: 1 },
     );
 
-    expect(first).toEqual({ applies: true, advance: true, nextStep: 1 });
-    expect(last).toEqual({ applies: true, advance: true, nextStep: 2 });
+    expect(first).toEqual({
+      applies: true,
+      advance: true,
+      nextStep: 1,
+      completes: false,
+    });
+    expect(last).toEqual({
+      applies: true,
+      advance: true,
+      nextStep: 2,
+      completes: true,
+    });
   });
 
   it.each([
@@ -49,6 +63,33 @@ describe('Study outcome progression', () => {
   ])('records eligible outcomes without advancing: %j', (roadmap) => {
     const decision = attemptOutcomeDecision(attempt, execution, roadmap);
 
-    expect(decision).toEqual({ applies: true, advance: false, nextStep: null });
+    expect(decision).toEqual({
+      applies: true,
+      advance: false,
+      nextStep: null,
+      completes: false,
+    });
+  });
+
+  it('describes a completed roadmap with its distinct concepts in step order', () => {
+    const roadmap = {
+      id: 'roadmap',
+      title: 'Hexagonal APIs',
+      steps: [
+        { concepts: ['ports', 'adapters'] },
+        {},
+        { concepts: ['adapters', 'testing'] },
+      ],
+    };
+
+    const completed = completedRoadmap(roadmap, 'workspace');
+
+    expect(completed).toEqual({
+      roadmapId: 'roadmap',
+      workspaceId: 'workspace',
+      title: 'Hexagonal APIs',
+      stepCount: 3,
+      concepts: ['ports', 'adapters', 'testing'],
+    });
   });
 });

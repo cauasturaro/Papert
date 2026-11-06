@@ -1,4 +1,7 @@
-import { attemptOutcomeDecision } from '../domain/attempt-progression.js';
+import {
+  attemptOutcomeDecision,
+  completedRoadmap,
+} from '../domain/attempt-progression.js';
 import type { Prisma } from '@prisma/client';
 import {
   roadmapSchema,
@@ -10,6 +13,7 @@ import type {
   ProgressionStep,
   OutcomeSnapshot,
   AttemptOutcome,
+  RecordedOutcome,
 } from '../domain/attempt-progression.js';
 
 export class PrismaAttemptProgression implements AttemptProgression {
@@ -70,11 +74,11 @@ export class PrismaAttemptProgression implements AttemptProgression {
     context: ProgressionTransaction,
     execution: { id: string; workspaceId: string; input: unknown },
     assess: (snapshot: OutcomeSnapshot) => AttemptOutcome,
-  ) {
+  ): Promise<RecordedOutcome | null> {
     const tx = context as Prisma.TransactionClient;
     const input = execution.input as { attemptId?: string };
     if (!input.attemptId) {
-      return;
+      return null;
     }
 
     // Lock order stays execution → workspace → attempt, inside the caller's transaction.
@@ -93,7 +97,7 @@ export class PrismaAttemptProgression implements AttemptProgression {
     };
     const eligibility = attemptOutcomeDecision(lockedAttempt, association);
     if (!eligibility.applies || !attempt) {
-      return;
+      return null;
     }
 
     const challenge = stepSchema.shape.challenge.parse(attempt.challenge);
@@ -107,33 +111,47 @@ export class PrismaAttemptProgression implements AttemptProgression {
 
     await this.updateResult(tx, attempt.id, outcome.result);
 
+    const recorded: RecordedOutcome = {
+      status: outcome.status,
+      completedRoadmap: null,
+    };
     if (!outcome.approved) {
-      return;
+      return recorded;
     }
 
     // Attempts only exist in workspaces bound to a roadmap.
     const bound = attempt.workspace.roadmap;
     if (!bound) {
-      return;
+      return recorded;
     }
 
-    const steps = roadmapSchema.parse(bound.definition).steps;
+    const definition = roadmapSchema.parse(bound.definition);
     const transition = attemptOutcomeDecision(lockedAttempt, association, {
       approved: outcome.approved,
       currentStep: attempt.workspace.currentStep,
-      steps,
+      steps: definition.steps,
     });
     if (!transition.advance || transition.nextStep === null) {
-      return;
+      return recorded;
     }
 
     // Conditional increment makes concurrent or redelivered approvals unlock once.
-    await tx.workspace.updateMany({
+    const unlocked = await tx.workspace.updateMany({
       where: {
         id: execution.workspaceId,
         currentStep: transition.nextStep - 1,
       },
       data: { currentStep: { increment: 1 } },
     });
+    if (unlocked.count !== 1 || !transition.completes) {
+      return recorded;
+    }
+
+    const roadmap = { id: bound.id, ...definition };
+
+    return {
+      ...recorded,
+      completedRoadmap: completedRoadmap(roadmap, execution.workspaceId),
+    };
   }
 }

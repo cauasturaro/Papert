@@ -1,6 +1,6 @@
 import type { Execution, Prisma } from '@prisma/client';
 import { parseEvaluation } from '../application/contracts/evaluation.contract.js';
-import { analysisOutcome } from '../domain/analysis.js';
+import { analysisOutcome, evaluatedAnalysis } from '../domain/analysis.js';
 import { completedTurn } from '../domain/conversation-window.js';
 import type { TerminalStatus } from '../domain/execution.js';
 import type { Grounding } from '../domain/grounding.js';
@@ -9,6 +9,7 @@ import type { ExecutionRecommendationDrafts } from '../domain/ports/execution-re
 import type { ExecutionRoadmapDrafts } from '../domain/ports/execution-roadmap-drafts.js';
 import type { ExecutionStudyProgression } from '../domain/ports/execution-study-progression.js';
 import type { ExecutionMemory } from '../domain/ports/execution-memory.js';
+import type { ExecutionEngagement } from '../domain/ports/execution-engagement.js';
 import { lockQuota } from './execution-locks.js';
 
 type Transaction = Prisma.TransactionClient;
@@ -24,9 +25,9 @@ export type FinishedResult = {
 };
 
 /**
- * Moves a locked execution to a terminal status and records its result in Study and Memory. The
- * quota row is locked before Study locks the workspace, the same quota → workspace order admissions
- * use.
+ * Moves a locked execution to a terminal status and records its result in Study, Engagement and
+ * Memory. The quota row is locked before Study locks the workspace, the same quota → workspace
+ * order admissions use; Engagement locks the learner's profile after the attempt.
  */
 export class PrismaExecutionSettlement {
   constructor(
@@ -35,6 +36,7 @@ export class PrismaExecutionSettlement {
     private readonly drafts: ExecutionRoadmapDrafts,
     private readonly recommendations: ExecutionRecommendationDrafts,
     private readonly memory: ExecutionMemory,
+    private readonly engagement: ExecutionEngagement,
   ) {}
 
   async finish(
@@ -47,7 +49,7 @@ export class PrismaExecutionSettlement {
 
     await lockQuota(tx, job.quotaId);
 
-    await this.study.recordOutcome(tx, job, (snapshot) => {
+    const recorded = await this.study.recordOutcome(tx, job, (snapshot) => {
       const parsedEvaluation =
         status === 'completed' && evaluation !== undefined
           ? parseEvaluation(evaluation)
@@ -61,6 +63,11 @@ export class PrismaExecutionSettlement {
         this.now(),
       );
     });
+
+    const analysis = evaluatedAnalysis(job, recorded, this.now());
+    if (analysis) {
+      await this.engagement.recordAnalysis(tx, analysis);
+    }
 
     await this.drafts.recordGeneration(
       tx,

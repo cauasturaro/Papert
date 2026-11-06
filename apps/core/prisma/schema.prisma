@@ -37,6 +37,9 @@ model User {
   conversations  TutorConversation[]
   memoryItems    MemoryItem[]
   answerFeedback AnswerFeedback[]
+  learnerProfile LearnerProfile?
+  studyDays      StudyDay[]
+  achievements   Achievement[]
 
   @@map("app_user")
   @@schema("core")
@@ -74,6 +77,7 @@ model Roadmap {
   createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   workspaces   Workspace[]
   publication  RoadmapPublication?
+  achievements Achievement[]
 
   @@map("roadmap")
   @@schema("core")
@@ -96,6 +100,7 @@ model Workspace {
   executions    Execution[]
   sources       SourceDocument[]
   conversations TutorConversation[]
+  achievements  Achievement[]
 
   @@unique([userId, roadmapId])
   @@map("workspace")
@@ -359,5 +364,53 @@ model AnswerFeedback {
 
   @@index([userId])
   @@map("answer_feedback")
+  @@schema("core")
+}
+
+model LearnerProfile {
+  userId        String    @id @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timeZone      String?   @map("time_zone") @db.VarChar(64)
+  currentStreak Int       @default(0) @map("current_streak")
+  longestStreak Int       @default(0) @map("longest_streak")
+  lastStudyDay  DateTime? @map("last_study_day") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@map("learner_profile")
+  @@schema("core")
+}
+
+model StudyDay {
+  userId           String   @map("user_id") @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  day              DateTime @db.Date
+  timeZone         String   @map("time_zone") @db.VarChar(64)
+  firstExecutionId String   @map("first_execution_id") @db.Uuid
+  firstAt          DateTime @map("first_at") @db.Timestamptz(3)
+  analyses         Int      @default(1)
+
+  @@id([userId, day])
+  @@map("study_day")
+  @@schema("core")
+}
+
+model Achievement {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  kind        String
+  roadmapId   String    @map("roadmap_id") @db.VarChar(100)
+  roadmap     Roadmap   @relation(fields: [roadmapId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  executionId String    @map("execution_id") @db.Uuid
+  title       String
+  concepts    String[]  @default([])
+  stepCount   Int       @map("step_count")
+  awardedAt   DateTime  @map("awarded_at") @db.Timestamptz(3)
+
+  @@unique([userId, kind, roadmapId])
+  @@map("achievement")
   @@schema("core")
 }

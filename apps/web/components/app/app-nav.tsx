@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/community", label: "Community" },
   { href: "/library", label: "Library" },
   { href: "/memory", label: "Memory" },
+  { href: "/profile", label: "Profile" },
 ];
 
 /** Product sections for pages outside the study workspace. */

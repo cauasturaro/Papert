@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { ENGAGEMENT_KEY } from "../../profile/engagement-keys";
 import { executionRequest as request } from "../execution-api";
 import { isRunning, newerSnapshot } from "../execution-state";
 import type { Execution } from "../execution-state";
@@ -26,6 +28,7 @@ export function useAnalysis({
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const settled = useRef(onSettled);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     settled.current = onSettled;
@@ -75,6 +78,9 @@ export function useAnalysis({
 
         if (!isRunning(snapshot)) {
           await settled.current();
+
+          // A finished analysis may add a study day or a badge.
+          void queryClient.invalidateQueries({ queryKey: ENGAGEMENT_KEY });
         }
       } catch (error) {
         if (!disposed) {
@@ -87,7 +93,7 @@ export function useAnalysis({
       disposed = true;
       clearInterval(poll);
     };
-  }, [executionId, running]);
+  }, [executionId, running, queryClient]);
 
   async function analyze() {
     setBusy(true);
