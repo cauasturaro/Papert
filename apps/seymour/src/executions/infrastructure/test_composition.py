@@ -143,19 +143,47 @@ def test_tutor_composition_supplies_its_schema_and_safe_tool_names(monkeypatch):
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
     monkeypatch.setattr("src.shared.infrastructure.tracing.Langfuse", lambda **_: MagicMock())
     monkeypatch.delenv("SESSIONS_TABLE", raising=False)
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     snapshot = SimpleNamespace(sources=[], foldTurns=[])
     folding = SimpleNamespace(sources=[], foldTurns=[{"prompt": "a", "answer": "b"}])
 
     runtime = tutor_resources(snapshot)
     compacting = tutor_resources(folding)
+    primary = runtime.model.providers[0]
+    summary = compacting.summarizer.providers[0]
 
-    assert runtime.model.response_name == "tutor_guidance"
-    assert runtime.model.response_schema == guidance_schema()
+    assert [provider.name for provider in runtime.model.providers] == ["openai"]
+    assert primary.model.response_name == "tutor_guidance"
+    assert primary.model.response_schema == guidance_schema()
     assert runtime.trace.tool_names == frozenset(TOOL_ARGUMENTS)
     assert runtime.search is None
     assert runtime.summarizer is None
     assert runtime.checkpoints is None
-    assert compacting.summarizer.response_name == "conversation_summary"
+    assert summary.model.response_name == "conversation_summary"
+    # One route per execution: a switch during the summary also moves the answer.
+    assert compacting.summarizer.route is compacting.model.route
+    assert runtime.model.route is not compacting.model.route
+
+
+def test_a_configured_deepseek_key_adds_the_fallback_provider(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from src.executions.infrastructure.composition import evaluation_resources
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-deepseek-key")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "http://localhost")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "test-public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr("src.shared.infrastructure.tracing.Langfuse", lambda **_: MagicMock())
+
+    runtime = evaluation_resources()
+    providers = runtime.model.providers
+
+    assert [provider.name for provider in providers] == ["openai", "deepseek"]
+    assert providers[0].model.cache_key == "papert-attempt_evaluation"
+    assert providers[1].model.model == "deepseek-flash"
+    assert providers[1].model.task is providers[0].model.task
 
 
 def test_an_unavailable_checkpoint_store_disables_resume_instead_of_failing(monkeypatch):

@@ -26,6 +26,10 @@ provider:
     AUTH_JWE_ACTIVE_KID: ${ssm:/papert/${self:provider.stage}/core/jwe-active-kid}
     AUTH_JWE_KEYS: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/core/jwe-keys}
     DATABASE_URL: ${ssm:/papert/${self:provider.stage}/core/database-url, ''}
+    # Learner feedback scores; delivery stays pending while these are empty.
+    LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/core/langfuse-url, ''}
+    LANGFUSE_PUBLIC_KEY: ${ssm:/papert/${self:provider.stage}/core/langfuse-public-key, ''}
+    LANGFUSE_SECRET_KEY: ${ssm:/papert/${self:provider.stage}/core/langfuse-secret-key, ''}
   iam:
     role:
       statements:
@@ -112,6 +116,12 @@ functions:
     handler: dist/executions/infrastructure/handlers.maintenance
     events:
       - schedule: rate(1 minute)
+
+  # Delivers learner feedback to Langfuse when the immediate send failed.
+  feedbackMaintenance:
+    handler: dist/feedback/infrastructure/handlers.maintenance
+    events:
+      - schedule: rate(5 minutes)
 
   # Only the ingestion role may invoke this function via IAM.
   sourceControl:

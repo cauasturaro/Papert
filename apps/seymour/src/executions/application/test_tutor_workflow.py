@@ -99,3 +99,30 @@ def test_tutor_workflow_publishes_its_memory_outcome_and_forgets_the_checkpoint(
     assert final.memory == {"proposal": {"kind": "preference", "text": "Prefers short answers"}}
     store.load.assert_called_once_with("execution")
     store.delete.assert_called_once_with("execution")
+
+
+def test_total_model_failure_ends_the_execution_as_failed_not_as_a_turn(context, noop_trace):
+    from src.shared.domain.inference import ModelUnavailable
+
+    model = MagicMock()
+    model.complete.side_effect = ModelUnavailable("timeout", charged=2148)
+    runtime = ExecutionResources(model, noop_trace, lambda: 100.0)
+    control = MagicMock()
+    control.active.return_value = True
+    published = []
+    request = {
+        **context.model_dump(),
+        "prompt": "Help with validation",
+        "mode": "doubt",
+        "solutionAllowed": False,
+    }
+
+    run_tutor_job("execution", "lease", request, 8000, control, published.append, lambda _: runtime)
+
+    final = published[-1]
+
+    assert final.status == "failed"
+    assert final.tokens == 2148
+    assert "not responding" in final.text
+    assert final.grounding is None
+    assert final.memory is None

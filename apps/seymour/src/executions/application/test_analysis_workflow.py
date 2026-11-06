@@ -105,3 +105,35 @@ def test_worker_publishes_bound_evaluation_through_the_results_contract(
     assert final["evaluation"]["attemptId"] == ATTEMPT_ID
     assert "1 of 2 criteria met" in final["text"]
     assert "approved" not in final["text"].lower()
+
+
+def test_analysis_with_every_provider_down_fails_through_the_results_contract(
+    context, monkeypatch, noop_trace
+):
+    from src.shared.domain.inference import ModelUnavailable
+
+    lease = str(uuid4())
+    events = []
+    snapshot = {"kind": "analysis", "effort": "medium", **context.model_dump()}
+
+    model = MagicMock()
+    model.complete.side_effect = ModelUnavailable("rate_limited")
+    runtime = ExecutionResources(model, noop_trace, time.monotonic)
+    monkeypatch.setattr(
+        "src.executions.infrastructure.composition.evaluation_resources", lambda: runtime
+    )
+
+    def control(request):
+        if request["action"] == "claim":
+            return {"status": "running", "lease": lease, "input": snapshot, "budget": 8000}
+
+        return {"active": True}
+
+    run_job({"version": 1, "executionId": str(uuid4())}, control, events.append)
+
+    final = events[-1]
+
+    assert final["status"] == "failed"
+    assert final["tokens"] == 0
+    assert "evaluation" not in final or final["evaluation"] is None
+    assert "progress did not change" in final["text"]

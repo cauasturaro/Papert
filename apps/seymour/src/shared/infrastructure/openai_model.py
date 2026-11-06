@@ -2,22 +2,25 @@
 
 import time
 
-from httpx import Client
+import openai
+from httpx import Client, HTTPStatusError, Response, TimeoutException, TransportError
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 
-from src.shared.domain.inference import BudgetExceeded, Message, TutorCancelled
+from src.shared.domain.inference import (
+    BudgetExceeded,
+    Message,
+    ModelTask,
+    ModelUnavailable,
+    TutorCancelled,
+)
+from src.shared.infrastructure.generation import GenerationCall, GenerationObserver, GenerationUsage
 
 DEFAULT_MODEL = "gpt-5.4-nano-2026-03-17"
 # Output reservation per reasoning effort; roadmap generation passes larger limits.
 OUTPUT_LIMITS = {"low": 2048, "medium": 3072, "high": 4096}
-# Standard USD per million tokens: uncached input, cached input, output.
-MODEL_PRICES = {
-    "gpt-5-nano": (0.05, 0.005, 0.40),
-    "gpt-5-nano-2025-08-07": (0.05, 0.005, 0.40),
-    "gpt-5.4-nano": (0.20, 0.02, 1.25),
-    "gpt-5.4-nano-2026-03-17": (0.20, 0.02, 1.25),
-}
+# Generation-only fields; the count endpoint rejects routing fields such as the cache key.
+NOT_COUNTED = {"max_output_tokens", "store", "include", "stream", "prompt_cache_key"}
 
 
 class OpenAIModel:
@@ -25,10 +28,10 @@ class OpenAIModel:
         self,
         api_key: str,
         model: str,
-        generation_observer,
-        response_name: str,
-        response_schema: dict,
-        output_limits: dict[str, int] | None = None,
+        generation_observer: GenerationObserver,
+        task: ModelTask,
+        cache_key: str | None = None,
+        base_url: str = "https://api.openai.com/v1/",
     ):
         if not api_key.strip():
             raise ValueError("OPENAI_API_KEY is required")
@@ -37,9 +40,13 @@ class OpenAIModel:
         self.api_key = api_key
         self.model = model
         self.generation_observer = generation_observer
-        self.response_name = response_name
-        self.response_schema = response_schema
-        self.output_limits = output_limits or OUTPUT_LIMITS
+        self.task = task
+        self.response_name = task.name
+        self.response_schema = task.schema
+        self.output_limits = task.output_limits or OUTPUT_LIMITS
+        # Routes requests with the same stable prefix to the same provider cache.
+        self.cache_key = cache_key
+        self.base_url = base_url
 
     def complete(self, messages: list[Message], tools, effort, remaining, deadline, active):
         message_ids = {id(message) for message in messages}
@@ -55,8 +62,12 @@ class OpenAIModel:
                 response.read()
                 payload.update(response.json())
 
+        extra = {}
+        if self.cache_key is not None:
+            extra["prompt_cache_key"] = self.cache_key
+
         with Client(
-            base_url="https://api.openai.com/v1/",
+            base_url=self.base_url,
             headers={"Authorization": f"Bearer {self.api_key}"},
             trust_env=False,
             event_hooks={"response": [capture_response]},
@@ -64,7 +75,7 @@ class OpenAIModel:
             model = ChatOpenAI(
                 api_key=self.api_key,
                 model=self.model,
-                base_url="https://api.openai.com/v1/",
+                base_url=self.base_url,
                 http_client=client,
                 use_responses_api=True,
                 output_version="responses/v1",
@@ -76,6 +87,7 @@ class OpenAIModel:
                 truncation="disabled",
                 max_tokens=maximum_output,
                 model_kwargs={
+                    **extra,
                     "text": {
                         "format": {
                             "type": "json_schema",
@@ -83,7 +95,7 @@ class OpenAIModel:
                             "schema": self.response_schema,
                             "strict": True,
                         }
-                    }
+                    },
                 },
             )
             parameters = {
@@ -101,17 +113,23 @@ class OpenAIModel:
             }
             # shortcut: exact preflight needs the private serializer; check payload parity on upgrades.
             request = model._get_request_payload(provider_messages, **parameters)
-            count_request = {
-                key: value
-                for key, value in request.items()
-                if key not in {"max_output_tokens", "store", "include", "stream"}
-            }
-            count = client.post(
-                "responses/input_tokens",
-                json=count_request,
-                timeout=max(0.1, deadline - time.monotonic()),
-            )
-            count.raise_for_status()
+            count_request = {key: value for key, value in request.items() if key not in NOT_COUNTED}
+
+            # Counting is free, so its failures never charge the attempt.
+            try:
+                count = client.post(
+                    "responses/input_tokens",
+                    json=count_request,
+                    timeout=max(0.1, deadline - time.monotonic()),
+                )
+                count.raise_for_status()
+            except TimeoutException:
+                raise ModelUnavailable("timeout") from None
+            except HTTPStatusError as error:
+                raise _status_failure(error.response) from None
+            except TransportError:
+                raise ModelUnavailable("server_error") from None
+
             input_tokens = count.json().get("input_tokens")
             if type(input_tokens) is not int or input_tokens < 0:
                 raise RuntimeError("Invalid preflight token count")
@@ -122,15 +140,37 @@ class OpenAIModel:
             if time.monotonic() >= deadline:
                 raise TimeoutError("Tutor deadline reached before inference")
 
-            with self.generation_observer(
-                self.model, effort, input_tokens, maximum_output
-            ) as generation:
-                response = model.invoke(
-                    provider_messages,
-                    config={"callbacks": []},
-                    **parameters,
-                    timeout=max(0.1, deadline - time.monotonic()),
-                )
+            call = GenerationCall(
+                provider="openai",
+                model=self.model,
+                effort=effort,
+                input_tokens=input_tokens,
+                input_exact=True,
+                max_output=maximum_output,
+                prompt=self.task.prompt.id,
+                prompt_version=self.task.prompt.version,
+            )
+
+            with self.generation_observer(call) as generation:
+                try:
+                    response = model.invoke(
+                        provider_messages,
+                        config={"callbacks": []},
+                        **parameters,
+                        timeout=max(0.1, deadline - time.monotonic()),
+                    )
+                except openai.APITimeoutError:
+                    # The provider may still finish and bill a request the client abandoned.
+                    raise ModelUnavailable(
+                        "timeout", charged=input_tokens + maximum_output
+                    ) from None
+                except openai.APIStatusError as error:
+                    if error.status_code == 429 or error.status_code >= 500:
+                        raise _status_failure(error.response) from None
+                    raise
+                except openai.APIConnectionError:
+                    raise ModelUnavailable("server_error") from None
+
                 usage = payload.get("usage", {})
                 actual_input = usage.get("input_tokens")
                 actual_output = usage.get("output_tokens")
@@ -155,24 +195,7 @@ class OpenAIModel:
                 ):
                     raise RuntimeError("Inconsistent model usage")
 
-                generation.update(
-                    usage_details={
-                        "input": actual_input,
-                        "output": actual_output,
-                        "total": actual_input + actual_output,
-                        "cache_read_input_tokens": cached,
-                    }
-                )
-                prices = MODEL_PRICES.get(self.model)
-                if prices:
-                    input_price, cached_price, output_price = prices
-                    generation.update(
-                        cost_details={
-                            "input": ((actual_input - cached) * input_price + cached * cached_price)
-                            / 1_000_000,
-                            "output": actual_output * output_price / 1_000_000,
-                        }
-                    )
+                generation.usage(GenerationUsage(actual_input, actual_output, cached))
 
         if payload.get("status") != "completed":
             response = response.model_copy(update={"content": "", "tool_calls": []})
@@ -198,6 +221,27 @@ class OpenAIModel:
             )
 
         return AIMessage(content=message.content, tool_calls=message.tool_calls)
+
+
+def _status_failure(response: Response) -> Exception:
+    """429 and 5xx mean the provider is unavailable; other statuses are request errors."""
+    status = response.status_code
+
+    if status == 429:
+        return ModelUnavailable("rate_limited", retry_after=_retry_after(response))
+    if status >= 500:
+        return ModelUnavailable("server_error")
+
+    return RuntimeError(f"Model request rejected with status {status}")
+
+
+def _retry_after(response: Response) -> float | None:
+    value = response.headers.get("retry-after")
+
+    try:
+        return float(value) if value is not None else None
+    except ValueError:
+        return None
 
 
 def from_langchain(response: AIMessage) -> Message:

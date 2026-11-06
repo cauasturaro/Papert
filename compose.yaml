@@ -76,6 +76,10 @@ services:
       SESSIONS_TABLE: papert-sessions
       SOURCES_BUCKET: papert-sources
       SOURCES_PUBLIC_S3_ENDPOINT: http://localhost:4566
+      # Learner feedback is sent to the execution's Langfuse trace.
+      LANGFUSE_BASE_URL: http://langfuse-web:3000
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
     depends_on:
       floci:
         condition: service_healthy
@@ -128,6 +132,9 @@ services:
       SESSIONS_TABLE: papert-sessions
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.4-nano-2026-03-17}
+      # Optional fallback provider; leave the key empty to run on OpenAI only.
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-flash}
       SEYMOUR_DATABASE_URL: postgresql://seymour_user:${SEYMOUR_DB_PASSWORD:?Run make up}@localhost:7001/papert
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       LANGFUSE_BASE_URL: http://langfuse-web:3000

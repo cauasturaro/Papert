@@ -10,6 +10,7 @@
 *.pyc
 *.tsbuildinfo
 .DS_Store
+.codex
 
 # CodeGraph
 .codegraph/

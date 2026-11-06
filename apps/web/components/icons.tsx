@@ -220,6 +220,22 @@ export function PanelRightIcon(props: IconProps) {
   );
 }
 
+export function ThumbUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7 11v9H4v-9h3ZM7 11l4-7a2 2 0 0 1 2 2v4h5.5a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 17.3 20H7" />
+    </Icon>
+  );
+}
+
+export function ThumbDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M17 13V4h3v9h-3ZM17 13l-4 7a2 2 0 0 1-2-2v-4H5.5a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 6.7 4H17" />
+    </Icon>
+  );
+}
+
 export function FlagIcon(props: IconProps) {
   return (
     <Icon {...props}>

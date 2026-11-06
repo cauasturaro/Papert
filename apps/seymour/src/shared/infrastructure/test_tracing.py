@@ -70,3 +70,30 @@ def test_tool_names_are_limited_to_the_composed_allowlist(monkeypatch, name, exp
 
     assert result is tool_result
     client.start_as_current_observation.assert_called_once_with(name=expected, as_type="tool")
+
+
+def test_prompt_versions_and_fallback_values_survive_the_mask():
+    metadata = {
+        "prompt": "tutor.guidance",
+        "prompt_version": "sha:0123456789ab",
+        "provider": "deepseek",
+        "reason": "rate_limited",
+        "action": "switch",
+        "error": "ModelUnavailable",
+        "note": "sha:learner text",
+    }
+
+    masked = mask(metadata)
+
+    assert masked == {**metadata, "note": "[redacted]"}
+
+
+def test_cost_separates_cached_input_from_uncached_input():
+    from src.shared.infrastructure.generation import GenerationUsage, cost_details
+
+    cost = cost_details("gpt-5.4-nano-2026-03-17", GenerationUsage(input=100, output=10, cached=20))
+    unknown = cost_details("unpriced-model", GenerationUsage(input=1, output=1, cached=0))
+
+    assert cost["input"] == pytest.approx(0.0000164)
+    assert cost["output"] == pytest.approx(0.0000125)
+    assert unknown is None

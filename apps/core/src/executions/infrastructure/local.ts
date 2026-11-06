@@ -9,6 +9,7 @@ import {
   runWorker,
   startControlBridge,
 } from '../../common/infrastructure/local-runner.js';
+import { maintenance as feedbackMaintenance } from '../../feedback/infrastructure/handlers.js';
 import { maintenance, results, workerControl } from './handlers.js';
 
 // Local-only bridge: the production worker uses IAM Lambda invocation instead.
@@ -73,6 +74,11 @@ const sweep = setInterval(() => {
   void maintenance().catch(() =>
     console.warn('Local execution maintenance failed.'),
   );
+
+  // Local stand-in for the scheduled feedbackMaintenance function.
+  void feedbackMaintenance().catch(() =>
+    console.warn('Local feedback delivery failed.'),
+  );
 }, 60000);
 sweep.unref();
 console.info('Local execution runner ready.');
@@ -95,6 +101,9 @@ await Promise.all([
         LOCAL_CONTROL_SECRET: control.secret,
         OPENAI_API_KEY: process.env.OPENAI_API_KEY,
         OPENAI_MODEL: process.env.OPENAI_MODEL,
+        // The fallback provider is optional: unset keys keep Seymour on OpenAI only.
+        DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY,
+        DEEPSEEK_MODEL: process.env.DEEPSEEK_MODEL,
         // The tutor searches the learner's sources in Seymour's schema.
         SEYMOUR_DATABASE_URL: process.env.SEYMOUR_DATABASE_URL,
         EMBEDDING_MODEL: process.env.EMBEDDING_MODEL,

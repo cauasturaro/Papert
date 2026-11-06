@@ -19,7 +19,7 @@ Run commands from the repository root.
 make up
 ```
 
-Add `OPENAI_API_KEY` to the generated `.env`.
+Add `OPENAI_API_KEY` to the generated `.env`. Optionally add `DEEPSEEK_API_KEY` to enable the fallback model provider.
 
 ## Run everything
 

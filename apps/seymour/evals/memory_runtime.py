@@ -7,10 +7,10 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+from src.shared.infrastructure.models import model_name, provider_model, settings_from_env
 from src.shared.infrastructure.tracing import ExecutionTrace
-from src.tutor.application.guidance import Guidance, guidance_schema
-from src.tutor.application.summary import SUMMARY_OUTPUT_LIMITS, summary_schema
+from src.tutor.application.guidance import Guidance, guidance_task
+from src.tutor.application.summary import summary_task
 from src.tutor.application.tools import TOOL_ARGUMENTS
 from src.tutor.application.tutor import run_tutor
 from src.tutor.domain.context import TutorContext
@@ -39,19 +39,11 @@ class Runtime:
     def __init__(self):
         self.retries = 0
         self.trace = ExecutionTrace(TOOL_ARGUMENTS)
-        self.model_name = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
-        key = os.environ["OPENAI_API_KEY"]
-        self.tutor = OpenAIModel(
-            key, self.model_name, self.trace.generation, "tutor_guidance", guidance_schema()
-        )
-        self.summarizer = OpenAIModel(
-            key,
-            self.model_name,
-            self.trace.generation,
-            "conversation_summary",
-            summary_schema(),
-            SUMMARY_OUTPUT_LIMITS,
-        )
+        settings = settings_from_env()
+        provider = os.environ.get("EVAL_PROVIDER", "openai")
+        self.model_name = model_name(provider, settings)
+        self.tutor = provider_model(provider, guidance_task(), settings, self.trace)
+        self.summarizer = provider_model(provider, summary_task(), settings, self.trace)
 
     def ask(self, context, prompt, mode="doubt"):
         """Retries one provider failure (timeouts, 5xx); fallback itself is measured elsewhere."""

@@ -10,9 +10,12 @@ from src.shared.domain.inference import (
     BudgetExceeded,
     Message,
     Model,
+    ModelTask,
+    ModelUnavailable,
     TutorCancelled,
     final_text,
 )
+from src.shared.domain.prompts import PromptFamily
 from src.shared.domain.workspace import StrictModel
 from src.tutor.application.conversation import TURN_ANSWER_CHARACTERS, TURN_PROMPT_CHARACTERS
 from src.tutor.domain.context import TutorContext
@@ -49,11 +52,20 @@ SUMMARY_PROMPT = (
 )
 
 
+SUMMARY_PROMPTS = PromptFamily("conversation.summary", {"system": SUMMARY_PROMPT})
+
+
 def summary_schema() -> dict:
     schema = SummaryDraft.model_json_schema(mode="serialization")
     schema["required"] = list(schema["properties"])
 
     return schema
+
+
+def summary_task() -> ModelTask:
+    return ModelTask(
+        "conversation_summary", summary_schema(), SUMMARY_PROMPTS, SUMMARY_OUTPUT_LIMITS
+    )
 
 
 def _request(context: TutorContext) -> str:
@@ -102,6 +114,8 @@ def summarize(
     except (BudgetExceeded, TutorCancelled):
         # Cancellation is noticed again before the answer; the fallback keeps compaction bounded.
         return fallback, 0, True
+    except ModelUnavailable as failure:
+        return fallback, failure.charged, True
 
     usage = response.usage
     tokens = usage["total_tokens"] if usage else 0

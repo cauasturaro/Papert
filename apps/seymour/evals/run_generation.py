@@ -20,15 +20,12 @@ from uuid import uuid4
 
 from openai import OpenAI
 
-from src.executions.infrastructure.composition import (
-    GENERATION_OUTPUT_LIMITS,
-    GENERATION_SEARCH_LIMIT,
-)
+from src.executions.infrastructure.composition import GENERATION_SEARCH_LIMIT
 from src.retrieval.application.search import SourceSearch
 from src.retrieval.infrastructure.openai_embedder import DIMENSIONS, OpenAIQueryEmbedder
-from src.roadmap.application.generator import GENERATION_BUDGET, run_generation
-from src.roadmap.domain.roadmap import GenerationContext, ModelRoadmap
-from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+from src.roadmap.application.generator import GENERATION_BUDGET, roadmap_task, run_generation
+from src.roadmap.domain.roadmap import GenerationContext
+from src.shared.infrastructure.models import provider_model, settings_from_env
 from src.shared.infrastructure.tracing import ExecutionTrace
 
 EVALS = Path(__file__).parent
@@ -199,14 +196,9 @@ def main():
 
     client = OpenAI(max_retries=0, timeout=30)
     trace = ExecutionTrace()
-    model = OpenAIModel(
-        os.environ["OPENAI_API_KEY"],
-        os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
-        trace.generation,
-        "roadmap_draft",
-        ModelRoadmap.model_json_schema(),
-        GENERATION_OUTPUT_LIMITS,
-    )
+    settings = settings_from_env()
+    provider = os.environ.get("EVAL_PROVIDER", "openai")
+    model = provider_model(provider, roadmap_task(), settings, trace)
     results = []
 
     for case in cases:

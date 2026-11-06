@@ -10,7 +10,16 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import ValidationError
 
 from src.evaluation.domain.evaluation import AnalysisContext, Evaluation, ModelEvaluation, bind
-from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
+from src.shared.domain.inference import (
+    BudgetExceeded,
+    Message,
+    Model,
+    ModelTask,
+    ModelUnavailable,
+    TutorCancelled,
+    final_text,
+)
+from src.shared.domain.prompts import PromptFamily
 
 MAX_MODEL_CALLS = 2
 DEADLINE_SECONDS = 45
@@ -40,6 +49,17 @@ SYSTEM = (
     "The platform, not you, decides approval and progression. "
     "Return only a JSON object matching the response schema."
 )
+
+REPAIR = (
+    "The previous answer failed {problem} validation. Return the JSON object "
+    "again with every criterion id exactly once."
+)
+
+EVALUATION_PROMPTS = PromptFamily("evaluation.attempt", {"system": SYSTEM, "repair": REPAIR})
+
+
+def evaluation_task() -> ModelTask:
+    return ModelTask("attempt_evaluation", ModelEvaluation.model_json_schema(), EVALUATION_PROMPTS)
 
 
 class AnalysisState(TypedDict):
@@ -184,6 +204,12 @@ def run_analysis(
             return {"stopped": True, "reason": "cancelled"}
         except BudgetExceeded:
             return {"stopped": True, "reason": "budget"}
+        except ModelUnavailable as failure:
+            return {
+                "tokens": state["tokens"] + failure.charged,
+                "stopped": True,
+                "reason": "unavailable",
+            }
 
         usage = response.usage
         if not usage or usage["total_tokens"] > budget - state["tokens"]:
@@ -201,13 +227,7 @@ def run_analysis(
 
             # Only the validation category is echoed back, never learner content.
             problem = "schema" if isinstance(error, ValidationError) else "criteria"
-            repair = Message(
-                role="user",
-                content=(
-                    f"The previous answer failed {problem} validation. Return the JSON object "
-                    "again with every criterion id exactly once."
-                ),
-            )
+            repair = Message(role="user", content=REPAIR.format(problem=problem))
 
             return {
                 "messages": state["messages"] + [response, repair],

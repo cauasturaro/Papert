@@ -101,22 +101,27 @@ def run_tutor_job(
             {
                 "calls": result["calls"],
                 "tokens": result["tokens"],
+                "unavailable": result["unavailable"],
                 **grounding_measurements(sources),
                 **memory_measurements(snapshot, result),
             }
         )
 
-        publish(
-            Result(
-                execution_id,
-                lease,
-                100,
-                "completed",
-                result["text"],
-                result["tokens"],
-                grounding=sources,
-                memory=memory_outcome(result),
+        if result["unavailable"]:
+            # A terminal failure, not a turn: Core keeps it out of the conversation history.
+            publish(Result(execution_id, lease, 100, "failed", result["text"], result["tokens"]))
+        else:
+            publish(
+                Result(
+                    execution_id,
+                    lease,
+                    100,
+                    "completed",
+                    result["text"],
+                    result["tokens"],
+                    grounding=sources,
+                    memory=memory_outcome(result),
+                )
             )
-        )
 
     forget(store, execution_id)

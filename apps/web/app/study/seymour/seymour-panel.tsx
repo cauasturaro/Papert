@@ -21,6 +21,7 @@ import { ConversationBar } from "./conversation-bar";
 import { ConversationSummary } from "./conversation-summary";
 import { MemoryDialog } from "./memory-dialog";
 import { useConversations } from "./use-conversations";
+import { useAnswerFeedback } from "../feedback/use-answer-feedback";
 
 type SeymourPanelProps = {
   workspaceId: string;
@@ -45,6 +46,11 @@ export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
       conversations.adopt(execution.conversationId ?? null),
   });
   const hasConversation = seymour.history.length > 0 || !!seymour.execution;
+
+  const answered = [...seymour.history, seymour.execution].flatMap((job) =>
+    job?.status === "completed" ? [job.id] : [],
+  );
+  const feedback = useAnswerFeedback(answered);
 
   // A completed answer may have added a suggestion or a new conversation summary.
   const completedId =
@@ -105,11 +111,22 @@ export function SeymourPanel({ onCollapse, ...props }: SeymourPanelProps) {
         )}
 
         {seymour.history.map((job) => (
-          <ChatTurn key={job.id} execution={job} live={false} memory={memory} />
+          <ChatTurn
+            key={job.id}
+            execution={job}
+            live={false}
+            memory={memory}
+            feedback={feedback}
+          />
         ))}
 
         {seymour.execution && (
-          <ChatTurn execution={seymour.execution} live memory={memory} />
+          <ChatTurn
+            execution={seymour.execution}
+            live
+            memory={memory}
+            feedback={feedback}
+          />
         )}
 
         <p role="status" className="text-muted-foreground">

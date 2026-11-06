@@ -4,6 +4,7 @@ import { SourceModule } from './sources/source.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { CommunityModule } from './community/community.module.js';
 import { MemoryModule } from './memory/memory.module.js';
+import { FeedbackModule } from './feedback/feedback.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DatabaseModule } from './infrastructure/database/database.module.js';
@@ -22,6 +23,7 @@ import { AppService } from './app.service.js';
     SourceModule,
     CommunityModule,
     MemoryModule,
+    FeedbackModule,
   ],
   controllers: [AppController],
   providers: [AppService],

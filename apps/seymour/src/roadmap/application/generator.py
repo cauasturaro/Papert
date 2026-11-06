@@ -13,9 +13,17 @@ from src.retrieval.application.grounding import (
     cited_excerpts,
 )
 from src.retrieval.domain.ports import Search
-from src.roadmap.application.prompts import LEVELS, REPAIR, SYSTEM
+from src.roadmap.application.prompts import LEVELS, REPAIR, ROADMAP_PROMPTS, SYSTEM
 from src.roadmap.domain.roadmap import GenerationContext, ModelRoadmap, RoadmapRuleError, bind
-from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
+from src.shared.domain.inference import (
+    BudgetExceeded,
+    Message,
+    Model,
+    ModelTask,
+    ModelUnavailable,
+    TutorCancelled,
+    final_text,
+)
 
 GENERATION_BUDGET = 16000
 MAX_MODEL_CALLS = 2
@@ -24,6 +32,17 @@ DEADLINE_SECONDS = 50
 EXCERPTS_PER_SOURCE = 2
 MAX_EXCERPTS = 6
 EXCERPT_TOTAL_CHARACTERS = 7200
+# A five-step roadmap is about 3,000-4,000 output tokens plus reasoning.
+GENERATION_OUTPUT_LIMITS = {"low": 7000, "medium": 9000, "high": 10000}
+
+
+def roadmap_task() -> ModelTask:
+    return ModelTask(
+        "roadmap_draft",
+        ModelRoadmap.model_json_schema(),
+        ROADMAP_PROMPTS,
+        GENERATION_OUTPUT_LIMITS,
+    )
 
 
 class GenerationState(TypedDict):
@@ -154,6 +173,12 @@ def run_generation(
             return {"stopped": True, "reason": "budget"}
         except TimeoutError:
             return {"stopped": True, "reason": "deadline"}
+        except ModelUnavailable as failure:
+            return {
+                "tokens": state["tokens"] + failure.charged,
+                "stopped": True,
+                "reason": "unavailable",
+            }
 
         usage = response.usage
         if not usage or usage["total_tokens"] > budget - state["tokens"]:

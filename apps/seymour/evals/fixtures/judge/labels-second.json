@@ -1,0 +1,170 @@
+{
+  "labeler": "gpt-6.1-sol (independent second reviewer; not a human)",
+  "rubric": [
+    "specific",
+    "no_solution",
+    "progression"
+  ],
+  "labels": [
+    {
+      "item": 1,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null,
+      "reason": "The feedback cites startup validation and secret handling in the supplied files, and the single hint is a maintenance nudge without a finished solution."
+    },
+    {
+      "item": 2,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null,
+      "reason": "The feedback identifies the frozen config and concrete validation checks, while the single hint nudges safe future changes without supplying code."
+    },
+    {
+      "item": 3,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The first two hints narrow appropriately, but the final hint returns to broader advice.",
+      "reason": "The feedback pinpoints fractional PORT acceptance and offers an allowed API pointer, but the final hint reverses the increase in specificity."
+    },
+    {
+      "item": 4,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null,
+      "reason": "The feedback pinpoints the whitespace-token gap, and the hints advance from locating the condition to suggesting trimming without supplying corrected code."
+    },
+    {
+      "item": 5,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The second hint could be read as applying the first pointer to the offending export.",
+      "reason": "The feedback identifies the direct environment read and gives an allowed config.port pointer, but the hints repeat the remedy without increasing specificity."
+    },
+    {
+      "item": 6,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "Both hints concern missing names, so the annotation hint could be seen as a narrower follow-up.",
+      "reason": "The feedback names the injected Protocol and SQL return behavior, but the hints give separate missing-value suggestions rather than a clear increasing sequence."
+    },
+    {
+      "item": 7,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": null,
+      "reason": "The feedback cites the actual Protocol and memory adapter, but the hints address separate future concerns without a progression or a finished answer."
+    },
+    {
+      "item": 8,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The absent-key reminder could be read as a refinement of the implementation nudge.",
+      "reason": "The feedback identifies the unimplemented lookup, while the second hint repeats its contract and missing-key behavior without a more specific implementation pointer."
+    },
+    {
+      "item": 9,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "Removing the named import completes this small criterion, but naming what to change is explicitly allowed.",
+      "reason": "The feedback identifies sqlite3 in the domain and gives an allowed removal pointer, but subsequent hints become broader architectural reminders."
+    },
+    {
+      "item": 10,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The first pair progresses and the annotation is an allowed one-line pointer, but the optional final hint changes topic.",
+      "reason": "The feedback pinpoints the object annotation and supplies an allowed Names pointer, but the last hint breaks the sequence with a separate missing-value concern."
+    },
+    {
+      "item": 11,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The second hint mentions normalization, but develops a separate boundary responsibility.",
+      "reason": "The feedback cites the pure builder and concrete boundary checks, while the hints give parallel boundary-design reminders without increasing specificity."
+    },
+    {
+      "item": 12,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null,
+      "reason": "The feedback names the pure Python builder and route validation, and the hints advance from layer separation to a request-model pointer without supplying a solution."
+    },
+    {
+      "item": 13,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "Removing console.log completes the small purity fix, but naming what to change is explicitly allowed.",
+      "reason": "The feedback identifies the logging side effect and gives an allowed removal pointer, followed by more general layer-separation advice."
+    },
+    {
+      "item": 14,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": "The latter hints divide boundary responsibilities rather than strictly narrowing one fix.",
+      "reason": "The feedback identifies HTTP semantics in the domain, and the hints move from validated inputs to locating status mapping and concrete request checks without corrected code."
+    },
+    {
+      "item": 15,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null,
+      "reason": "The feedback names filesystem writes and time reads, and the hints progress from purity to relocating I/O and passing time explicitly without a complete implementation."
+    },
+    {
+      "item": 16,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null,
+      "reason": "The feedback cites the actual validation, error response and greeting, and its single architectural hint remains a nudge without supplying code."
+    },
+    {
+      "item": 17,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The missing-body hint is more concrete, but concerns a different issue from the first hint.",
+      "reason": "The feedback cites concrete validation and response construction, but the hints switch from layer separation to missing-body handling rather than developing one progression."
+    },
+    {
+      "item": 18,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "Trimming followed by validation consistency could be read as a coherent two-step nudge.",
+      "reason": "The feedback identifies whitespace passing the length check, but the hints move from a concrete trimming pointer to a more general consistency principle."
+    },
+    {
+      "item": 19,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The first two hints form a progression, but the final extraction suggestion is a separate architectural topic.",
+      "reason": "The feedback identifies FastAPI body-shape rejection and the hints initially narrow the issue, but the final hint leaves that sequence for general validation extraction."
+    },
+    {
+      "item": 20,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "The final response-shaping hint could be read as narrowing the preceding error-classification advice.",
+      "reason": "The feedback pinpoints unsafe trim usage and leaked error details, but the hints list parallel validation, status and response fixes rather than progressively narrowing one nudge."
+    }
+  ]
+}

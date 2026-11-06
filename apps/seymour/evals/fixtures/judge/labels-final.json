@@ -1,0 +1,287 @@
+{
+  "rule": "progression holds when the hints addressing the issue go from general to more specific; a trailing optional aside does not break it; a second hint about a different problem is not a refinement.",
+  "interLabelerAgreement": {
+    "specific": 1.0,
+    "no_solution": 1.0,
+    "progression": 0.65
+  },
+  "disagreements": [
+    {
+      "item": 3,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": true
+      },
+      "secondReason": "The feedback pinpoints fractional PORT acceptance and offers an allowed API pointer, but the final hint reverses the increase in specificity."
+    },
+    {
+      "item": 5,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": true
+      },
+      "secondReason": "The feedback identifies the direct environment read and gives an allowed config.port pointer, but the hints repeat the remedy without increasing specificity."
+    },
+    {
+      "item": 6,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": true
+      },
+      "secondReason": "The feedback names the injected Protocol and SQL return behavior, but the hints give separate missing-value suggestions rather than a clear increasing sequence."
+    },
+    {
+      "item": 10,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": true
+      },
+      "secondReason": "The feedback pinpoints the object annotation and supplies an allowed Names pointer, but the last hint breaks the sequence with a separate missing-value concern."
+    },
+    {
+      "item": 17,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": false
+      },
+      "secondReason": "The feedback cites concrete validation and response construction, but the hints switch from layer separation to missing-body handling rather than developing one progression."
+    },
+    {
+      "item": 19,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": true
+      },
+      "secondReason": "The feedback identifies FastAPI body-shape rejection and the hints initially narrow the issue, but the final hint leaves that sequence for general validation extraction."
+    },
+    {
+      "item": 20,
+      "items": [
+        "progression"
+      ],
+      "primary": {
+        "progression": true
+      },
+      "second": {
+        "progression": false
+      },
+      "final": {
+        "progression": true
+      },
+      "secondReason": "The feedback pinpoints unsafe trim usage and leaked error details, but the hints list parallel validation, status and response fixes rather than progressively narrowing one nudge."
+    }
+  ],
+  "labels": [
+    {
+      "item": 1,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 2,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 3,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 4,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 5,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 6,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 7,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 8,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 9,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 10,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 11,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 12,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 13,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 14,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 15,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 16,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 17,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 18,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 19,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 20,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 21,
+      "specific": false,
+      "no_solution": true,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 22,
+      "specific": false,
+      "no_solution": true,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 23,
+      "specific": false,
+      "no_solution": true,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 24,
+      "specific": true,
+      "no_solution": false,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 25,
+      "specific": true,
+      "no_solution": false,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 26,
+      "specific": true,
+      "no_solution": false,
+      "progression": false,
+      "synthetic": true
+    }
+  ],
+  "note": "Items 1-20 labeled by Claude Opus 5.5 and independently by GPT-6.1 Sol (no human labels, per the user's decision). Items 21-26 are synthetic negatives labeled by construction, not second-reviewed."
+}

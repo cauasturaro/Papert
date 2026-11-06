@@ -1,0 +1,150 @@
+{
+  "labeler": "claude-opus-5.5 (asked by the user to label; not a human)",
+  "rubric": [
+    "specific",
+    "no_solution",
+    "progression"
+  ],
+  "labels": [
+    {
+      "item": 1,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 2,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 3,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": "Number.isInteger names the exact fix; hints 1-2 progress, hint 3 is an aside"
+    },
+    {
+      "item": 4,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 5,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 6,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 7,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "two parallel general nudges on an approved attempt"
+    },
+    {
+      "item": 8,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "hint 1 is already specific and nearly the fix; hint 2 is a check"
+    },
+    {
+      "item": 9,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "specific hint first, general ones after"
+    },
+    {
+      "item": 10,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": "hint 2 states the one-line fix"
+    },
+    {
+      "item": 11,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "two general nudges"
+    },
+    {
+      "item": 12,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 13,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "'Remove the console.log' first, general after"
+    },
+    {
+      "item": 14,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 15,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 16,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 17,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 18,
+      "specific": true,
+      "no_solution": true,
+      "progression": false,
+      "borderline": "specific-ish first, more general second; feedback text inconsistent with the met status"
+    },
+    {
+      "item": 19,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    },
+    {
+      "item": 20,
+      "specific": true,
+      "no_solution": true,
+      "progression": true,
+      "borderline": null
+    }
+  ]
+}

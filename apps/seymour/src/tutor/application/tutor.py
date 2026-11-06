@@ -8,7 +8,14 @@ from langgraph.graph import END, START, StateGraph
 
 from src.retrieval.application.grounding import grounding
 from src.retrieval.domain.ports import Search
-from src.shared.domain.inference import BudgetExceeded, Message, Model, TutorCancelled, final_text
+from src.shared.domain.inference import (
+    BudgetExceeded,
+    Message,
+    Model,
+    ModelUnavailable,
+    TutorCancelled,
+    final_text,
+)
 from src.tutor.application.conversation import search_query
 from src.tutor.application.guidance import Guidance, render
 from src.tutor.application.guidance import grounding as answer_grounding
@@ -30,7 +37,14 @@ class State(TypedDict):
     grounding: dict | None
     # A filtered durable-note proposal from valid guidance.
     proposal: dict | None
+    # Every provider failed; the execution ends as failed instead of answering.
+    unavailable: bool
 
+
+UNAVAILABLE_TEXT = (
+    "Seymour's AI models are not responding right now. Nothing in your workspace changed, "
+    "and only the tokens the failed calls may have used were charged. Try again in a minute."
+)
 
 # Checkpoint steps: 1 after the summary, then 1 + calls after every tool round.
 SUMMARY_STEP = 1
@@ -175,6 +189,13 @@ def run_tutor(
                 "stopped": True,
                 "text": "Context exceeds this attempt's token budget. Narrow the selection or question.",
             }
+        except ModelUnavailable as failure:
+            return {
+                "tokens": state["tokens"] + failure.charged,
+                "stopped": True,
+                "text": UNAVAILABLE_TEXT,
+                "unavailable": True,
+            }
 
         usage = response.usage
         if not usage or usage["total_tokens"] > budget - state["tokens"]:
@@ -282,6 +303,7 @@ def run_tutor(
             "stopped": False,
             "grounding": None,
             "proposal": None,
+            "unavailable": False,
         },
         {"recursion_limit": 8, "callbacks": []},
     )

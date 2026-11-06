@@ -22,6 +22,9 @@ provider:
     SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url, ''}
     OPENAI_API_KEY: ${ssm:/papert/${self:provider.stage}/seymour/openai-api-key, ''}
     OPENAI_MODEL: ${env:OPENAI_MODEL, 'gpt-5.4-nano-2026-03-17'}
+    # Optional fallback provider; an empty key keeps Seymour on OpenAI only.
+    DEEPSEEK_API_KEY: ${ssm:/papert/${self:provider.stage}/seymour/deepseek-api-key, ''}
+    DEEPSEEK_MODEL: ${env:DEEPSEEK_MODEL, 'deepseek-flash'}
     # Must match the ingestion model: query and passage vectors share one space.
     EMBEDDING_MODEL: text-embedding-3-small
     LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-url, ''}

@@ -20,10 +20,11 @@ if TYPE_CHECKING:
 
 def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
     # Inference/retrieval SDK imports stay lazy so transport-only jobs avoid their cold start.
-    from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.shared.application.fallback_model import Route
+    from src.shared.infrastructure.models import model_for, settings_from_env
     from src.shared.infrastructure.tracing import ExecutionTrace
-    from src.tutor.application.guidance import guidance_schema
-    from src.tutor.application.summary import SUMMARY_OUTPUT_LIMITS, summary_schema
+    from src.tutor.application.guidance import guidance_task
+    from src.tutor.application.summary import summary_task
     from src.tutor.application.tools import TOOL_ARGUMENTS
 
     trace = ExecutionTrace(TOOL_ARGUMENTS)
@@ -45,24 +46,13 @@ def tutor_resources(snapshot: TutorContext) -> ExecutionResources:
         def search(query, document_ids):
             return searcher.search(query, document_ids, SEARCH_LIMIT)
 
-    model = OpenAIModel(
-        os.environ["OPENAI_API_KEY"],
-        os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
-        trace.generation,
-        "tutor_guidance",
-        guidance_schema(),
-    )
+    settings = settings_from_env()
+    route = Route()
+    model = model_for(guidance_task(), settings, trace, route)
 
     summarizer = None
     if snapshot.foldTurns:
-        summarizer = OpenAIModel(
-            os.environ["OPENAI_API_KEY"],
-            os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
-            trace.generation,
-            "conversation_summary",
-            summary_schema(),
-            SUMMARY_OUTPUT_LIMITS,
-        )
+        summarizer = model_for(summary_task(), settings, trace, route)
 
     return ExecutionResources(
         model,
@@ -92,30 +82,24 @@ def checkpoint_store():
 
 def evaluation_resources() -> ExecutionResources:
     # Evaluation SDKs and schemas are unnecessary for deterministic transport jobs.
-    from src.evaluation.domain.evaluation import ModelEvaluation
-    from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.evaluation.application.evaluator import evaluation_task
+    from src.shared.application.fallback_model import Route
+    from src.shared.infrastructure.models import model_for, settings_from_env
     from src.shared.infrastructure.tracing import ExecutionTrace
 
     trace = ExecutionTrace()
-    model = OpenAIModel(
-        os.environ["OPENAI_API_KEY"],
-        os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
-        trace.generation,
-        "attempt_evaluation",
-        ModelEvaluation.model_json_schema(),
-    )
+    model = model_for(evaluation_task(), settings_from_env(), trace, Route())
 
     return ExecutionResources(model, trace, time.monotonic)
 
 
-# A five-step roadmap is about 3,000-4,000 output tokens plus reasoning.
-GENERATION_OUTPUT_LIMITS = {"low": 7000, "medium": 9000, "high": 10000}
 GENERATION_SEARCH_LIMIT = 10
 
 
 def generation_resources(snapshot: GenerationContext) -> ExecutionResources:
-    from src.roadmap.domain.roadmap import ModelRoadmap
-    from src.shared.infrastructure.openai_model import DEFAULT_MODEL, OpenAIModel
+    from src.roadmap.application.generator import roadmap_task
+    from src.shared.application.fallback_model import Route
+    from src.shared.infrastructure.models import model_for, settings_from_env
     from src.shared.infrastructure.tracing import ExecutionTrace
 
     trace = ExecutionTrace()
@@ -136,14 +120,7 @@ def generation_resources(snapshot: GenerationContext) -> ExecutionResources:
         def search(query, document_ids):
             return searcher.search(query, document_ids, GENERATION_SEARCH_LIMIT)
 
-    model = OpenAIModel(
-        os.environ["OPENAI_API_KEY"],
-        os.environ.get("OPENAI_MODEL", DEFAULT_MODEL),
-        trace.generation,
-        "roadmap_draft",
-        ModelRoadmap.model_json_schema(),
-        GENERATION_OUTPUT_LIMITS,
-    )
+    model = model_for(roadmap_task(), settings_from_env(), trace, Route())
 
     return ExecutionResources(model, trace, time.monotonic, search)
 

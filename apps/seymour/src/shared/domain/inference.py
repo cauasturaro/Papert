@@ -4,6 +4,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, TypedDict
 
+from src.shared.domain.prompts import PromptFamily
+
+UnavailableReason = Literal["timeout", "rate_limited", "server_error"]
+
 
 class BudgetExceeded(Exception):
     pass
@@ -11,6 +15,26 @@ class BudgetExceeded(Exception):
 
 class TutorCancelled(Exception):
     pass
+
+
+class ModelUnavailable(Exception):
+    """No answer from the provider: timeout, rate limit, server error or lost connection.
+
+    `charged` bounds the tokens the failed call may have consumed (a timed-out request can
+    still be billed); rate-limit and server errors charge nothing.
+    """
+
+    def __init__(
+        self,
+        reason: UnavailableReason,
+        charged: int = 0,
+        retry_after: float | None = None,
+    ):
+        super().__init__(reason)
+
+        self.reason = reason
+        self.charged = charged
+        self.retry_after = retry_after
 
 
 class Usage(TypedDict):
@@ -33,6 +57,16 @@ class Message:
     usage: Usage | None = None
     tool_call_id: str | None = None
     name: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelTask:
+    """What a model call produces: response schema, prompt family and output reservations."""
+
+    name: str
+    schema: dict
+    prompt: PromptFamily
+    output_limits: dict[str, int] | None = None
 
 
 class Model(Protocol):

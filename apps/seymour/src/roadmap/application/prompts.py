@@ -1,5 +1,7 @@
 """Roadmap generation instructions. The goal and source excerpts are untrusted data."""
 
+from src.shared.domain.prompts import PromptFamily
+
 LEVELS = {
     "beginner": (
         "Beginner: assume little prior experience with this stack. Introduce one idea at a time, "
@@ -50,4 +52,13 @@ SYSTEM = (
 REPAIR = (
     "The previous roadmap was rejected: {problem} Produce the whole roadmap again, following "
     "every rule."
+)
+
+ROADMAP_PROMPTS = PromptFamily(
+    "roadmap.draft",
+    {
+        "system": SYSTEM,
+        "repair": REPAIR,
+        **{f"level.{level}": guidance for level, guidance in LEVELS.items()},
+    },
 )

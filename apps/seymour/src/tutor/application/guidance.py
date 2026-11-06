@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import Field
 
+from src.shared.domain.inference import ModelTask
+from src.tutor.application.prompts import TUTOR_PROMPTS
 from src.tutor.application.quotes import attributed_cites, extract_quote, quote_supports
 from src.tutor.domain.context import StrictModel
 
@@ -87,3 +89,7 @@ def guidance_schema() -> dict:
     schema["required"] = list(schema["properties"])
 
     return schema
+
+
+def guidance_task() -> ModelTask:
+    return ModelTask("tutor_guidance", guidance_schema(), TUTOR_PROMPTS)

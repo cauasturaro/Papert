@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge/badge";
 import { proposalFor } from "../../memory/memory-state";
 import type { MemoryActions } from "../../memory/use-memory";
 import type { Execution } from "../execution-state";
+import { AnswerFeedback } from "../feedback/answer-feedback";
+import type { AnswerFeedbackActions } from "../feedback/use-answer-feedback";
 import { AnswerSources } from "./answer-sources";
 import { MemoryProposal } from "./memory-proposal";
 
@@ -12,10 +14,12 @@ export function ChatTurn({
   execution,
   live,
   memory,
+  feedback,
 }: {
   execution: Execution;
   live: boolean;
   memory: MemoryActions;
+  feedback: AnswerFeedbackActions;
 }) {
   const proposal = proposalFor(memory.items.data, execution.id);
   const used = execution.memoryUsed ?? 0;
@@ -56,6 +60,14 @@ export function ChatTurn({
         )}
 
         {proposal && <MemoryProposal item={proposal} actions={memory} />}
+
+        {execution.status === "completed" && (
+          <AnswerFeedback
+            executionId={execution.id}
+            subject="answer"
+            actions={feedback}
+          />
+        )}
       </div>
     </>
   );

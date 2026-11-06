@@ -141,3 +141,32 @@ def test_failed_generation_completes_with_a_message_and_no_roadmap(noop_trace):
 
     assert published[-1].roadmap is None
     assert "Nothing was saved" in published[-1].text
+
+
+def test_generation_with_every_provider_down_fails_explicitly(noop_trace):
+    from src.shared.domain.inference import ModelUnavailable
+
+    model = MagicMock()
+    model.complete.side_effect = ModelUnavailable("server_error")
+    runtime = ExecutionResources(model, noop_trace, lambda: 0.0)
+    control = MagicMock()
+    control.active.return_value = True
+    published = []
+    snapshot = {"requestKey": str(uuid4()), "kind": "generation", **context().model_dump()}
+
+    run_generation_job(
+        "execution",
+        "lease",
+        snapshot,
+        GENERATION_BUDGET,
+        control,
+        published.append,
+        lambda _: runtime,
+    )
+
+    final = published[-1]
+
+    assert final.status == "failed"
+    assert final.roadmap is None
+    assert final.tokens == 0
+    assert "Nothing was saved" in final.text

@@ -7,6 +7,8 @@ import {
 } from "@/components/ui/alert/alert";
 import { Badge } from "@/components/ui/badge/badge";
 import { SyntaxDiagnostics } from "../attempt-feedback";
+import { AnswerFeedback } from "../feedback/answer-feedback";
+import { useAnswerFeedback } from "../feedback/use-answer-feedback";
 import type { useAnalysis } from "./use-analysis";
 
 type AnalysisPanelProps = {
@@ -16,6 +18,9 @@ type AnalysisPanelProps = {
 export function AnalysisPanel({ analysis }: AnalysisPanelProps) {
   const { execution, syntax, message, running } = analysis;
   const idle = !execution && !syntax && !message;
+
+  const completedId = execution?.status === "completed" ? execution.id : null;
+  const feedback = useAnswerFeedback(completedId ? [completedId] : []);
 
   return (
     <section
@@ -65,6 +70,14 @@ export function AnalysisPanel({ analysis }: AnalysisPanelProps) {
             <p className="whitespace-pre-wrap" aria-live="polite">
               {execution.text}
             </p>
+
+            {completedId && (
+              <AnswerFeedback
+                executionId={completedId}
+                subject="analysis"
+                actions={feedback}
+              />
+            )}
           </div>
         )}
       </div>

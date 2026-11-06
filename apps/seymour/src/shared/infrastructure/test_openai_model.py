@@ -7,11 +7,11 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
-from openai import APIStatusError
 
-from src.shared.domain.inference import Message
+from src.shared.domain.inference import Message, ModelUnavailable
+from src.shared.infrastructure.generation import GenerationUsage
 from src.shared.infrastructure.openai_model import OpenAIModel, from_langchain
-from src.tutor.application.guidance import guidance_schema
+from src.tutor.application.guidance import guidance_task
 from src.tutor.application.tools import tool_definitions
 from src.tutor.application.tutor import BudgetExceeded, TutorCancelled, run_tutor
 from src.tutor.domain.context import TutorContext
@@ -134,9 +134,7 @@ def test_openai_preflight_admits_input_and_output_before_generation(
         )
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5-nano-2025-08-07", generation, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5-nano-2025-08-07", generation, guidance_task())
 
     messages = [
         Message(role="system", content="Tutor policy"),
@@ -210,9 +208,7 @@ def test_langchain_preserves_encrypted_reasoning_and_tool_results(context, monke
         )
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5.4-nano-2026-03-17", generation, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", generation, guidance_task())
 
     result = run(context, model, effort="medium")
 
@@ -234,8 +230,8 @@ def test_langchain_preserves_encrypted_reasoning_and_tool_results(context, monke
     assert requests[2][1]["input"] == continuation["input"]
 
 
-@pytest.mark.parametrize("status", [429, 500])
-def test_langchain_does_not_retry_failed_generation(monkeypatch, status):
+@pytest.mark.parametrize("status, reason", [(429, "rate_limited"), (500, "server_error")])
+def test_langchain_does_not_retry_failed_generation(monkeypatch, status, reason):
     requests = []
 
     def handler(request):
@@ -246,13 +242,13 @@ def test_langchain_does_not_retry_failed_generation(monkeypatch, status):
         return httpx.Response(status, json={"error": {"message": "Unavailable"}})
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5.4-nano-2026-03-17", generation, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", generation, guidance_task())
 
-    with pytest.raises(APIStatusError):
+    with pytest.raises(ModelUnavailable) as failure:
         model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
 
+    assert failure.value.reason == reason
+    assert failure.value.charged == 0
     assert requests == ["/v1/responses/input_tokens", "/v1/responses"]
 
 
@@ -265,9 +261,7 @@ def test_openai_does_not_generate_when_input_plus_output_exceeds_budget(monkeypa
         return httpx.Response(200, json={"input_tokens": 8000})
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5-nano-2025-08-07", generation, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5-nano-2025-08-07", generation, guidance_task())
 
     with pytest.raises(BudgetExceeded):
         model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
@@ -284,9 +278,7 @@ def test_openai_rechecks_cancellation_after_counting_input(monkeypatch):
         return httpx.Response(200, json={"input_tokens": 100})
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5.4-nano-2026-03-17", generation, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", generation, guidance_task())
 
     with pytest.raises(TutorCancelled):
         model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: False)
@@ -319,9 +311,7 @@ def test_openai_rejects_inconsistent_usage_without_retrying_generation(monkeypat
         return httpx.Response(200, json=payload)
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5.4-nano-2026-03-17", generation, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", generation, guidance_task())
 
     with pytest.raises(RuntimeError, match="usage"):
         model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
@@ -329,7 +319,7 @@ def test_openai_rejects_inconsistent_usage_without_retrying_generation(monkeypat
     assert requests == ["/v1/responses/input_tokens", "/v1/responses"]
 
 
-def test_openai_cost_separates_cached_input_from_uncached_input(monkeypatch):
+def test_openai_reports_cached_input_separately(monkeypatch):
     span = MagicMock()
 
     @contextmanager
@@ -354,25 +344,19 @@ def test_openai_cost_separates_cached_input_from_uncached_input(monkeypatch):
         )
 
     mock_openai_transport(monkeypatch, handler)
-    model = OpenAIModel(
-        "test-key", "gpt-5.4-nano-2026-03-17", observe, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", observe, guidance_task())
 
     result = model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
-    cost = span.update.call_args.kwargs["cost_details"]
 
     assert result.usage["total_tokens"] == 110
-    assert cost["input"] == pytest.approx(0.0000164)
-    assert cost["output"] == pytest.approx(0.0000125)
+    span.usage.assert_called_once_with(GenerationUsage(input=100, output=10, cached=20))
 
 
 def test_openai_schema_preserves_the_previous_strict_guidance_schema(monkeypatch):
     fixture = Path(__file__).parents[3] / "tests/fixtures/guidance_schema.json"
     expected = json.loads(fixture.read_text())
     emitted = []
-    model = OpenAIModel(
-        "test-key", "gpt-5-nano", lambda *_: None, "tutor_guidance", guidance_schema()
-    )
+    model = OpenAIModel("test-key", "gpt-5-nano", lambda *_: None, guidance_task())
 
     def capture(**kwargs):
         emitted.append(kwargs["model_kwargs"]["text"]["format"]["schema"])
@@ -387,10 +371,78 @@ def test_openai_schema_preserves_the_previous_strict_guidance_schema(monkeypatch
 
 
 def test_openai_schema_preserves_evaluation_overrides():
+    from src.evaluation.application.evaluator import evaluation_task
     from src.evaluation.domain.evaluation import ModelEvaluation
 
     schema = ModelEvaluation.model_json_schema()
-    model = OpenAIModel("test-key", "gpt-5-nano", lambda *_: None, "attempt_evaluation", schema)
+    model = OpenAIModel("test-key", "gpt-5-nano", lambda *_: None, evaluation_task())
 
     assert model.response_schema == schema
     assert model.response_name == "attempt_evaluation"
+
+
+def test_openai_generation_timeout_charges_the_admitted_reservation(monkeypatch):
+    def handler(request):
+        if request.url.path.endswith("input_tokens"):
+            return httpx.Response(200, json={"input_tokens": 100})
+
+        raise httpx.ReadTimeout("slow", request=request)
+
+    mock_openai_transport(monkeypatch, handler)
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", generation, guidance_task())
+
+    with pytest.raises(ModelUnavailable) as failure:
+        model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
+
+    assert failure.value.reason == "timeout"
+    assert failure.value.charged == 100 + 2048
+
+
+def test_openai_count_failures_are_unavailable_and_free(monkeypatch):
+    def handler(request):
+        return httpx.Response(503, json={"error": {"message": "Overloaded"}})
+
+    mock_openai_transport(monkeypatch, handler)
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", generation, guidance_task())
+
+    with pytest.raises(ModelUnavailable) as failure:
+        model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
+
+    assert failure.value.reason == "server_error"
+    assert failure.value.charged == 0
+
+
+def test_openai_records_the_prompt_family_and_cache_key(monkeypatch):
+    calls = []
+    requests = []
+
+    @contextmanager
+    def observe(call):
+        calls.append(call)
+        yield MagicMock()
+
+    def handler(request):
+        requests.append(json.loads(request.content))
+        if request.url.path.endswith("input_tokens"):
+            return httpx.Response(200, json={"input_tokens": 10})
+
+        return httpx.Response(
+            200,
+            json={
+                "status": "completed",
+                "output": [],
+                "usage": {"input_tokens": 10, "output_tokens": 1},
+            },
+        )
+
+    mock_openai_transport(monkeypatch, handler)
+    task = guidance_task()
+    model = OpenAIModel("test-key", "gpt-5.4-nano-2026-03-17", observe, task, cache_key="tutor")
+
+    model.complete([], [], "low", 8000, time.monotonic() + 10, lambda: True)
+
+    assert calls[0].prompt == "tutor.guidance"
+    assert calls[0].prompt_version == task.prompt.version
+    assert calls[0].input_exact is True
+    assert "prompt_cache_key" not in requests[0]
+    assert requests[1]["prompt_cache_key"] == "tutor"

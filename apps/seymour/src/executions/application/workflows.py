@@ -46,10 +46,25 @@ def grounding_measurements(grounding: dict | None) -> dict:
     return {"sourceSupport": grounding["support"], "citations": cited}
 
 
+UNAVAILABLE_ANALYSIS = (
+    "Seymour's AI models are not responding right now. Your progress did not change; "
+    "analyze again in a minute."
+)
+UNAVAILABLE_GENERATION = (
+    "Seymour's AI models are not responding right now. Nothing was saved; try again in a minute."
+)
+
+
+def final_status(reason: str) -> str:
+    """Every provider failing ends the execution as failed, an explicit state for Core."""
+    return "failed" if reason == "unavailable" else "completed"
+
+
 ANALYSIS_MESSAGES = {
     "budget": "The saved files exceed this analysis budget. Reduce the workspace and analyze again.",
     "invalid": "Seymour could not produce a valid evaluation. Your progress did not change; analyze again.",
     "deadline": "The analysis time limit was reached. Your progress did not change; analyze again.",
+    "unavailable": UNAVAILABLE_ANALYSIS,
     "cancelled": "",
 }
 
@@ -106,13 +121,16 @@ def run_analysis_job(
             text = summary_text(result["evaluation"])
             evaluation = result["evaluation"].model_dump()
 
-        publish(Result(execution_id, lease, 100, "completed", text, result["tokens"], evaluation))
+        status = final_status(result["reason"])
+
+        publish(Result(execution_id, lease, 100, status, text, result["tokens"], evaluation))
 
 
 GENERATION_MESSAGES = {
     "budget": "The roadmap did not fit this generation budget. Shorten the goal and try again.",
     "invalid": "Seymour could not produce a valid roadmap. Nothing was saved; try again.",
     "deadline": "The generation time limit was reached. Nothing was saved; try again.",
+    "unavailable": UNAVAILABLE_GENERATION,
     "cancelled": "",
 }
 
@@ -177,7 +195,7 @@ def run_generation_job(
                 execution_id,
                 lease,
                 100,
-                "completed",
+                final_status(result["reason"]),
                 text,
                 result["tokens"],
                 roadmap=roadmap,
