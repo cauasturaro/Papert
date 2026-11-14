@@ -1,0 +1,496 @@
+{
+  "source": "evaluation-baseline.json run 1",
+  "promptVersion": "sha:0c11587bcd13",
+  "items": [
+    {
+      "item": 1,
+      "case": "fail-fast-edge-met",
+      "step": "config-validation",
+      "verdict": "approve",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !(Number.isFinite(port) && Math.floor(port) === port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken?.trim()) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Config = { port, apiToken: rawToken };\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = config.port;\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "In src/config.ts, environment variables are read and validated at module initialization and exported as a typed config object. src/main.ts only imports and consumes that config; it does not re-read process.env inside request functions or other modules.",
+        "fail-fast": "src/config.ts validates PORT as an integer in [1, 65535] (including rejecting blanks, non-numeric, fractional, and out-of-range values) and validates API_TOKEN as non-blank. Errors thrown before export/usage are clear and name the invalid field ('Invalid PORT' / 'Invalid API_TOKEN').",
+        "secret-safe": "No logging is present in src/config.ts or src/main.ts. Thrown errors only include static messages ('Invalid PORT' / 'Invalid API_TOKEN') and do not include API_TOKEN, its value, or any object containing it."
+      },
+      "hints": [
+        "Keep consuming code limited to the shared exported config (as you did) and avoid any future re-reading of process.env inside per-request paths."
+      ]
+    },
+    {
+      "item": 2,
+      "case": "startup-config-edge-met",
+      "step": "config-validation",
+      "verdict": "approve",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken?.trim()) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Readonly<Config> = Object.freeze( { port, apiToken: rawToken });\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = config.port;\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "In src/config.ts, environment variables are read and validated at module load time and then exported as a shared frozen typed object (config). src/main.ts only imports that config and does not re-read environment variables in request/runtime functions.",
+        "fail-fast": "src/config.ts rejects invalid PORT values (missing/blank, non-integer, fractional, out of [1,65535]) and rejects missing/blank API_TOKEN before exporting config. The thrown errors explicitly name the invalid fields (\"Invalid PORT\" / \"Invalid API_TOKEN\").",
+        "secret-safe": "No code logs API_TOKEN or includes it in thrown errors. The only thrown error strings in src/config.ts are field-name based (\"Invalid PORT\" / \"Invalid API_TOKEN\"), and there is no console/log usage in the provided files."
+      },
+      "hints": [
+        "If you extend this, keep validation confined to src/config.ts and ensure any future error handling never interpolates config.apiToken into messages."
+      ]
+    },
+    {
+      "item": 3,
+      "case": "fail-fast-edge-not-met",
+      "step": "config-validation",
+      "verdict": "reject",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isFinite(port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken?.trim()) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Config = { port, apiToken: rawToken };\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = config.port;\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "In src/config.ts, PORT and API_TOKEN are read from process.env at module load time and exported as a single typed config object (export const config). src/main.ts only imports and uses this shared object (import { config } from \"./config\"), with no additional env reads elsewhere.",
+        "fail-fast": "In src/config.ts, PORT is validated for presence, finiteness, and range (1..65535), but not for integer-ness. Using Number(rawPort) allows fractional values like \"3000.5\" to pass the current checks.",
+        "secret-safe": "In src/config.ts, API_TOKEN is never logged or included in error messages. The thrown errors are generic (\"Invalid PORT\" / \"Invalid API_TOKEN\"), and no object containing apiToken is printed."
+      },
+      "hints": [
+        "Update the PORT validation to ensure it is an integer (not just finite and in-range).",
+        "Consider using Number.isInteger(port) (or a regex-based numeric check) before comparing to 1..65535.",
+        "Keep the thrown error messages tied to the field name (e.g., \"Invalid PORT\") as you already do, but tighten the numeric rules."
+      ]
+    },
+    {
+      "item": 4,
+      "case": "config-blank-token-accepted",
+      "step": "config-validation",
+      "verdict": "reject",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Config = { port, apiToken: rawToken };\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = config.port;\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "In src/config.ts, environment variables are read and validated at module load time, and the exported const config is imported and reused by src/main.ts. No re-reading of process.env occurs inside request-style functions.",
+        "fail-fast": "In src/config.ts, API_TOKEN is validated with `if (!rawToken)`, which rejects empty string/undefined, but not a whitespace-only token (e.g., \"   \"). The criterion requires rejecting blank strings (including whitespace). PORT validation appears correct (integer + range).",
+        "secret-safe": "src/config.ts throws generic errors ('Invalid PORT' / 'Invalid API_TOKEN') without including API_TOKEN values, and neither file logs config/token contents."
+      },
+      "hints": [
+        "Focus on the API_TOKEN validation condition in src/config.ts—right now it only treats empty/undefined as invalid.",
+        "Update the check to treat whitespace-only strings as blank (e.g., by trimming before validation), while still throwing an error that names the invalid field."
+      ]
+    },
+    {
+      "item": 5,
+      "case": "config-consumer-rereads-port",
+      "step": "config-validation",
+      "verdict": "reject",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken?.trim()) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Config = { port, apiToken: rawToken };\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = Number(process.env.PORT);\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "In src/main.ts you read PORT directly via process.env.PORT (export const listeningPort = Number(process.env.PORT)), instead of consuming the validated config.port from src/config.ts. This violates the requirement that environment configuration is read only once at startup into a shared typed object.",
+        "fail-fast": "src/config.ts validates PORT and API_TOKEN during module startup: PORT is checked for presence, integer-ness, and range (1..65535), and API_TOKEN is checked as non-blank. On invalid values it throws an error before any consumers can proceed.",
+        "secret-safe": "No code in src/config.ts or src/main.ts logs API_TOKEN (or an object containing it), and thrown errors are generic (e.g., \"Invalid API_TOKEN\"), without including secret values."
+      },
+      "hints": [
+        "Use the validated config object everywhere (e.g., config.port) rather than calling process.env.* outside src/config.ts.",
+        "Remove or refactor exports in src/main.ts that depend on direct process.env access; derive them from src/config.ts to keep startup configuration centralized."
+      ]
+    },
+    {
+      "item": 6,
+      "case": "repository-sql-adapter",
+      "step": "repository-port",
+      "verdict": "approve",
+      "files": {
+        "app/domain.py": "from typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: Names):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/sql.py": "import sqlite3\nfrom .domain import Names\n\n\nclass SqlNames(Names):\n    def __init__(self, connection: sqlite3.Connection):\n        self.connection = connection\n\n    def lookup(self, key: str) -> str | None:\n        row = self.connection.execute(\"SELECT name FROM names WHERE id = ?\", (key,)).fetchone()\n\n        return row[0] if row else None\n"
+      },
+      "feedback": {
+        "repository-abstraction": "In app/domain.py, Greeter.__init__ accepts a Names Protocol instance (injected), and greet() calls self.names.lookup(key) rather than constructing a concrete adapter.",
+        "adapter-contract": "In app/sql.py, SqlNames implements the Names.lookup(self, key: str) -> str | None signature and returns row[0] when a record exists, otherwise returns None.",
+        "database-free-domain": "In app/domain.py, there are no imports of database libraries (no sqlite3 or related modules); only typing.Protocol is imported. The sqlite3 dependency is confined to app/sql.py."
+      },
+      "hints": [
+        "Check what should happen when Names.lookup returns None (e.g., raise a domain error, return a fallback, or change the return type).",
+        "Align the Greeter.greet() return type annotation with the repository contract (Names.lookup can be None)."
+      ]
+    },
+    {
+      "item": 7,
+      "case": "repository-memory-wired",
+      "step": "repository-port",
+      "verdict": "approve",
+      "files": {
+        "app/domain.py": "from typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: Names):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/memory.py": "from .domain import Names\n\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        return self.names.get(key)\n",
+        "app/main.py": "from .domain import Greeter\nfrom .memory import MemoryNames\n\ngreeter = Greeter(MemoryNames({\"one\": \"Ada\"}))\n"
+      },
+      "feedback": {
+        "repository-abstraction": "In app/domain.py, Greeter.__init__ accepts a repository typed as the Names Protocol and Greeter.greet calls self.names.lookup(key) rather than constructing any concrete adapter.",
+        "adapter-contract": "In app/memory.py, MemoryNames implements the Names.lookup signature (key: str) -> str | None and returns dict.get(key), which yields the stored name or None when absent.",
+        "database-free-domain": "In app/domain.py, the only import is from typing (Protocol). There are no database libraries or concrete adapter imports in the domain module."
+      },
+      "hints": [
+        "If you later add a SQL adapter, keep it out of app/domain.py and make it implement the same Names Protocol interface.",
+        "Consider how Greeter should behave when lookup returns None (e.g., validation or a default) if you plan to support missing keys."
+      ]
+    },
+    {
+      "item": 8,
+      "case": "repository-todo-adapter",
+      "step": "repository-port",
+      "verdict": "reject",
+      "files": {
+        "app/domain.py": "from typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: Names):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/memory.py": "from .domain import Names\n\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        # TODO: implement lookup\n        pass\n"
+      },
+      "feedback": {
+        "repository-abstraction": "In app/domain.py, Greeter accepts a dependency typed as the Names Protocol and calls self.names.lookup(key) rather than constructing any concrete adapter.",
+        "adapter-contract": "In app/memory.py, MemoryNames.lookup has the correct signature but is not implemented (it contains a TODO and returns pass). It does not return the stored name or None when absent.",
+        "database-free-domain": "In app/domain.py, the only import is typing (Protocol). There are no database-related imports in the domain module."
+      },
+      "hints": [
+        "Implement MemoryNames.lookup in app/memory.py to consult the internal dict and return the correct value (or None if the key is missing).",
+        "Verify that the lookup method matches the Protocol exactly: parameter type str and return type str | None, and ensure the absent-key case returns None."
+      ]
+    },
+    {
+      "item": 9,
+      "case": "database-free-domain-edge-not-met",
+      "step": "repository-port",
+      "verdict": "reject",
+      "files": {
+        "app/domain.py": "import sqlite3\n\nfrom typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: Names):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/memory.py": "from .domain import Names\n\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        return self.names.get(key)\n"
+      },
+      "feedback": {
+        "repository-abstraction": "In app/domain.py, Greeter is constructed with a Names Protocol (injected dependency) and uses self.names.lookup(key) rather than instantiating a concrete adapter.",
+        "adapter-contract": "In app/memory.py, MemoryNames implements the Names Protocol and defines lookup(self, key: str) -> str | None, returning self.names.get(key) (which yields the stored value or None).",
+        "database-free-domain": "In app/domain.py, sqlite3 is imported at the top of the module (import sqlite3). This keeps a database library in the domain layer, contrary to the criterion."
+      },
+      "hints": [
+        "Remove any database-related imports from the domain module (e.g., sqlite3 in app/domain.py).",
+        "Ensure only adapters (in other modules) import database libraries, while the domain depends solely on the Protocol/ABC.",
+        "Re-check that the domain file contains no direct/indirect database library usage through adapter imports."
+      ]
+    },
+    {
+      "item": 10,
+      "case": "repository-abstraction-edge-not-met",
+      "step": "repository-port",
+      "verdict": "reject",
+      "files": {
+        "app/domain.py": "from typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: object):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/memory.py": "from .domain import Names\n\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        return self.names.get(key)\n"
+      },
+      "feedback": {
+        "repository-abstraction": "In app/domain.py, Greeter.__init__ takes `names: object` rather than typing it as the `Names` Protocol (or an ABC). While greet calls `self.names.lookup(key)`, the dependency injection contract is not expressed via the declared Protocol type.",
+        "adapter-contract": "In app/memory.py, MemoryNames implements `Names` and defines `lookup(self, key: str) -> str | None` that returns `self.names.get(key)`, yielding the stored name or None when absent.",
+        "database-free-domain": "In app/domain.py, only `typing.Protocol` is imported. No database libraries are imported directly or via a concrete adapter import."
+      },
+      "hints": [
+        "General: Type the injected dependency with the Protocol/ABC you intend consumers to implement (not `object` or an untyped parameter).",
+        "More specific: In app/domain.py, change Greeter.__init__ to accept `names: Names` so the call to `names.lookup(...)` is backed by the declared interface.",
+        "Optional: Decide how `greet` should behave when the repository returns None and encode that explicitly in app/domain.py."
+      ]
+    },
+    {
+      "item": 11,
+      "case": "boundary-validation-edge-met",
+      "step": "separate-rules",
+      "verdict": "approve",
+      "files": {
+        "src/rules.ts": "export function buildGreeting(name: string): string {\n  return [\"Hello\", name].join(\", \") + \"!\";\n}\n",
+        "src/http.ts": "import { buildGreeting } from \"./rules\";\n\nexport function postGreeting(body: { name?: unknown }) {\n  const name = body.name;\n  if (typeof name !== \"string\" || !/\\S/.test(name)) {\n    return { status: 400, body: { error: \"Invalid name\" } };\n  }\n\n  return { status: 200, body: { greeting: buildGreeting(name.trim()) } };\n}\n"
+      },
+      "feedback": {
+        "pure-function": "In src/rules.ts, buildGreeting(name) only builds and returns a string using basic operations. It has no HTTP dependencies, side effects, or external calls.",
+        "boundary-validation": "In src/http.ts, postGreeting performs input validation (type check + non-whitespace check) and sets HTTP concerns (status and error/success body). buildGreeting is only called after validation."
+      },
+      "hints": [
+        "If you extend validation later, keep any additional status-code/body shaping in src/http.ts rather than moving it into src/rules.ts.",
+        "Prefer explicit normalization/constraints (e.g., trimming and defining what counts as valid) at the HTTP boundary so the rules function stays purely computational."
+      ]
+    },
+    {
+      "item": 12,
+      "case": "python-layers-correct",
+      "step": "separate-rules",
+      "verdict": "approve",
+      "files": {
+        "app/rules.py": "def build_greeting(name: str) -> str:\n    return f\"Hello, {name}!\"\n",
+        "app/api.py": "from fastapi import APIRouter\nfrom fastapi.responses import JSONResponse\n\nfrom .rules import build_greeting\n\nrouter = APIRouter()\n\n\n@router.post(\"/greetings\")\nasync def greetings(payload: dict):\n    name = payload.get(\"name\")\n    if not isinstance(name, str) or not name.strip():\n        return JSONResponse(status_code=400, content={\"message\": \"Invalid name.\"})\n\n    return {\"greeting\": build_greeting(name.strip())}\n"
+      },
+      "feedback": {
+        "pure-function": "In app/rules.py, build_greeting(name: str) builds the greeting via string formatting and has no imports, side effects, or HTTP/IO dependencies.",
+        "boundary-validation": "In app/api.py, request validation (checking name is a non-empty string) and the 400 status code are handled inside the FastAPI route. app/rules.py contains only the greeting construction and is not responsible for HTTP concerns."
+      },
+      "hints": [
+        "General: Keep all HTTP-specific behavior (status codes, response shaping) inside the API layer, and ensure rules/functions remain pure.",
+        "More specific: If you want stronger boundary validation, introduce an explicit request schema/model for the endpoint and map its validation errors to HTTP responses in app/api.py."
+      ]
+    },
+    {
+      "item": 13,
+      "case": "pure-function-edge-not-met",
+      "step": "separate-rules",
+      "verdict": "reject",
+      "files": {
+        "src/rules.ts": "export function buildGreeting(name: string): string {\n  console.log(name);\n\n  return [\"Hello\", name].join(\", \") + \"!\";\n}\n",
+        "src/http.ts": "import { buildGreeting } from \"./rules\";\n\nexport function postGreeting(body: { name?: unknown }) {\n  const name = body.name;\n  if (typeof name !== \"string\" || !name.trim()) {\n    return { status: 400, body: { error: \"Invalid name\" } };\n  }\n\n  return { status: 200, body: { greeting: buildGreeting(name.trim()) } };\n}\n"
+      },
+      "feedback": {
+        "pure-function": "In src/rules.ts, buildGreeting includes a side effect (console.log(name);). A pure function should not perform I/O or other observable effects.",
+        "boundary-validation": "In src/http.ts, postGreeting performs request validation (type/empty checks) and sets HTTP-like status codes (400 for invalid input, 200 for valid input). buildGreeting is called only after validation succeeds."
+      },
+      "hints": [
+        "Remove the console.log from src/rules.ts so buildGreeting has no observable side effects.",
+        "Keep any request-shape/type checking and status-code decisions inside src/http.ts, and ensure src/rules.ts only transforms inputs to outputs."
+      ]
+    },
+    {
+      "item": 14,
+      "case": "validation-in-domain",
+      "step": "separate-rules",
+      "verdict": "reject",
+      "files": {
+        "src/domain/greeting.ts": "export class HttpError extends Error {\n  constructor(public readonly status: number, message: string) {\n    super(message);\n  }\n}\n\nexport function buildGreeting(name: unknown): string {\n  if (typeof name !== \"string\" || name.trim() === \"\") {\n    throw new HttpError(400, \"Invalid name.\");\n  }\n\n  return `Hello, ${name}!`;\n}\n",
+        "src/http/greetings.ts": "import type { Request, Response } from \"express\";\nimport { buildGreeting, HttpError } from \"../domain/greeting\";\n\nexport function postGreeting(req: Request, res: Response) {\n  try {\n    res.json({ greeting: buildGreeting(req.body?.name) });\n  } catch (error) {\n    if (error instanceof HttpError) {\n      res.status(error.status).json({ message: error.message });\n      return;\n    }\n\n    throw error;\n  }\n}\n"
+      },
+      "feedback": {
+        "pure-function": "In src/domain/greeting.ts, buildGreeting(name) throws HttpError(400, ...), embedding HTTP status-code semantics into the domain layer. That means the greeting construction is not purely HTTP-independent (even if there are no side effects).",
+        "boundary-validation": "In src/http/greetings.ts, the HTTP handler postGreeting only catches HttpError, but the actual request validation and the status code (400) are implemented inside src/domain/greeting.ts via buildGreeting throwing HttpError. Validation/status handling is therefore not confined to the HTTP boundary."
+      },
+      "hints": [
+        "First, make the greeting-building function accept validated inputs (e.g., already-checked name) and ensure it doesn’t decide HTTP status codes.",
+        "Move the HTTP status code mapping back into src/http/greetings.ts (where req/res objects live), and have the domain layer report only domain-level failures (e.g., a plain Error or a structured domain result).",
+        "Ensure the HTTP handler performs the request-specific checks (missing/blank name) and then calls the pure builder with a proper string."
+      ]
+    },
+    {
+      "item": 15,
+      "case": "impure-greeting",
+      "step": "separate-rules",
+      "verdict": "reject",
+      "files": {
+        "src/domain/greeting.ts": "import { appendFileSync } from \"node:fs\";\n\nexport function buildGreeting(name: string): string {\n  appendFileSync(\"greetings.log\", `${new Date().toISOString()} ${name}\\n`);\n\n  return `Hello, ${name}! It is ${new Date().toLocaleTimeString()}.`;\n}\n",
+        "src/http/greetings.ts": "import type { Request, Response } from \"express\";\nimport { buildGreeting } from \"../domain/greeting\";\n\nexport function postGreeting(req: Request, res: Response) {\n  const name = req.body?.name;\n\n  if (typeof name !== \"string\" || name.trim() === \"\") {\n    res.status(400).json({ message: \"Invalid name.\" });\n    return;\n  }\n\n  res.json({ greeting: buildGreeting(name) });\n}\n"
+      },
+      "feedback": {
+        "pure-function": "In src/domain/greeting.ts, buildGreeting(name) calls appendFileSync(...) (node:fs) and reads system time (new Date().toISOString()/toLocaleTimeString()). That introduces side effects and HTTP-independent behavior is broken by filesystem access, so it is not a pure function.",
+        "boundary-validation": "In src/http/greetings.ts, input validation (typeof name, trim/empty check) and the 400 status code with JSON error response are handled inside the Express boundary (postGreeting). The HTTP handler then returns the greeting payload."
+      },
+      "hints": [
+        "First, ensure the domain function only transforms inputs to outputs (no fs calls, no Express types, no request/response objects).",
+        "Then, move any logging/IO out of src/domain/greeting.ts into the HTTP layer or a separate infrastructure module.",
+        "If you need the current time in the greeting, consider injecting a time value into buildGreeting (or computing it at the HTTP boundary) so the domain stays deterministic."
+      ]
+    },
+    {
+      "item": 16,
+      "case": "express-correct",
+      "step": "validate-input",
+      "verdict": "approve",
+      "files": {
+        "src/service.ts": "import express from \"express\";\n\nexport const app = express();\napp.use(express.json());\n\napp.post(\"/greetings\", (req, res) => {\n  const name = req.body?.name;\n\n  if (typeof name !== \"string\" || name.trim() === \"\") {\n    res.status(400).json({ message: \"name must be a non-empty string\" });\n    return;\n  }\n\n  res.status(200).json({ greeting: `Hello, ${name.trim()}!` });\n});\n"
+      },
+      "feedback": {
+        "valid-name": "In src/service.ts, app.post('/greetings') extracts name from req.body?.name and rejects it when typeof name !== 'string' or when name.trim() === ''. This covers missing, empty, and non-string values.",
+        "http-errors": "In src/service.ts, invalid input results in res.status(400).json({ message: 'name must be a non-empty string' }) and returns immediately, without exposing stack traces or other internal details.",
+        "greeting": "In src/service.ts, after validation the endpoint responds with greeting: `Hello, ${name.trim()}!`, so the greeting includes the validated name value."
+      },
+      "hints": [
+        "If you later need to separate business rules from HTTP, consider moving the name-validation logic into a dedicated function/module and let the route handler only handle HTTP concerns (parsing and status codes)."
+      ]
+    },
+    {
+      "item": 17,
+      "case": "greeting-edge-met",
+      "step": "validate-input",
+      "verdict": "approve",
+      "files": {
+        "src/service.ts": "export function postGreeting(body: { name?: unknown }) {\n  const name = body.name;\n  if (typeof name !== \"string\" || !name.trim()) {\n    return { status: 400, body: { error: \"Invalid name\" } };\n  }\n\n  return { status: 200, body: { greeting: [\"Hello\", name.trim()].join(\" \") } };\n}\n"
+      },
+      "feedback": {
+        "valid-name": "src/service.ts checks that body.name is a string and rejects missing/empty/whitespace-only values via typeof name !== \"string\" or !name.trim(). Non-string values are also rejected.",
+        "http-errors": "src/service.ts returns { status: 400, body: { error: \"Invalid name\" } } on invalid input, which avoids exposing internal details.",
+        "greeting": "src/service.ts returns { status: 200, body: { greeting: ... } } and includes the validated, trimmed name (name.trim()) in the greeting string."
+      },
+      "hints": [
+        "Keep the business-rule validation logic independent from HTTP response formatting so the HTTP layer can translate validation results into status codes.",
+        "Make postGreeting resilient to a missing request body (e.g., validate body existence before reading body.name) to ensure invalid requests consistently return 400."
+      ]
+    },
+    {
+      "item": 18,
+      "case": "valid-name-edge-not-met",
+      "step": "validate-input",
+      "verdict": "reject",
+      "files": {
+        "src/service.ts": "export function postGreeting(body: { name?: unknown }) {\n  const name = body.name;\n  if (typeof name !== \"string\" || name.length === 0) {\n    return { status: 400, body: { error: \"Invalid name\" } };\n  }\n\n  return { status: 200, body: { greeting: `Hello, ${name.trim()}!` } };\n}\n"
+      },
+      "feedback": {
+        "valid-name": "In src/service.ts, postGreeting checks `typeof name !== \"string\" || name.length === 0`, which rejects missing values (undefined), empty strings, and non-string types.",
+        "http-errors": "In src/service.ts, invalid input returns `{ status: 400, body: { error: \"Invalid name\" } }` with no stack traces or internal implementation details.",
+        "greeting": "In src/service.ts, validation checks `name.length === 0` before trimming, but the returned greeting uses `name.trim()`. A whitespace-only string (e.g., \"  \") is not rejected (length > 0) yet trims to an empty string in the greeting."
+      },
+      "hints": [
+        "Consider normalizing the input (e.g., trimming) before performing the non-empty check.",
+        "Ensure the value used to build the greeting is the same value you validate."
+      ]
+    },
+    {
+      "item": 19,
+      "case": "python-fastapi-correct",
+      "step": "validate-input",
+      "verdict": "reject",
+      "files": {
+        "app/main.py": "from fastapi import FastAPI\nfrom fastapi.responses import JSONResponse\n\napp = FastAPI()\n\n\n@app.post(\"/greetings\")\nasync def greetings(payload: dict):\n    name = payload.get(\"name\")\n    if not isinstance(name, str) or not name.strip():\n        return JSONResponse(status_code=400, content={\"message\": \"Invalid name.\"})\n\n    return {\"greeting\": f\"Hello, {name.strip()}!\"}\n"
+      },
+      "feedback": {
+        "valid-name": "In app/main.py, greetings() extracts payload['name'] and checks both type (must be str) and non-emptiness after stripping, returning 400 when name is missing, empty/whitespace, or not a string.",
+        "http-errors": "In app/main.py, the handler signature `payload: dict` delegates request-body shape validation to FastAPI. If the client sends a non-object JSON body (e.g., a list/string), FastAPI will typically return 422 before your code runs, so invalid inputs are not reliably mapped to HTTP 400.",
+        "greeting": "In app/main.py, the response greeting uses the validated value via `name.strip()` and includes it in `Hello, {name.strip()}!`."
+      },
+      "hints": [
+        "Look at how FastAPI handles type annotations for the request body—your code runs only after FastAPI accepts the payload shape.",
+        "Adjust the endpoint’s input contract (or add an explicit fallback) so that all invalid inputs (including non-object JSON bodies) consistently produce 400.",
+        "Consider extracting the name validation into a pure function so the HTTP layer only translates validation results into responses."
+      ]
+    },
+    {
+      "item": 20,
+      "case": "leaks-internals",
+      "step": "validate-input",
+      "verdict": "reject",
+      "files": {
+        "src/service.ts": "import express from \"express\";\n\nexport const app = express();\napp.use(express.json());\n\napp.post(\"/greetings\", (req, res) => {\n  try {\n    const name: string = req.body.name.trim();\n    if (name.length === 0) {\n      throw new Error(`Empty name from ${req.ip} in ${__filename}`);\n    }\n\n    res.json({ greeting: `Hello, ${name}!` });\n  } catch (error) {\n    res.status(500).json({ error: String(error), stack: (error as Error).stack });\n  }\n});\n"
+      },
+      "feedback": {
+        "valid-name": "In src/service.ts, the code does `const name: string = req.body.name.trim();` without checking that `req.body.name` exists and is a string. Missing `name` or non-string values will throw before reaching the empty-name check, and those cases are not rejected as invalid inputs.",
+        "http-errors": "In src/service.ts, the catch block returns `res.status(500)` and responds with `{ error: String(error), stack: ... }`. This both uses the wrong status for client input errors and exposes internal details (stack trace and error content) in the response.",
+        "greeting": "In src/service.ts, when `name.trim()` succeeds and is non-empty, the handler responds with `res.json({ greeting: `Hello, ${name}!` })`, which includes the validated (trimmed) name in the greeting."
+      },
+      "hints": [
+        "General: Add explicit type/emptiness checks for `req.body.name` before calling any string methods like `.trim()`.",
+        "More specific: Differentiate client-input validation failures from unexpected server errors so you can return HTTP 400 for invalid input while reserving 500 for true internal failures.",
+        "More specific: In your error response, avoid returning stack traces or raw error strings to the client; return a generic message for 400 responses."
+      ]
+    },
+    {
+      "item": 21,
+      "case": "config-blank-token-accepted",
+      "step": "config-validation",
+      "verdict": "reject",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Config = { port, apiToken: rawToken };\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = config.port;\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "Good structure overall.",
+        "fail-fast": "Validation could be improved.",
+        "secret-safe": "Looks fine."
+      },
+      "hints": [
+        "Review your code carefully.",
+        "Think about edge cases."
+      ],
+      "synthetic": "generic"
+    },
+    {
+      "item": 22,
+      "case": "repository-todo-adapter",
+      "step": "repository-port",
+      "verdict": "reject",
+      "files": {
+        "app/domain.py": "from typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: Names):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/memory.py": "from .domain import Names\n\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        # TODO: implement lookup\n        pass\n"
+      },
+      "feedback": {
+        "repository-abstraction": "Nice use of abstractions.",
+        "adapter-contract": "Some parts are incomplete.",
+        "database-free-domain": "Fine."
+      },
+      "hints": [
+        "Make sure everything is implemented.",
+        "Follow best practices."
+      ],
+      "synthetic": "generic"
+    },
+    {
+      "item": 23,
+      "case": "pure-function-edge-not-met",
+      "step": "separate-rules",
+      "verdict": "reject",
+      "files": {
+        "src/rules.ts": "export function buildGreeting(name: string): string {\n  console.log(name);\n\n  return [\"Hello\", name].join(\", \") + \"!\";\n}\n",
+        "src/http.ts": "import { buildGreeting } from \"./rules\";\n\nexport function postGreeting(body: { name?: unknown }) {\n  const name = body.name;\n  if (typeof name !== \"string\" || !name.trim()) {\n    return { status: 400, body: { error: \"Invalid name\" } };\n  }\n\n  return { status: 200, body: { greeting: buildGreeting(name.trim()) } };\n}\n"
+      },
+      "feedback": {
+        "pure-function": "There may be an issue with purity.",
+        "boundary-validation": "Validation is handled."
+      },
+      "hints": [
+        "Keep functions pure."
+      ],
+      "synthetic": "generic"
+    },
+    {
+      "item": 24,
+      "case": "config-blank-token-accepted",
+      "step": "config-validation",
+      "verdict": "reject",
+      "files": {
+        "src/config.ts": "type Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) {\n  throw new Error(\"Invalid PORT\");\n}\nif (!rawToken) {\n  throw new Error(\"Invalid API_TOKEN\");\n}\n\nexport const config: Config = { port, apiToken: rawToken };\n",
+        "src/main.ts": "import { config } from \"./config\";\n\nexport const listeningPort = config.port;\nexport function token() {\n  return config.apiToken;\n}\n"
+      },
+      "feedback": {
+        "startup-config": "src/config.ts reads the environment once and exports config.",
+        "fail-fast": "src/config.ts uses `if (!rawToken)`, which accepts a whitespace-only API_TOKEN.",
+        "secret-safe": "No secret is logged."
+      },
+      "hints": [
+        "Replace src/config.ts with:\ntype Config = { port: number; apiToken: string };\nconst rawPort = process.env.PORT;\nconst rawToken = process.env.API_TOKEN;\nconst port = Number(rawPort);\nif (!rawPort?.trim() || !Number.isInteger(port) || port < 1 || port > 65535) { throw new Error(\"Invalid PORT\"); }\nif (!rawToken?.trim()) { throw new Error(\"Invalid API_TOKEN\"); }\nexport const config: Config = { port, apiToken: rawToken };"
+      ],
+      "synthetic": "full_solution"
+    },
+    {
+      "item": 25,
+      "case": "repository-todo-adapter",
+      "step": "repository-port",
+      "verdict": "reject",
+      "files": {
+        "app/domain.py": "from typing import Protocol\n\n\nclass Names(Protocol):\n    def lookup(self, key: str) -> str | None: ...\n\n\nclass Greeter:\n    def __init__(self, names: Names):\n        self.names = names\n\n    def greet(self, key: str) -> str:\n        name = self.names.lookup(key)\n\n        return f\"Hello, {name}!\"\n",
+        "app/memory.py": "from .domain import Names\n\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        # TODO: implement lookup\n        pass\n"
+      },
+      "feedback": {
+        "repository-abstraction": "app/domain.py injects the Names Protocol.",
+        "adapter-contract": "MemoryNames.lookup in app/memory.py is a TODO with `pass`.",
+        "database-free-domain": "app/domain.py imports only typing."
+      },
+      "hints": [
+        "Here is the finished app/memory.py:\nfrom .domain import Names\n\nclass MemoryNames(Names):\n    def __init__(self, names: dict[str, str]):\n        self.names = names\n\n    def lookup(self, key: str) -> str | None:\n        return self.names.get(key)"
+      ],
+      "synthetic": "full_solution"
+    },
+    {
+      "item": 26,
+      "case": "pure-function-edge-not-met",
+      "step": "separate-rules",
+      "verdict": "reject",
+      "files": {
+        "src/rules.ts": "export function buildGreeting(name: string): string {\n  console.log(name);\n\n  return [\"Hello\", name].join(\", \") + \"!\";\n}\n",
+        "src/http.ts": "import { buildGreeting } from \"./rules\";\n\nexport function postGreeting(body: { name?: unknown }) {\n  const name = body.name;\n  if (typeof name !== \"string\" || !name.trim()) {\n    return { status: 400, body: { error: \"Invalid name\" } };\n  }\n\n  return { status: 200, body: { greeting: buildGreeting(name.trim()) } };\n}\n"
+      },
+      "feedback": {
+        "pure-function": "src/rules.ts calls console.log(name) inside buildGreeting.",
+        "boundary-validation": "src/http.ts validates and sets the status codes."
+      },
+      "hints": [
+        "Use this exact src/rules.ts:\nexport function buildGreeting(name: string): string {\n  return [\"Hello\", name].join(\", \") + \"!\";\n}\nand keep src/http.ts unchanged."
+      ],
+      "synthetic": "full_solution"
+    }
+  ],
+  "note": "Items 1-20: real baseline outputs. Items 21-26: synthetic negatives (generic feedback; feedback that hands over the solution) added so specific/no_solution have both classes."
+}

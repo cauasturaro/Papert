@@ -1,0 +1,49 @@
+{
+  "valid": [
+    {
+      "name": "reindex",
+      "payload": {
+        "messageId": "message-1",
+        "body": "{\"PapertReindex\":{\"documentId\":\"11111111-1111-4111-8111-111111111111\"}}",
+        "attributes": {
+          "ApproximateReceiveCount": "2"
+        }
+      },
+      "decoded": {
+        "receive_count": 2,
+        "document_id": "11111111-1111-4111-8111-111111111111",
+        "job_id": "message-1"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "invalid-id",
+      "payload": {
+        "messageId": "message-1",
+        "body": "{\"PapertReindex\":{\"documentId\":\"invalid\"}}",
+        "attributes": {
+          "ApproximateReceiveCount": "2"
+        }
+      },
+      "rejection": {
+        "service": "ingestion",
+        "exception": "ValueError"
+      }
+    },
+    {
+      "name": "missing-id",
+      "payload": {
+        "messageId": "message-1",
+        "body": "{\"PapertReindex\":{}}",
+        "attributes": {
+          "ApproximateReceiveCount": "2"
+        }
+      },
+      "rejection": {
+        "service": "ingestion",
+        "exception": "KeyError"
+      }
+    }
+  ]
+}

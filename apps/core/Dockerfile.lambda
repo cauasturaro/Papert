@@ -1,0 +1,19 @@
+FROM public.ecr.aws/lambda/nodejs:22@sha256:f9688a2b965ccd05110ac254d7348bbd772bbf7d1b502aeaec50c2f10a377890 AS builder
+WORKDIR /build
+COPY apps/core/package.json apps/core/package-lock.json apps/core/prisma.config.ts ./
+COPY apps/core/prisma ./prisma
+RUN npm ci
+COPY apps/core ./
+RUN npm run build && npm prune --omit=dev
+
+FROM public.ecr.aws/lambda/nodejs:22@sha256:f9688a2b965ccd05110ac254d7348bbd772bbf7d1b502aeaec50c2f10a377890
+# The function ships its own SDK and never installs packages, and Lambda supplies
+# its own runtime API, so the bundled SDK, package manager and local emulator are dropped.
+RUN rm -rf /var/runtime/node_modules /var/lang/lib/node_modules/npm /var/lang/bin/npm /var/lang/bin/npx \
+    /usr/local/bin/aws-lambda-rie
+COPY --from=builder /build/node_modules ${LAMBDA_TASK_ROOT}/node_modules
+COPY --from=builder /build/dist ${LAMBDA_TASK_ROOT}/dist
+COPY --from=builder /build/package.json ${LAMBDA_TASK_ROOT}/package.json
+ENV TRUST_PROXY_HOPS=2
+USER 10001:10001
+CMD ["dist/lambda.handler"]

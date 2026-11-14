@@ -1,0 +1,12 @@
+/internal/
+**/.venv/
+.env
+/.env.langfuse
+**/node_modules/
+**/dist/
+**/coverage/
+**/__pycache__/
+*.pyc
+*.tsbuildinfo
+.DS_Store
+/.env.e2e

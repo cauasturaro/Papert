@@ -1,0 +1,14 @@
+# No-key demo mode: Seymour answers with its deterministic fake model instead of OpenAI.
+# Use it on top of compose.yaml (make demo); answers and reviews say they are canned.
+services:
+  seymour:
+    environment:
+      MODEL_PROVIDER: fake
+
+  execution-runner:
+    environment:
+      MODEL_PROVIDER: fake
+
+  ingestion-runner:
+    environment:
+      MODEL_PROVIDER: fake

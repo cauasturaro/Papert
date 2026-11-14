@@ -1,0 +1,112 @@
+service: papert-ingestion
+
+frameworkVersion: "4.46.0"
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+  memorySize: 1024
+  timeout: 120
+  logRetentionInDays: 14
+  ecr:
+    images:
+      runtime:
+        path: ../..
+        file: apps/ingestion/Dockerfile.lambda
+        platform: linux/amd64
+        provenance: false
+  vpc:
+    subnetIds: !Split [",", "${param:subnetIds}"]
+    securityGroupIds: !Split [",", "${param:securityGroupIds}"]
+  environment:
+    ENVIRONMENT: ${self:provider.stage}
+    SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url}
+    SOURCES_BUCKET: !ImportValue papert-shared-SourcesBucketName-${self:provider.stage}
+    SOURCE_CONTROL_FUNCTION: papert-core-${self:provider.stage}-sourceControl
+    OPENAI_API_KEY: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/openai/api-key}
+    EMBEDDING_MODEL: text-embedding-3-small
+    LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-url, ''}
+    LANGFUSE_PUBLIC_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-public-key, ''}
+    LANGFUSE_SECRET_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-secret-key, ''}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource: !ImportValue papert-shared-IngestionQueueArn-${self:provider.stage}
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:GetObjectVersion
+          Resource:
+            !Sub [
+              "${BucketArn}/documents/*",
+              {
+                BucketArn: !ImportValue "papert-shared-SourcesBucketArn-${self:provider.stage}",
+              },
+            ]
+
+        - Effect: Allow
+          Action: s3:PutObject
+          Resource:
+            !Sub [
+              "${BucketArn}/renditions/*",
+              {
+                BucketArn: !ImportValue "papert-shared-SourcesBucketArn-${self:provider.stage}",
+              },
+            ]
+
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:papert-core-${self:provider.stage}-sourceControl"
+
+functions:
+  ingest:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ["src.handler.handler"]
+    events:
+      - sqs:
+          arn: !ImportValue papert-shared-IngestionQueueArn-${self:provider.stage}
+          batchSize: 1
+          maximumConcurrency: 2
+          functionResponseType: ReportBatchItemFailures
+
+resources:
+  Resources:
+    WorkerErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref IngestLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+    WorkerThrottlesAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/Lambda
+        MetricName: Throttles
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref IngestLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]

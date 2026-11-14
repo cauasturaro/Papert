@@ -1,0 +1,425 @@
+// Core API: Prisma schema
+// Schema: "core" (isolated from seymour)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["core"]
+}
+
+// Proof-of-migration table: verifies the ORM workflow and DB connectivity.
+// Replace with a domain model later.
+model HealthCheck {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  checkedAt DateTime @default(now()) @map("checked_at")
+
+  @@map("health_check")
+  @@schema("core")
+}
+
+model User {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email          String               @unique @db.VarChar(254)
+  passwordHash   String               @map("password_hash")
+  sessions       AuthSession[]
+  roadmaps       Roadmap[]
+  workspaces     Workspace[]
+  quotas         ExecutionQuota[]
+  executions     Execution[]
+  sources        SourceDocument[]
+  roadmapDrafts  RoadmapDraft[]
+  publications   RoadmapPublication[]
+  votes          RoadmapVote[]
+  libraryEntries LibraryEntry[]
+  conversations  TutorConversation[]
+  memoryItems    MemoryItem[]
+  answerFeedback AnswerFeedback[]
+  learnerProfile LearnerProfile?
+  studyDays      StudyDay[]
+  achievements   Achievement[]
+
+  @@map("app_user")
+  @@schema("core")
+}
+
+model AuthSession {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String    @map("user_id") @db.Uuid
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tokenId             String    @map("token_id") @db.Uuid
+  expiresAt           DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt           DateTime? @map("revoked_at") @db.Timestamptz(3)
+  refreshHash         String?   @unique(map: "auth_session_refresh_hash_key") @map("refresh_hash")
+  previousRefreshHash String?   @map("previous_refresh_hash")
+  refreshRotatedAt    DateTime? @map("refresh_rotated_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([previousRefreshHash], map: "auth_session_previous_refresh_hash_idx")
+  @@map("auth_session")
+  @@schema("core")
+}
+
+model AuthAttempt {
+  key      String   @id
+  count    Int
+  resetsAt DateTime @map("resets_at") @db.Timestamptz(3)
+
+  @@map("auth_attempt")
+  @@schema("core")
+}
+
+// A consolidated roadmap is immutable; generation drafts are not roadmaps.
+model Roadmap {
+  id           String              @id @db.VarChar(100)
+  authorName   String              @map("author_name")
+  authorUserId String?             @map("author_user_id") @db.Uuid
+  author       User?               @relation(fields: [authorUserId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  definition   Json
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  workspaces   Workspace[]
+  publication  RoadmapPublication?
+  achievements Achievement[]
+
+  @@map("roadmap")
+  @@schema("core")
+}
+
+model Workspace {
+  id            String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String              @map("user_id") @db.Uuid
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roadmapId     String?             @map("roadmap_id") @db.VarChar(100)
+  roadmap       Roadmap?            @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  currentStep   Int                 @default(0) @map("current_step")
+  revision      Int                 @default(0)
+  notes         String              @default("")
+  files         Json
+  createdAt     DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  session       StudySession?
+  draft         RoadmapDraft?
+  attempts      StudyAttempt[]
+  executions    Execution[]
+  sources       SourceDocument[]
+  conversations TutorConversation[]
+  achievements  Achievement[]
+
+  @@unique([userId, roadmapId])
+  @@map("workspace")
+  @@schema("core")
+}
+
+model RoadmapDraft {
+  workspaceId    String     @id @map("workspace_id") @db.Uuid
+  workspace      Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId         String     @map("user_id") @db.Uuid
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  goal           String
+  level          String
+  status         String     @default("open")
+  executionId    String?    @map("execution_id") @db.Uuid
+  execution      Execution? @relation(fields: [executionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  outcome        Json?
+  recommendation Json?
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId, status])
+  @@map("roadmap_draft")
+  @@schema("core")
+}
+
+model StudySession {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId  String    @unique @map("workspace_id") @db.Uuid
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  lastOpenedAt DateTime  @default(now()) @map("last_opened_at") @db.Timestamptz(3)
+
+  @@map("study_session")
+  @@schema("core")
+}
+
+model StudyAttempt {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  stepId      String    @map("step_id")
+  revision    Int
+  files       Json
+  challenge   Json
+  result      Json      @default("{\"status\":\"not_evaluated\"}")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([workspaceId, revision, stepId])
+  @@index([workspaceId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([workspaceId, stepId, createdAt(sort: Desc), id(sort: Desc)])
+  @@map("study_attempt")
+  @@schema("core")
+}
+
+model ExecutionQuota {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String      @map("user_id") @db.Uuid
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  period     String
+  used       Int         @default(0)
+  reserved   Int         @default(0)
+  executions Execution[]
+
+  @@unique([userId, period])
+  @@map("execution_quota")
+  @@schema("core")
+}
+
+model Execution {
+  id             String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String             @map("user_id") @db.Uuid
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  workspaceId    String             @map("workspace_id") @db.Uuid
+  workspace      Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  quotaId        String             @map("quota_id") @db.Uuid
+  quota          ExecutionQuota     @relation(fields: [quotaId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  conversationId String?            @map("conversation_id") @db.Uuid
+  conversation   TutorConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  requestKey     String             @map("request_key") @db.Uuid
+  input          Json
+  status         String             @default("queued")
+  text           String             @default("")
+  grounding      Json?
+  sequence       Int                @default(0)
+  eventIndex     Int                @default(0) @map("event_index")
+  attempts       Int                @default(0)
+  reserved       Int                @default(3000)
+  leases         String[]           @default([]) @db.Uuid
+  settledLeases  String[]           @default([]) @map("settled_leases") @db.Uuid
+  charged        Int                @default(0)
+  claimId        String?            @map("claim_id") @db.Uuid
+  lease          String?            @db.Uuid
+  leaseUntil     DateTime?          @map("lease_until") @db.Timestamptz(3)
+  publishedAt    DateTime?          @map("published_at") @db.Timestamptz(3)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  deadline       DateTime           @db.Timestamptz(3)
+  firstEventAt   DateTime?          @map("first_event_at") @db.Timestamptz(3)
+  finishedAt     DateTime?          @map("finished_at") @db.Timestamptz(3)
+  tickets        StreamTicket[]
+  drafts         RoadmapDraft[]
+  feedback       AnswerFeedback?
+
+  @@unique([userId, requestKey])
+  @@index([conversationId, createdAt])
+  @@index([status, publishedAt])
+  @@index([userId, createdAt])
+  @@map("execution")
+  @@schema("core")
+}
+
+model StreamTicket {
+  hash          String    @id
+  executionId   String    @map("execution_id") @db.Uuid
+  execution     Execution @relation(fields: [executionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  authSessionId String    @map("auth_session_id") @db.Uuid
+  tokenId       String    @map("token_id") @db.Uuid
+  expiresAt     DateTime  @map("expires_at") @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("stream_ticket")
+  @@schema("core")
+}
+
+// Core owns registration, authorization and state; chunks/vectors live in Seymour's schema.
+model SourceDocument {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  workspace        Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  uploadedByUserId String    @map("uploaded_by_user_id") @db.Uuid
+  uploadedBy       User      @relation(fields: [uploadedByUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bucket           String
+  objectKey        String    @unique @map("object_key")
+  filename         String
+  format           String
+  contentType      String    @map("content_type")
+  sizeBytes        Int       @map("size_bytes")
+  status           String    @default("awaiting_upload")
+  objectVersionId  String?   @map("object_version_id")
+  sequencer        String?
+  errorCode        String?   @map("error_code")
+  errorMessage     String?   @map("error_message")
+  chunkCount       Int?      @map("chunk_count")
+  characterCount   Int?      @map("character_count")
+  pageCount        Int?      @map("page_count")
+  embeddingTokens  Int?      @map("embedding_tokens")
+  warnings         Json      @default("[]")
+  uploadExpiresAt  DateTime  @map("upload_expires_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+  readyAt          DateTime? @map("ready_at") @db.Timestamptz(3)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(3)
+  purgedAt         DateTime? @map("purged_at") @db.Timestamptz(3)
+
+  @@index([workspaceId, status])
+  @@index([uploadedByUserId, createdAt])
+  @@index([status, uploadExpiresAt])
+  @@map("source_document")
+  @@schema("core")
+}
+
+model RoadmapPublication {
+  roadmapId         String                  @id @map("roadmap_id") @db.VarChar(100)
+  roadmap           Roadmap                 @relation(fields: [roadmapId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  publishedByUserId String?                 @map("published_by_user_id") @db.Uuid
+  publishedBy       User?                   @relation(fields: [publishedByUserId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  authorName        String                  @map("author_name")
+  level             String?
+  searchText        String                  @map("search_text")
+  searchDocument    Unsupported("tsvector") @map("search_document")
+  upvotes           Int                     @default(0)
+  downvotes         Int                     @default(0)
+  score             Float                   @default(0)
+  publishedAt       DateTime                @default(now()) @map("published_at") @db.Timestamptz(3)
+  votes             RoadmapVote[]
+  libraryEntries    LibraryEntry[]
+
+  @@index([searchDocument], type: Gin)
+  @@index([score(sort: Desc), upvotes(sort: Desc), publishedAt(sort: Desc)])
+  @@index([publishedAt(sort: Desc)])
+  @@index([publishedByUserId])
+  @@map("roadmap_publication")
+  @@schema("core")
+}
+
+model RoadmapVote {
+  userId    String             @map("user_id") @db.Uuid
+  user      User               @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  roadmapId String             @map("roadmap_id") @db.VarChar(100)
+  roadmap   RoadmapPublication @relation(fields: [roadmapId], references: [roadmapId], onDelete: Restrict, onUpdate: NoAction)
+  value     Int                @db.SmallInt
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime           @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@id([userId, roadmapId])
+  @@index([roadmapId])
+  @@map("roadmap_vote")
+  @@schema("core")
+}
+
+model LibraryEntry {
+  userId    String             @map("user_id") @db.Uuid
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  roadmapId String             @map("roadmap_id") @db.VarChar(100)
+  roadmap   RoadmapPublication @relation(fields: [roadmapId], references: [roadmapId], onDelete: Restrict, onUpdate: NoAction)
+  createdAt DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([userId, roadmapId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("library_entry")
+  @@schema("core")
+}
+
+model TutorConversation {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workspaceId      String      @map("workspace_id") @db.Uuid
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId           String      @map("user_id") @db.Uuid
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  title            String?
+  summary          Json?
+  summaryThroughId String?     @map("summary_through_id") @db.Uuid
+  summaryThroughAt DateTime?   @map("summary_through_at") @db.Timestamptz(3)
+  summarySourceIds String[]    @default([]) @map("summary_source_ids") @db.Uuid
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastActiveAt     DateTime    @default(now()) @map("last_active_at") @db.Timestamptz(3)
+  executions       Execution[]
+
+  @@index([workspaceId, lastActiveAt(sort: Desc)])
+  @@index([userId])
+  @@map("tutor_conversation")
+  @@schema("core")
+}
+
+model MemoryItem {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  kind        String
+  text        String
+  status      String
+  origin      String
+  executionId String?   @unique @map("execution_id") @db.Uuid
+  expiresAt   DateTime? @map("expires_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId, status, updatedAt(sort: Desc)])
+  @@map("memory_item")
+  @@schema("core")
+}
+
+model AnswerFeedback {
+  executionId       String    @id @map("execution_id") @db.Uuid
+  execution         Execution @relation(fields: [executionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  rating            String
+  cleared           Boolean   @default(false)
+  hallucination     Boolean   @default(false)
+  revision          Int       @default(1)
+  deliveredRevision Int       @default(0) @map("delivered_revision")
+  deliveryAttempts  Int       @default(0) @map("delivery_attempts")
+  nextDeliveryAt    DateTime? @map("next_delivery_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("answer_feedback")
+  @@schema("core")
+}
+
+model LearnerProfile {
+  userId        String    @id @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  timeZone      String?   @map("time_zone") @db.VarChar(64)
+  currentStreak Int       @default(0) @map("current_streak")
+  longestStreak Int       @default(0) @map("longest_streak")
+  lastStudyDay  DateTime? @map("last_study_day") @db.Date
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@map("learner_profile")
+  @@schema("core")
+}
+
+model StudyDay {
+  userId           String   @map("user_id") @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  day              DateTime @db.Date
+  timeZone         String   @map("time_zone") @db.VarChar(64)
+  firstExecutionId String   @map("first_execution_id") @db.Uuid
+  firstAt          DateTime @map("first_at") @db.Timestamptz(3)
+  analyses         Int      @default(1)
+
+  @@id([userId, day])
+  @@map("study_day")
+  @@schema("core")
+}
+
+model Achievement {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  kind        String
+  roadmapId   String    @map("roadmap_id") @db.VarChar(100)
+  roadmap     Roadmap   @relation(fields: [roadmapId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  executionId String    @map("execution_id") @db.Uuid
+  title       String
+  concepts    String[]  @default([])
+  stepCount   Int       @map("step_count")
+  awardedAt   DateTime  @map("awarded_at") @db.Timestamptz(3)
+
+  @@unique([userId, kind, roadmapId])
+  @@map("achievement")
+  @@schema("core")
+}

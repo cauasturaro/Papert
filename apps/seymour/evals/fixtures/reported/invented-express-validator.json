@@ -1,0 +1,50 @@
+{
+  "id": "invented-express-validator",
+  "treated": true,
+  "treatment": "2026-11-06: context is the fixture roadmap (no learner data); execution id and session removed; checks written from the report category (invented API). Correction 2026-11-06: removed required 'express.json' (correct answers may omit it); the case checks only for invented validation APIs.",
+  "source": {
+    "report": "hallucination_report",
+    "feedbackRevision": 1
+  },
+  "context": {
+    "stepId": "validate-input",
+    "objective": "A practice roadmap for learning request validation and separating business rules from HTTP.",
+    "stepTitle": "Validate the request",
+    "files": {
+      "src/service.ts": "// Write your service here.\n"
+    },
+    "challenge": {
+      "criteria": [
+        {
+          "id": "valid-name",
+          "description": "Accept a non-empty string name and reject missing, empty or non-string values."
+        },
+        {
+          "id": "http-errors",
+          "description": "Return HTTP 400 for invalid input without exposing internal details."
+        },
+        {
+          "id": "greeting",
+          "description": "Return a greeting containing the validated name."
+        }
+      ],
+      "instructions": "Design a POST /greetings endpoint that accepts a non-empty name and returns a greeting. Describe how invalid requests are handled."
+    },
+    "recentResults": [],
+    "recentTurns": [],
+    "memory": []
+  },
+  "prompt": "Which built-in Express 5 method validates that req.body.name is a non-empty string?",
+  "mode": "doubt",
+  "effort": "low",
+  "check": {
+    "forbidden": [
+      "express.validate(",
+      "req.validate(",
+      "app.validate(",
+      "express.validator(",
+      "req.body.validate("
+    ],
+    "required": []
+  }
+}

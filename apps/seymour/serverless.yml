@@ -1,0 +1,157 @@
+service: papert-seymour
+
+frameworkVersion: "4.46.0"
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+  memorySize: 1024
+  timeout: 30
+  logRetentionInDays: 14
+  ecr:
+    images:
+      runtime:
+        path: ../..
+        file: apps/seymour/Dockerfile.lambda
+        platform: linux/amd64
+        provenance: false
+  vpc:
+    subnetIds: !Split [",", "${param:subnetIds}"]
+    securityGroupIds: !Split [",", "${param:securityGroupIds}"]
+  environment:
+    SESSIONS_TABLE: !ImportValue papert-shared-SessionsTableName-${self:provider.stage}
+    RESULTS_QUEUE_URL: !ImportValue papert-shared-ResultsQueueUrl-${self:provider.stage}
+    CORE_EXECUTION_CONTROL_FUNCTION: papert-core-${self:provider.stage}-executionControl
+    ENVIRONMENT: ${self:provider.stage}
+    SEYMOUR_DATABASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/database-url}
+    OPENAI_API_KEY: ${ssm:/papert/${self:provider.stage}/seymour/openai-api-key}
+    OPENAI_MODEL: ${env:OPENAI_MODEL, 'gpt-5.4-nano-2026-03-17'}
+    DEEPSEEK_API_KEY: ${ssm:/papert/${self:provider.stage}/seymour/deepseek-api-key, ''}
+    DEEPSEEK_MODEL: ${env:DEEPSEEK_MODEL, 'deepseek-flash'}
+    EMBEDDING_MODEL: text-embedding-3-small
+    LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-url, ''}
+    LANGFUSE_PUBLIC_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-public-key, ''}
+    LANGFUSE_SECRET_KEY: ${ssm:/papert/${self:provider.stage}/seymour/langfuse-secret-key, ''}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:DeleteItem
+          Resource: !ImportValue papert-shared-SessionsTableArn-${self:provider.stage}
+          Condition:
+            ForAllValues:StringLike:
+              dynamodb:LeadingKeys:
+                - "CHECKPOINT#*"
+        - Effect: Allow
+          Action:
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+          Resource: !ImportValue papert-shared-ChatQueueArn-${self:provider.stage}
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !ImportValue papert-shared-ResultsQueueArn-${self:provider.stage}
+        - Effect: Allow
+          Action: lambda:InvokeFunction
+          Resource: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:papert-core-${self:provider.stage}-executionControl"
+
+functions:
+  api:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ["mangum_handler.handler"]
+    events:
+      - httpApi:
+          path: /internal/seymour/{proxy+}
+          method: ANY
+          authorizer:
+            type: aws_iam
+
+  worker:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ["worker_handler.handler"]
+    timeout: 60
+    events:
+      - sqs:
+          arn: !ImportValue papert-shared-ChatQueueArn-${self:provider.stage}
+          batchSize: 1
+          maximumConcurrency: 2
+          functionResponseType: ReportBatchItemFailures
+
+resources:
+  extensions:
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 10
+  Resources:
+    WorkerErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref WorkerLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+    WorkerThrottlesAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/Lambda
+        MetricName: Throttles
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref WorkerLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+    ApiErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/ApiGateway
+        MetricName: 5xx
+        Dimensions:
+          - Name: ApiId
+            Value: !Ref HttpApi
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+    ApiLatencyAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/ApiGateway
+        MetricName: Latency
+        Dimensions:
+          - Name: ApiId
+            Value: !Ref HttpApi
+        ExtendedStatistic: p95
+        Period: 300
+        EvaluationPeriods: 2
+        Threshold: 1000
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]

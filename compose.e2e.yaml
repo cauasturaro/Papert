@@ -1,0 +1,84 @@
+# Browser end-to-end stack, layered on compose.yaml and compose.fake.yaml (make e2e).
+# A separate project and network, a disposable PostgreSQL instead of Floci's RDS, and no
+# host ports except the web app, so it runs next to the development stack.
+name: papert-e2e
+
+services:
+  postgres:
+    profiles: !reset []
+    ports: !reset []
+    volumes: !override
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-vector.sql:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "papert_admin", "-d", "papert"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Only SQS, S3 and DynamoDB are used here, so Floci needs neither the Docker socket nor RDS.
+  floci:
+    ports: !reset []
+    environment:
+      FLOCI_SERVICES_DOCKER_NETWORK: papert-e2e
+    volumes: !override
+      - floci_data:/app/data
+
+  db:
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+
+  aws-setup:
+    profiles: [tools]
+    image: amazon/aws-cli:2.31.18@sha256:1a491b258590cc66866cd550f592edff80082f44daf1d903820daeca2f4954de
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for stack in ingestion chat storage sessions; do
+          aws cloudformation deploy --no-cli-pager --stack-name "papert-$$stack" \
+            --template-file "/templates/$$stack.yaml"
+        done
+    environment:
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://floci:4566
+    volumes:
+      - ./infra/shared:/templates:ro
+
+  core:
+    ports: !reset []
+    environment:
+      WEB_ORIGIN: http://localhost:${E2E_WEB_PORT:-3100}
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD}@postgres:5432/papert?schema=core
+
+  seymour:
+    ports: !reset []
+    environment:
+      SEYMOUR_DATABASE_URL: postgresql+asyncpg://seymour_user:${SEYMOUR_DB_PASSWORD}@postgres:5432/papert
+
+  execution-runner:
+    environment:
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD}@postgres:5432/papert?schema=core
+      SEYMOUR_DATABASE_URL: postgresql://seymour_user:${SEYMOUR_DB_PASSWORD}@postgres:5432/papert
+
+  ingestion-runner:
+    environment:
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD}@postgres:5432/papert?schema=core
+      SEYMOUR_DATABASE_URL: postgresql://seymour_user:${SEYMOUR_DB_PASSWORD}@postgres:5432/papert
+
+  ingress:
+    ports: !override
+      - "127.0.0.1:${E2E_WEB_PORT:-3100}:80"
+
+  core-migrate:
+    environment:
+      DATABASE_URL: postgresql://core_user:${CORE_DB_PASSWORD}@postgres:5432/papert?schema=core
+
+  seymour-migrate:
+    environment:
+      SEYMOUR_DATABASE_URL: postgresql+asyncpg://seymour_user:${SEYMOUR_DB_PASSWORD}@postgres:5432/papert
+
+networks:
+  default:
+    name: papert-e2e

@@ -1,0 +1,115 @@
+"""The tutor's structured answer and how the server renders it for the learner."""
+
+from typing import Literal
+
+from pydantic import Field
+
+from src.shared.domain.inference import Message, ModelTask
+from src.tutor.application.prompts import TUTOR_PROMPTS
+from src.tutor.application.quotes import attributed_cites, extract_quote, quote_supports
+from src.tutor.domain.context import StrictModel, TutorContext
+
+
+class Guidance(StrictModel):
+    explanation: str = Field(min_length=1, max_length=2000)
+    # Verbatim text copied from a source excerpt; shown only if it really is in one.
+    # Exact first and last lines of a source passage to show; the server copies the text.
+    quote_from: str = Field(default="", max_length=300)
+    quote_to: str = Field(default="", max_length=300)
+    next_step: str = Field(min_length=1, max_length=800)
+    question: str = Field(min_length=1, max_length=500)
+    # Cite strings of the source excerpts the answer used.
+    sources: list[str] = Field(default_factory=list, max_length=5)
+    # False when the excerpts do not contain the answer; the server then cites nothing.
+    answered_from_sources: bool = True
+    # A durable note for the learner to review; the server filters it before Core stores it.
+    remember_kind: Literal["none", "preference", "difficulty"] = "none"
+    remember_text: str = Field(default="", max_length=200)
+
+
+MAX_CITATIONS = 5
+
+
+def _citation(cite: str, excerpts: list[dict]) -> dict:
+    """The first retrieved excerpt with this cite: document, location and passage text."""
+    excerpt = next(item for item in excerpts if item["cite"] == cite)
+
+    return {
+        "sourceId": excerpt["sourceId"],
+        "cite": cite,
+        "location": excerpt["location"],
+        "excerpt": excerpt["text"],
+        "quote": None,
+    }
+
+
+def render(guidance: Guidance, excerpts: list[dict], prompt: str = "") -> tuple[str, list[dict]]:
+    """Answer text plus citations; only excerpts retrieved in this run can be cited or quoted."""
+    text = f"{guidance.explanation}\n\nNext step: {guidance.next_step}\n\n{guidance.question}"
+
+    quote = extract_quote(guidance.quote_from, guidance.quote_to, excerpts)
+
+    # Measured: the model sometimes quotes an unrelated example; drop quotes that back nothing.
+    if quote and not quote_supports(quote[0], guidance.explanation, prompt):
+        quote = None
+
+    origins = quote[1] if quote else []
+
+    retrieved = {excerpt["cite"] for excerpt in excerpts}
+    used = [item for item in guidance.sources if item in retrieved]
+    stated = attributed_cites(excerpts, guidance.explanation, prompt)
+    cites = list(dict.fromkeys([*origins, *used, *stated]))[:MAX_CITATIONS]
+
+    # Measured: "not found" answers listed the searched excerpts as sources.
+    if not guidance.answered_from_sources:
+        return text, []
+
+    citations = [_citation(cite, excerpts) for cite in cites]
+
+    # Quotes come first in `cites`, so the quote belongs to the first citation.
+    if quote:
+        citations[0]["quote"] = quote[0]
+
+    return text, citations
+
+
+def sources_needed(context: TutorContext, messages: list[Message]) -> bool:
+    """The learner mentioned a source or the model searched them itself during this run."""
+    if context.sourceIds:
+        return True
+
+    return any(
+        call["name"] == "search_sources" for message in messages for call in message.tool_calls
+    )
+
+
+def grounding(has_sources: bool, citations: list[dict], needed: bool = True) -> dict | None:
+    """Whether the workspace's sources support the answer. None when it has no sources, or
+    when nothing was cited for a question that did not ask for them (a pure code question)."""
+    if not has_sources:
+        return None
+
+    if not citations and not needed:
+        return None
+
+    support = "cited" if citations else "unsupported"
+
+    return {"support": support, "citations": citations}
+
+
+def guidance_schema() -> dict:
+    """Require every model output field, including fields with defaults."""
+    schema = Guidance.model_json_schema(mode="serialization")
+    schema["required"] = list(schema["properties"])
+
+    return schema
+
+
+def guidance_task() -> ModelTask:
+    return ModelTask(
+        "tutor_guidance",
+        guidance_schema(),
+        TUTOR_PROMPTS,
+        # Measured answers use a few hundred tokens of JSON plus reasoning.
+        minimum_output=1024,
+    )

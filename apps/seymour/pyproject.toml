@@ -1,0 +1,27 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["src", "tests", "evals"]
+addopts = "--import-mode=importlib"
+pythonpath = ["."]
+markers = [
+    "unit: tests that do not require a real database or network",
+    "integration: tests that require a running database",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+# Applied migrations are immutable; do not rewrite them to satisfy newer lint rules.
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.pyright]
+include = ["src", "evals", "main.py", "worker_handler.py", "mangum_handler.py"]
+exclude = ["**/test_*.py", "src/conftest.py", "evals/fixtures", "**/__pycache__"]
+pythonVersion = "3.12"
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "basic"

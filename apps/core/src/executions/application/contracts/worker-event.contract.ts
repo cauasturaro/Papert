@@ -1,0 +1,33 @@
+import { z } from 'zod';
+import { GENERATION_ATTEMPT_BUDGET } from '../../domain/admission/quota.js';
+import type { WorkerEvent } from '../../domain/execution.js';
+
+export const workerEvent: z.ZodType<WorkerEvent> = z
+  .strictObject({
+    version: z.literal(1),
+    executionId: z.guid(),
+    lease: z.guid(),
+    index: z.number().int().min(1).max(100),
+    status: z.enum(['running', 'completed', 'failed']),
+    text: z.string().max(4000),
+    tokens: z.number().int().min(0).max(GENERATION_ATTEMPT_BUDGET),
+    // Validated against the attempt by Core; malformed content is recorded, never trusted.
+    evaluation: z.unknown().optional(),
+    // Citations are re-authorized against live sources before they are stored.
+    grounding: z.unknown().optional(),
+    // Untrusted; Study validates it.
+    roadmap: z.unknown().optional(),
+    // Untrusted; Study keeps only offered roadmaps that are still published.
+    recommendation: z.unknown().optional(),
+    // Untrusted; Memory validates the summary and proposal of a completed chat.
+    memory: z.unknown().optional(),
+  })
+  .refine(
+    (event) =>
+      (event.evaluation === undefined &&
+        event.grounding === undefined &&
+        event.roadmap === undefined &&
+        event.recommendation === undefined &&
+        event.memory === undefined) ||
+      event.status === 'completed',
+  );

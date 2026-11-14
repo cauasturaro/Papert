@@ -1,0 +1,47 @@
+@import "tailwindcss";
+@import "../styles/theme.css";
+
+/* Base rules stay layered so component utilities can override them. */
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+  }
+
+  :focus-visible {
+    outline: 3px solid var(--ring);
+    outline-offset: 4px;
+  }
+
+  select {
+    background: var(--card);
+    color: var(--foreground);
+  }
+}
+
+/*
+ * The study IDE fills the viewport and scrolls inside its panels. Body-level
+ * nodes (editor overlays, portals) must not make the page itself scroll. The
+ * study page sets this attribute while it is visible.
+ */
+html[data-viewport-app] {
+  overflow: hidden;
+}
+
+/* Panel chrome for the study IDE; flat edge-to-edge panels on small screens. */
+.panel-surface {
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--card);
+  color: var(--card-foreground);
+}
+
+@media (max-width: 1023px) {
+  .panel-surface {
+    border: 0;
+    border-radius: 0;
+  }
+}

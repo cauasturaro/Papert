@@ -1,0 +1,149 @@
+/*
+ * Shared tokens for components copied from the BlinkingEye component library.
+ * `<html data-theme>` always holds the resolved theme: the head script in
+ * `components/theme/theme-script.tsx` sets it before paint from the stored
+ * preference or the system scheme, so dark tokens live in a single block.
+ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+  --background: #fafafa;
+  --foreground: #202024;
+  --card: #ffffff;
+  --card-foreground: #202024;
+  --popover: var(--card);
+  --popover-foreground: var(--card-foreground);
+  --primary: #e8dff5;
+  --primary-foreground: #30263d;
+  /* The light fill is close to the background; this edge keeps primary controls at 3:1+. */
+  --primary-border: #85709f;
+  --secondary: #f0f0f2;
+  --secondary-foreground: #303036;
+  --muted: #f4f4f5;
+  --muted-foreground: #62626b;
+  --accent: #f0f0f2;
+  --accent-foreground: #202024;
+  --border: #e4e4e7;
+  --input: #909090;
+  --ring: #85709f;
+  --destructive: #a82a3a;
+  --destructive-foreground: #ffffff;
+  --success: #246b46;
+  /* Attention without failure: "Needs work", offline, waiting. */
+  --warning: #8a5a00;
+  --warning-foreground: #ffffff;
+  /* Neutral progress: "Processing", queued, informational notes. */
+  --info: #5b4a78;
+  --overlay: rgb(0 0 0 / 45%);
+  --radius: 0.75rem;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #111113;
+  --foreground: #f4f4f5;
+  --card: #19191c;
+  --card-foreground: #f4f4f5;
+  --popover: var(--card);
+  --popover-foreground: var(--card-foreground);
+  --primary: #d8c8ec;
+  --primary-foreground: #30263d;
+  --primary-border: #d8c8ec;
+  --secondary: #27272b;
+  --secondary-foreground: #f4f4f5;
+  --muted: #222225;
+  --muted-foreground: #a6a6af;
+  --accent: #2d2d32;
+  --accent-foreground: #f4f4f5;
+  --border: #34343a;
+  --input: #777777;
+  --ring: #baa4d2;
+  --destructive: #f19aa6;
+  --destructive-foreground: #30151a;
+  --success: #8bd5aa;
+  --warning: #f2c46d;
+  --warning-foreground: #2e2208;
+  --info: #baa4d2;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-border: var(--primary-border);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-overlay: var(--overlay);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --radius-xs: calc(var(--radius) * 5 / 12);
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) * 1.5);
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  --font-mono: var(--font-geist-mono);
+  --animate-progress-indeterminate: progress-indeterminate 1.4s ease-in-out
+    infinite;
+  --animate-menu-in: menu-in 120ms ease-out;
+  --spacing-control-sm: 2rem;
+  --spacing-control-md: 2.5rem;
+  --spacing-control-lg: 3rem;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
+}
+
+/*
+ * Dialog rules from the library's CSS Module. Papert routes every CSS file
+ * through the Tailwind Turbopack loader, which disables CSS Modules.
+ */
+html:has([data-slot="dialog"]:modal) {
+  overflow: hidden;
+}
+
+/* The portal must not create another scroll ancestor for sticky elements. */
+body[data-scroll-locked]:has([data-slot="dialog"]:modal) {
+  overflow: clip !important;
+}
+
+[data-slot="dialog"],
+[data-slot="dialog-content"] {
+  overscroll-behavior: contain;
+}
