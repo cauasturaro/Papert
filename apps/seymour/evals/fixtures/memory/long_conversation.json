@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "step": {
+    "stepId": "validate-input",
+    "stepTitle": "Validate the request",
+    "objective": "A practice roadmap for learning request validation and separating business rules from HTTP.",
+    "challenge": {
+      "instructions": "Design a POST /greetings endpoint that accepts a non-empty name and returns a greeting. Describe how invalid requests are handled.",
+      "criteria": [
+        {
+          "id": "valid-name",
+          "description": "Accept a non-empty string name and reject missing, empty or non-string values."
+        },
+        {
+          "id": "http-errors",
+          "description": "Return HTTP 400 for invalid input without exposing internal details."
+        },
+        {
+          "id": "greeting",
+          "description": "Return a greeting containing the validated name."
+        }
+      ]
+    },
+    "files": {
+      "src/service.ts": "// Write your service here.\n"
+    }
+  },
+  "turns": [
+    {
+      "prompt": "I am on Validate the request. We are learning request validation and separating business rules from HTTP, right?",
+      "answer": "Yes. Focus on the POST /greetings input contract first. Which values should a name accept?"
+    },
+    {
+      "prompt": "I will add a missing-field test next, before I write the handler. Please keep that on our pending list.",
+      "answer": "Keep the missing-field test pending. Describe the request body and expected response first. What should happen when name is absent?"
+    },
+    {
+      "prompt": "A name must be a non-empty string. I keep confusing TypeScript annotations with runtime checks, even after earlier practice.",
+      "answer": "That recurring confusion is useful to track: annotations do not inspect incoming JSON. Which operation could observe the actual value when a request arrives?"
+    },
+    {
+      "prompt": "I will also document numeric rejection with HTTP 400. That is my second pending task; I have not done it yet.",
+      "answer": "Keep documenting numeric rejection pending too. Think about rejecting the value before using string operations. What public error would tell the caller enough?"
+    },
+    {
+      "prompt": "I think a valid Ada request should produce a greeting containing Ada. Is that the happy path?",
+      "answer": "That matches the greeting criterion. Describe the input and output without implementing the whole endpoint. Which part depends on the validated name?"
+    },
+    {
+      "prompt": "My third pending action is to sketch a boundary diagram showing validation before the greeting rule. I will do that after the tests.",
+      "answer": "Keep the boundary diagram pending with the other two actions. Put the transport decision next to the request handling. Where should greeting construction sit?"
+    },
+    {
+      "prompt": "Should I include an internal stack trace when the input is invalid?",
+      "answer": "A caller needs a clear public error, while internal details should stay private. What could you say about the name field without exposing implementation details?"
+    },
+    {
+      "prompt": "I have only planned those actions, not completed them. Can I think about some related HTTP topics before I start?",
+      "answer": "Yes, those actions remain open. We can discuss related topics while staying on the current step. Which HTTP detail would you like to explore?"
+    },
+    {
+      "prompt": "Why use POST instead of GET for a greeting request with a JSON body?",
+      "answer": "Methods express the endpoint contract. A POST body gives this exercise an explicit input to inspect. What does the challenge say the endpoint accepts?"
+    },
+    {
+      "prompt": "What is a Content-Type header?",
+      "answer": "It labels the representation being sent, such as JSON. Parsing and accepting that representation are separate decisions. What format would your client send?"
+    },
+    {
+      "prompt": "Can header names use different capitalization?",
+      "answer": "HTTP field names are case-insensitive, though their values have their own rules. How would you avoid relying on one spelling of a field name?"
+    },
+    {
+      "prompt": "Why do examples often use localhost?",
+      "answer": "It refers to the local machine, making it useful for development. A deployed service has a different address. Which environment are you describing in your notes?"
+    },
+    {
+      "prompt": "Does pretty-printing JSON change its meaning?",
+      "answer": "Whitespace outside strings generally changes readability rather than JSON values. Whitespace inside a string is data. Which of those are you changing?"
+    },
+    {
+      "prompt": "Can I use a different port while practicing?",
+      "answer": "Usually yes, if your local configuration and client agree and the port is available. The exercise does not require a particular port. Which address would your client call?"
+    }
+  ],
+  "probes": [
+    {
+      "id": "current-work",
+      "prompt": "What are we working on right now?",
+      "expectAny": [
+        [
+          "validate",
+          "validation"
+        ],
+        [
+          "request"
+        ],
+        [
+          "business rules",
+          "business logic"
+        ],
+        [
+          "http"
+        ]
+      ]
+    },
+    {
+      "id": "pending-actions",
+      "prompt": "What did I say I would do next?",
+      "expectAny": [
+        [
+          "missing-field"
+        ],
+        [
+          "numeric rejection"
+        ],
+        [
+          "boundary diagram"
+        ]
+      ]
+    },
+    {
+      "id": "recurring-struggle",
+      "prompt": "Where have I been struggling?",
+      "expectAny": [
+        [
+          "typescript",
+          "annotations"
+        ],
+        [
+          "runtime"
+        ]
+      ]
+    }
+  ]
+}

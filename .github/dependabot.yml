@@ -1,0 +1,50 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directories: [/apps/core, /apps/web, /apps/web/type-packs]
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The services pin the same packages and CI installs them together, so
+  # they have to move in one pull request.
+  - package-ecosystem: pip
+    directories: [/apps/seymour, /apps/ingestion, /infra]
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+
+  # Runtime versions follow what Lambda supports, so only digests and
+  # patch releases are proposed.
+  - package-ecosystem: docker
+    directories:
+      [
+        /,
+        /apps/core,
+        /apps/web,
+        /apps/seymour,
+        /apps/ingestion,
+        /infra/runner,
+        /infra/langfuse,
+      ]
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      base-images:
+        patterns: ["*"]

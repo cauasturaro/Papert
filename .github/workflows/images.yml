@@ -1,0 +1,101 @@
+name: Images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      ["apps/**", "infra/**", ".dockerignore", ".github/workflows/images.yml"]
+  pull_request:
+    paths:
+      ["apps/**", "infra/**", ".dockerignore", ".github/workflows/images.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and scan ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            context: apps/core
+            file: apps/core/Dockerfile
+            smoke: node -e "import('./dist/lambda.js')"
+          - name: web
+            context: apps/web
+            file: apps/web/Dockerfile
+            smoke: node --check server.js
+          - name: seymour
+            context: apps/seymour
+            file: apps/seymour/Dockerfile
+            smoke: python -c "import main, tiktoken; tiktoken.encoding_for_model('text-embedding-3-small')"
+          - name: runner
+            context: .
+            file: infra/runner/Dockerfile
+            smoke: >-
+              node -e "import('./apps/core/dist/lambda.js')" &&
+              (cd apps/seymour && python -c "import src.executions.infrastructure.sqs") &&
+              (cd apps/ingestion && python -c "import src.handler")
+          - name: core-lambda
+            context: .
+            file: apps/core/Dockerfile.lambda
+            smoke: node -e "import('./dist/lambda.js')"
+          - name: seymour-lambda
+            context: .
+            file: apps/seymour/Dockerfile.lambda
+            smoke: python -c "import mangum_handler, worker_handler, tiktoken; tiktoken.encoding_for_model('text-embedding-3-small')"
+          - name: ingestion-lambda
+            context: .
+            file: apps/ingestion/Dockerfile.lambda
+            smoke: python -c "import src.handler"
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build Linux image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64
+          load: true
+          provenance: false
+          tags: papert-check:${{ matrix.name }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Import image entrypoints as runtime user
+        env:
+          SMOKE: ${{ matrix.smoke }}
+        run: docker run --rm --entrypoint /bin/sh -e AWS_EC2_METADATA_DISABLED=true papert-check:${{ matrix.name }} -c "$SMOKE"
+
+      - name: Scan runtime image
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          ghcr.io/aquasecurity/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          image --scanners vuln --ignore-unfixed --exit-code 1 --severity HIGH,CRITICAL
+          papert-check:${{ matrix.name }}
+
+      - name: Generate image SBOM
+        if: always()
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          ghcr.io/aquasecurity/trivy@sha256:bcc376de8d77cfe086a917230e818dc9f8528e3c852f7b1aff648949b6258d1c
+          image --format cyclonedx papert-check:${{ matrix.name }} > sbom.json
+
+      - name: Upload image SBOM
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sbom-${{ matrix.name }}
+          path: sbom.json

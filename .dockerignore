@@ -1,0 +1,16 @@
+.git/
+internal/
+**/.env*
+**/node_modules/
+**/.venv/
+**/dist/
+**/.next/
+**/coverage/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.tsbuildinfo
+**/test_*.py
+**/conftest.py
+**/*.test.mjs
+.DS_Store

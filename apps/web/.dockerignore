@@ -1,0 +1,13 @@
+**/node_modules
+dist
+.next
+coverage
+.env
+.env.*
+
+public/monaco
+public/pdfjs
+
+**/*.test.mjs
+
+.git/

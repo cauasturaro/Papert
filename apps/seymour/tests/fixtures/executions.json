@@ -1,0 +1,59 @@
+{
+  "incoming": {
+    "version": 1,
+    "executionId": "11111111-1111-4111-8111-111111111111"
+  },
+  "running": {
+    "version": 1,
+    "executionId": "11111111-1111-4111-8111-111111111111",
+    "lease": "22222222-2222-4222-8222-222222222222",
+    "index": 1,
+    "status": "running",
+    "text": "Your saved workspace was received. ",
+    "tokens": 0
+  },
+  "completed": {
+    "version": 1,
+    "executionId": "11111111-1111-4111-8111-111111111111",
+    "lease": "22222222-2222-4222-8222-222222222222",
+    "index": 3,
+    "status": "completed",
+    "text": "Your saved workspace was received. Compare the code with the current challenge criteria. This deterministic transport check does not evaluate or approve your solution.",
+    "tokens": 0
+  },
+  "cancelled": {
+    "version": 1,
+    "executionId": "11111111-1111-4111-8111-111111111111",
+    "lease": "22222222-2222-4222-8222-222222222222",
+    "index": 100,
+    "status": "completed",
+    "text": "",
+    "tokens": 0
+  },
+  "evaluation": {
+    "version": 1,
+    "executionId": "11111111-1111-4111-8111-111111111111",
+    "lease": "22222222-2222-4222-8222-222222222222",
+    "index": 100,
+    "status": "completed",
+    "text": "Evaluation summary",
+    "tokens": 900,
+    "evaluation": {
+      "attemptId": "33333333-3333-4333-8333-333333333333",
+      "revision": 4,
+      "stepId": "validate-input",
+      "summary": "Validate input.",
+      "criteria": [
+        {
+          "id": "name",
+          "status": "met",
+          "feedback": "Input is checked."
+        }
+      ],
+      "findings": [],
+      "hints": [
+        "Check invalid input."
+      ]
+    }
+  }
+}

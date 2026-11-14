@@ -1,0 +1,176 @@
+{
+  "source": "Core recommendation snapshot of the Papert showcase, captured 2026-11-05",
+  "candidates": [
+    {
+      "level": null,
+      "steps": [
+        "Validate the request",
+        "Separate business rules"
+      ],
+      "title": "Build a small HTTP service",
+      "concepts": [],
+      "roadmapId": "http-service-foundations",
+      "description": "A practice roadmap for learning request validation and separating business rules from HTTP."
+    },
+    {
+      "level": "intermediate",
+      "steps": [
+        "Keep the rule inside the domain",
+        "Describe what the use case needs",
+        "Put storage behind the port",
+        "Connect the framework at the edge"
+      ],
+      "title": "Hexagonal Architecture with NestJS",
+      "concepts": [
+        "domain rules",
+        "dependency direction",
+        "ports",
+        "use cases",
+        "injection tokens",
+        "adapters"
+      ],
+      "roadmapId": "hexagonal-architecture-nestjs",
+      "description": "Design a reservation service with a framework-independent core, explicit ports, and NestJS adapters. Make dependency direction visible across workspace files."
+    },
+    {
+      "level": "advanced",
+      "steps": [
+        "Chunk documents without losing provenance",
+        "Align vectors with the storage schema",
+        "Rank evidence before writing an answer",
+        "Expose an answer that names its evidence"
+      ],
+      "title": "Grounded Answers with FastAPI and pgvector",
+      "concepts": [
+        "chunking",
+        "overlap",
+        "source provenance",
+        "embeddings",
+        "pgvector",
+        "schema contracts"
+      ],
+      "roadmapId": "rag-fastapi-pgvector",
+      "description": "Build the file-level design of a retrieval-augmented answer service. Preserve source identity through chunking, vector retrieval, and citation assembly."
+    },
+    {
+      "level": "intermediate",
+      "steps": [
+        "Carry only runtime artifacts forward",
+        "Keep private and transient files outside the image",
+        "Describe service readiness and durable data",
+        "Make publication and deployment deliberate"
+      ],
+      "title": "Production Containers and Delivery Pipelines",
+      "concepts": [
+        "multi-stage builds",
+        "layer caching",
+        "nonroot runtime",
+        "build context",
+        "secret boundaries",
+        "runtime configuration"
+      ],
+      "roadmapId": "docker-ci-cd-production",
+      "description": "Describe a repeatable container build and a gated delivery workflow in files. Connect a multi-stage Dockerfile, Compose services, and GitHub Actions without performing a deployment."
+    },
+    {
+      "level": "beginner",
+      "steps": [
+        "Give each fact a clear home",
+        "Let constraints protect relationships",
+        "Choose an index from a lookup pattern",
+        "Write changes with an explicit reverse path"
+      ],
+      "title": "Designing Relational Schemas in PostgreSQL",
+      "concepts": [
+        "tables",
+        "primary keys",
+        "nullability",
+        "foreign keys",
+        "unique constraints",
+        "check constraints"
+      ],
+      "roadmapId": "postgresql-schema-design",
+      "description": "Model workshop registrations using tables, relationships, and SQL constraints. Add query-focused indexes and reversible migration files."
+    },
+    {
+      "level": "beginner",
+      "steps": [
+        "Define a resource and its operations",
+        "Narrow untrusted input before using it",
+        "Distinguish an absent resource from a bad request",
+        "Finish the boundary with consistent failures"
+      ],
+      "title": "Building a REST API with Express and TypeScript",
+      "concepts": [
+        "resources",
+        "routes",
+        "representations",
+        "runtime validation",
+        "normalization",
+        "trust boundaries"
+      ],
+      "roadmapId": "typescript-rest-api-express",
+      "description": "Write a small task API with explicit routes, input validation, and consistent error responses. Keep task rules separate from Express request handling."
+    },
+    {
+      "level": "beginner",
+      "steps": [
+        "Turn a rule into a focused example",
+        "Share setup without sharing mutable state",
+        "Name the cases around a threshold",
+        "Replace an external collaborator deliberately"
+      ],
+      "title": "Practical Unit Testing with pytest",
+      "concepts": [
+        "assertions",
+        "arrange act assert",
+        "boundaries",
+        "fixtures",
+        "fixture scope",
+        "isolation"
+      ],
+      "roadmapId": "python-testing-pytest",
+      "description": "Write readable tests for a parcel pricing function and a shipping boundary. Practice fixtures, parameterized cases, and small test doubles through saved test files."
+    },
+    {
+      "level": "intermediate",
+      "steps": [
+        "Give server data a stable identity",
+        "Make request states understandable",
+        "Bring cached lists back into agreement",
+        "Make speculative state reversible"
+      ],
+      "title": "Server State with React and TanStack Query",
+      "concepts": [
+        "query keys",
+        "QueryClient",
+        "request cancellation",
+        "pending states",
+        "background refresh",
+        "accessible feedback"
+      ],
+      "roadmapId": "react-data-fetching-tanstack-query",
+      "description": "Build a task-list interface whose server state has explicit query identities and mutation behavior. Describe cache invalidation and reversible optimistic updates in React files."
+    },
+    {
+      "level": "advanced",
+      "steps": [
+        "Treat each message as an independent input",
+        "Protect effects across duplicate delivery",
+        "Retry failures without repeating successful records",
+        "Make recovery settings part of the template"
+      ],
+      "title": "Reliable Event Processing with SQS and Lambda",
+      "concepts": [
+        "event envelopes",
+        "batch processing",
+        "validation",
+        "idempotency",
+        "atomic writes",
+        "DynamoDB transactions"
+      ],
+      "roadmapId": "event-driven-aws-sqs-lambda",
+      "description": "Design a queue-backed parcel event processor with explicit duplicate handling and failure recovery. Connect handler code to a least-privilege infrastructure template."
+    }
+  ]
+}

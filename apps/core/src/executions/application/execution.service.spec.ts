@@ -1,0 +1,286 @@
+import { randomUUID } from 'node:crypto';
+import { describe, expect, it, vi } from 'vitest';
+import { ExecutionService } from './execution.service.js';
+import type { ExecutionRecord } from '../domain/execution.js';
+import type { ExecutionLifecycle } from '../domain/ports/execution-lifecycle.js';
+import type { ExecutionRepository } from '../domain/ports/execution-repository.js';
+import type { Position } from '../../analysis/domain/syntax.js';
+
+const execution: ExecutionRecord = {
+  id: 'execution',
+  workspaceId: 'workspace',
+  input: { kind: 'chat', prompt: 'Help', files: { 'private.txt': 'private' } },
+  status: 'queued',
+  text: '',
+  grounding: null,
+  sequence: 0,
+  attempts: 0,
+  charged: 0,
+  reserved: 3000,
+  createdAt: new Date(0),
+  deadline: new Date(900000),
+  firstEventAt: null,
+  finishedAt: null,
+  publishedAt: null,
+};
+
+const request = {
+  requestKey: '4ca755d9-108c-497c-b9a0-1dab240cb901',
+  kind: 'chat',
+  revision: 1,
+  prompt: 'Help',
+};
+
+function setup() {
+  const repo = {
+    quota: vi.fn<ExecutionRepository['quota']>(),
+    create: vi.fn<ExecutionRepository['create']>().mockResolvedValue(execution),
+    analysisFiles: vi
+      .fn<ExecutionRepository['analysisFiles']>()
+      .mockResolvedValue({ 'main.ts': 'const x = 1;' }),
+    rejectSyntax: vi
+      .fn<ExecutionRepository['rejectSyntax']>()
+      .mockResolvedValue({
+        id: 'attempt',
+        revision: 1,
+        stepId: 'step',
+        result: {},
+      }),
+    owned: vi.fn<ExecutionRepository['owned']>().mockResolvedValue(execution),
+    list: vi.fn<ExecutionRepository['list']>().mockResolvedValue([execution]),
+    createGeneration: vi
+      .fn<ExecutionRepository['createGeneration']>()
+      .mockResolvedValue(execution),
+    createRecommendation: vi
+      .fn<ExecutionRepository['createRecommendation']>()
+      .mockResolvedValue(execution),
+    markPublished: vi.fn<ExecutionRepository['markPublished']>(),
+    pending: vi
+      .fn<ExecutionRepository['pending']>()
+      .mockResolvedValue([execution]),
+  } satisfies ExecutionRepository;
+  const lifecycle = {
+    cancel: vi
+      .fn<ExecutionLifecycle['cancel']>()
+      .mockResolvedValue({ ...execution, status: 'cancelled' }),
+    claim: vi.fn<ExecutionLifecycle['claim']>(),
+    failed: vi.fn<ExecutionLifecycle['failed']>(),
+    active: vi.fn<ExecutionLifecycle['active']>(),
+    accept: vi.fn<ExecutionLifecycle['accept']>(),
+    sourceScope: vi.fn<ExecutionLifecycle['sourceScope']>(),
+    expire: vi.fn<ExecutionLifecycle['expire']>().mockResolvedValue(2),
+  } satisfies ExecutionLifecycle;
+  const queue = { publish: vi.fn().mockResolvedValue(undefined) };
+  const syntax = {
+    check: vi.fn<() => Promise<Position[]>>().mockResolvedValue([]),
+  };
+  const sources = { ready: vi.fn().mockResolvedValue([]) };
+  const catalog = {
+    candidates: vi.fn().mockResolvedValue([]),
+    publishedIds: vi.fn().mockResolvedValue([]),
+  };
+  const service = new ExecutionService(
+    repo,
+    lifecycle,
+    queue,
+    syntax,
+    sources,
+    catalog,
+  );
+
+  return { service, repo, lifecycle, queue, syntax, sources, catalog };
+}
+
+describe('ExecutionService with fake ports', () => {
+  it('validates before calling ports', async () => {
+    const { service, repo, queue } = setup();
+
+    await expect(service.submit('user', 'workspace', {})).rejects.toThrow(
+      'Invalid study request.',
+    );
+
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(queue.publish).not.toHaveBeenCalled();
+  });
+
+  it('persists before publication, marks only success and excludes private input', async () => {
+    const { service, repo, queue, sources } = setup();
+
+    const result = await service.submit('user', 'workspace', request);
+
+    expect(repo.create).toHaveBeenCalledWith('user', 'workspace', request, {
+      sources: [],
+      syntax: undefined,
+    });
+    expect(repo.create.mock.invocationCallOrder[0]).toBeLessThan(
+      queue.publish.mock.invocationCallOrder[0],
+    );
+    expect(queue.publish.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.markPublished.mock.invocationCallOrder[0],
+    );
+    expect(result).toMatchObject({ id: execution.id, prompt: 'Help' });
+    expect(result).not.toHaveProperty('input');
+    expect(sources.ready).not.toHaveBeenCalled();
+  });
+
+  it('keeps durable admission when publication fails, then retries the outbox on sweep', async () => {
+    const { service, repo, queue } = setup();
+    queue.publish.mockRejectedValueOnce(new Error('offline'));
+
+    const admitted = await service.submit('user', 'workspace', request);
+
+    expect(admitted).toMatchObject({ id: execution.id });
+    expect(repo.markPublished).not.toHaveBeenCalled();
+
+    const swept = await service.sweep();
+
+    expect(swept).toEqual({ expired: 2, published: 1 });
+    expect(repo.markPublished).toHaveBeenCalledWith(execution.id);
+  });
+
+  it('loads source context only for tutor requests', async () => {
+    const { service, sources, repo } = setup();
+    const tutorRequest = { ...request, mode: 'doubt' };
+
+    await service.submit('user', 'workspace', tutorRequest);
+
+    expect(sources.ready).toHaveBeenCalledWith('user', 'workspace');
+    expect(sources.ready.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.create.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('records syntax rejection without reserving or publishing', async () => {
+    const { service, repo, syntax, queue, sources } = setup();
+    syntax.check.mockResolvedValue([
+      { line: 1, column: 1, message: 'Unexpected token' },
+    ]);
+    const analysis = {
+      requestKey: request.requestKey,
+      kind: 'analysis',
+      revision: 1,
+    };
+
+    const result = await service.submit('user', 'workspace', analysis);
+
+    expect(result).toMatchObject({
+      status: 'syntax_error',
+      syntax: { status: 'failed' },
+    });
+    expect(repo.rejectSyntax).toHaveBeenCalled();
+    expect(repo.create).not.toHaveBeenCalled();
+    expect(queue.publish).not.toHaveBeenCalled();
+    expect(sources.ready).not.toHaveBeenCalled();
+  });
+
+  it('passes successful syntax coverage into admission and leaves stale revisions to idempotency', async () => {
+    const { service, repo, syntax } = setup();
+    const analysis = {
+      requestKey: request.requestKey,
+      kind: 'analysis',
+      revision: 1,
+    };
+
+    await service.submit('user', 'workspace', analysis);
+
+    expect(repo.create).toHaveBeenLastCalledWith(
+      'user',
+      'workspace',
+      analysis,
+      {
+        sources: [],
+        syntax: {
+          status: 'passed',
+          coverage: 'complete',
+          checked: [{ path: 'main.ts', language: 'typescript' }],
+          unchecked: [],
+          diagnostics: [],
+        },
+      },
+    );
+
+    repo.analysisFiles.mockResolvedValue(null);
+    syntax.check.mockClear();
+
+    await service.submit('user', 'workspace', analysis);
+
+    expect(syntax.check).not.toHaveBeenCalled();
+    expect(repo.create).toHaveBeenLastCalledWith(
+      'user',
+      'workspace',
+      analysis,
+      { sources: [], syntax: undefined },
+    );
+  });
+
+  it('does not republish an idempotent execution that was already published', async () => {
+    const { service, repo, queue } = setup();
+    repo.create.mockResolvedValue({ ...execution, publishedAt: new Date(0) });
+
+    await service.submit('user', 'workspace', request);
+
+    expect(queue.publish).not.toHaveBeenCalled();
+  });
+
+  it('snapshots catalog candidates when a draft asks for recommendations', async () => {
+    const { service, repo, queue, catalog } = setup();
+    const candidate = {
+      roadmapId: 'kept-roadmap',
+      title: 'Hexagonal NestJS',
+      description: 'Ports and adapters.',
+      level: 'intermediate',
+      concepts: ['ports'],
+      steps: ['Define ports'],
+    };
+    catalog.candidates.mockResolvedValue([candidate]);
+    const body = { requestKey: randomUUID(), kind: 'recommendation' };
+
+    await service.submit('user', 'workspace', body);
+
+    expect(catalog.candidates).toHaveBeenCalledWith('user');
+    expect(repo.createRecommendation).toHaveBeenCalledWith(
+      'user',
+      'workspace',
+      body,
+      [candidate],
+    );
+    expect(queue.publish).toHaveBeenCalled();
+  });
+
+  it('lists a workspace unchanged and pages a conversation before a cursor', async () => {
+    const { service, repo } = setup();
+    const conversation = randomUUID();
+    const before = randomUUID();
+
+    await service.list('user', 'workspace');
+    await service.list('user', 'workspace', conversation, before);
+
+    expect(repo.list).toHaveBeenNthCalledWith(
+      1,
+      'user',
+      'workspace',
+      undefined,
+      undefined,
+    );
+    expect(repo.list).toHaveBeenNthCalledWith(
+      2,
+      'user',
+      'workspace',
+      conversation,
+      before,
+    );
+  });
+
+  it('rejects a cursor that is not an id or has no conversation', async () => {
+    const { service, repo } = setup();
+
+    await expect(
+      service.list('user', 'workspace', randomUUID(), 'latest'),
+    ).rejects.toThrow('Invalid study request.');
+    await expect(
+      service.list('user', 'workspace', undefined, randomUUID()),
+    ).rejects.toThrow('Invalid study request.');
+
+    expect(repo.list).not.toHaveBeenCalled();
+  });
+});

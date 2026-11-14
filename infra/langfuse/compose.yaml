@@ -1,0 +1,132 @@
+# Local integration stack adapted from https://github.com/langfuse/langfuse/blob/main/docker-compose.yml
+name: papert-langfuse
+
+services:
+  web:
+    image: docker.langfuse.com/langfuse/langfuse@sha256:c311fd9db4b69f6514fdcb1b86a2a105d5a4ed51fbf0ded033ff2722459c804a
+    ports:
+      - "127.0.0.1:3003:3000"
+    depends_on: &dependencies
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      <<: &common
+        DATABASE_URL: postgresql://postgres:${LF_POSTGRES_PASSWORD:?Run python3 infra/langfuse/setup.py}@postgres:5432/langfuse
+        NEXTAUTH_URL: http://localhost:3003
+        SALT: ${LF_SALT:?Run setup.py}
+        ENCRYPTION_KEY: ${LF_ENCRYPTION_KEY:?Run setup.py}
+        TELEMETRY_ENABLED: "false"
+        CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+        CLICKHOUSE_URL: http://clickhouse:8123
+        CLICKHOUSE_USER: langfuse
+        CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?Run setup.py}
+        CLICKHOUSE_CLUSTER_ENABLED: "false"
+        REDIS_HOST: redis
+        REDIS_AUTH: ${LF_REDIS_PASSWORD:?Run setup.py}
+        LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+        LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+        LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: langfuse
+        LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LF_STORAGE_PASSWORD:?Run setup.py}
+        LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+        LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+        LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+        LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+        LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+        LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: langfuse
+        LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LF_STORAGE_PASSWORD:?Run setup.py}
+        LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+        LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+        LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+        LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+      NEXTAUTH_SECRET: ${LF_AUTH_SECRET:?Run setup.py}
+      AUTH_DISABLE_SIGNUP: "true"
+      LANGFUSE_INIT_ORG_ID: papert-local
+      LANGFUSE_INIT_ORG_NAME: Papert
+      LANGFUSE_INIT_PROJECT_ID: papert-seymour
+      LANGFUSE_INIT_PROJECT_NAME: Seymour
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?Run setup.py}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?Run setup.py}
+      LANGFUSE_INIT_USER_EMAIL: ${LF_ADMIN_EMAIL:?Run setup.py}
+      LANGFUSE_INIT_USER_NAME: Papert local administrator
+      LANGFUSE_INIT_USER_PASSWORD: ${LF_ADMIN_PASSWORD:?Run setup.py}
+
+  worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker@sha256:aa1724b989a00f1e4ca9930709202489c73deaaf2f1116bbd3d71c77edb8fedb
+    depends_on: *dependencies
+    environment: *common
+
+  postgres:
+    image: postgres:17.6-alpine@sha256:ef257d85f76e48da1c64832459b59fcaba1a4dac97bf5d7450c77753542eee94
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_PASSWORD: ${LF_POSTGRES_PASSWORD:?Run setup.py}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "langfuse"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:26.3.62.3@sha256:de3e47c64078aa196dae2349e048fc98ba81947f651f5c20e06e46baea8ae40a
+    environment:
+      CLICKHOUSE_USER: langfuse
+      CLICKHOUSE_PASSWORD: ${LF_CLICKHOUSE_PASSWORD:?Run setup.py}
+    volumes:
+      - clickhouse:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8123/ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine@sha256:7b1753b4c5ad8458906c272a8132b8c15f5557b000379eb115fb239706a384b7
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${LF_REDIS_PASSWORD:?Run setup.py}",
+        "--maxmemory-policy",
+        "noeviction",
+        "--appendonly",
+        "yes",
+      ]
+    environment:
+      REDISCLI_AUTH: ${LF_REDIS_PASSWORD:?Run setup.py}
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  minio:
+    image: cgr.dev/chainguard/minio@sha256:090010a3f73f6aa2dff606c61cd0de3640b22748abe19f4e48cce6dc9de7a53f
+    entrypoint: /bin/sh
+    command:
+      ["-c", "mkdir -p /data/langfuse && minio server --address :9000 /data"]
+    environment:
+      MINIO_ROOT_USER: langfuse
+      MINIO_ROOT_PASSWORD: ${LF_STORAGE_PASSWORD:?Run setup.py}
+    volumes:
+      - storage:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres:
+  clickhouse:
+  redis:
+  storage:

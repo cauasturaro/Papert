@@ -1,0 +1,11 @@
+.venv/
+.env*
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+evals/
+**/test_*.py
+**/conftest.py
+
+.git/

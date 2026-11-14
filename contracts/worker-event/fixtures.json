@@ -1,0 +1,189 @@
+{
+  "valid": [
+    {
+      "name": "progress",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 1,
+        "status": "running",
+        "text": "Working",
+        "tokens": 0
+      }
+    },
+    {
+      "name": "failed",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "failed",
+        "text": "",
+        "tokens": 10
+      }
+    },
+    {
+      "name": "completed",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "completed",
+        "text": "Working",
+        "tokens": 16000
+      }
+    },
+    {
+      "name": "evaluation",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "completed",
+        "text": "Working",
+        "tokens": 0,
+        "evaluation": {
+          "passed": true
+        }
+      }
+    },
+    {
+      "name": "grounding",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "completed",
+        "text": "Working",
+        "tokens": 0,
+        "grounding": {
+          "support": "unsupported",
+          "citations": []
+        }
+      }
+    },
+    {
+      "name": "roadmap",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "completed",
+        "text": "Working",
+        "tokens": 0,
+        "roadmap": {
+          "definition": {},
+          "evidence": []
+        }
+      }
+    },
+    {
+      "name": "recommendation",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "completed",
+        "text": "Working",
+        "tokens": 0,
+        "recommendation": {
+          "roadmapIds": []
+        }
+      }
+    },
+    {
+      "name": "memory",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 100,
+        "status": "completed",
+        "text": "Working",
+        "tokens": 0,
+        "memory": {
+          "summary": {
+            "covered": [],
+            "pending": [],
+            "struggles": []
+          }
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown-field",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 1,
+        "status": "running",
+        "text": "Working",
+        "tokens": 0,
+        "extra": true
+      },
+      "rejection": {
+        "service": "core",
+        "exception": "ZodError"
+      }
+    },
+    {
+      "name": "tokens-type",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 1,
+        "status": "running",
+        "text": "Working",
+        "tokens": "10"
+      },
+      "rejection": {
+        "service": "core",
+        "exception": "ZodError"
+      }
+    },
+    {
+      "name": "tokens-over-budget",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 1,
+        "status": "running",
+        "text": "Working",
+        "tokens": 16001
+      },
+      "rejection": {
+        "service": "core",
+        "exception": "ZodError"
+      }
+    },
+    {
+      "name": "final-only-data",
+      "payload": {
+        "version": 1,
+        "executionId": "11111111-1111-4111-8111-111111111111",
+        "lease": "22222222-2222-4222-8222-222222222222",
+        "index": 1,
+        "status": "running",
+        "text": "Working",
+        "tokens": 0,
+        "memory": {}
+      },
+      "rejection": {
+        "service": "core",
+        "exception": "ZodError"
+      }
+    }
+  ]
+}

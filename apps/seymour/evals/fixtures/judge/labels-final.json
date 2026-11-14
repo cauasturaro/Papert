@@ -1,0 +1,169 @@
+{
+  "reviewer": "human (the project author), labeled without seeing any model verdict",
+  "rule": "progression holds when the hints addressing the issue go from general to more specific; a trailing optional aside does not break it; a second hint about a different problem is not a refinement.",
+  "labels": [
+    {
+      "item": 1,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 2,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 3,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 4,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 5,
+      "specific": true,
+      "no_solution": false,
+      "progression": false
+    },
+    {
+      "item": 6,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 7,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 8,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 9,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 10,
+      "specific": true,
+      "no_solution": false,
+      "progression": true
+    },
+    {
+      "item": 11,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 12,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 13,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 14,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 15,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 16,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 17,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 18,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 19,
+      "specific": true,
+      "no_solution": true,
+      "progression": true
+    },
+    {
+      "item": 20,
+      "specific": true,
+      "no_solution": true,
+      "progression": false
+    },
+    {
+      "item": 21,
+      "specific": false,
+      "no_solution": true,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 22,
+      "specific": false,
+      "no_solution": true,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 23,
+      "specific": false,
+      "no_solution": true,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 24,
+      "specific": true,
+      "no_solution": false,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 25,
+      "specific": true,
+      "no_solution": false,
+      "progression": false,
+      "synthetic": true
+    },
+    {
+      "item": 26,
+      "specific": true,
+      "no_solution": false,
+      "progression": false,
+      "synthetic": true
+    }
+  ],
+  "note": "Items 1-20 labeled by one human reviewer. Items 21-26 are synthetic negatives labeled by construction."
+}

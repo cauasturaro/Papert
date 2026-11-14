@@ -1,0 +1,296 @@
+service: papert-core
+
+frameworkVersion: '4.46.0'
+
+provider:
+  name: aws
+  runtime: nodejs22.x
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+  memorySize: 512
+  timeout: 29
+  logRetentionInDays: 14
+  ecr:
+    images:
+      runtime:
+        path: ../..
+        file: apps/core/Dockerfile.lambda
+        platform: linux/amd64
+        provenance: false
+  vpc:
+    subnetIds: !Split [',', '${param:subnetIds}']
+    securityGroupIds: !Split [',', '${param:securityGroupIds}']
+  environment:
+    NODE_ENV: production
+    TRUST_PROXY_HOPS: '2'
+    EDGE_PROXY_SECRET: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/core/edge-proxy-secret}
+    CHAT_QUEUE_URL: !ImportValue papert-shared-ChatQueueUrl-${self:provider.stage}
+    SESSIONS_TABLE: !ImportValue papert-shared-SessionsTableName-${self:provider.stage}
+    SOURCES_BUCKET: !ImportValue papert-shared-SourcesBucketName-${self:provider.stage}
+    WEBSOCKET_URL: !Sub 'wss://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
+    WEBSOCKET_MANAGEMENT_URL: !Sub 'https://${WebsocketsApi}.execute-api.${AWS::Region}.amazonaws.com/${self:provider.stage}'
+    WEB_ORIGIN: ${ssm:/papert/${self:provider.stage}/web/origin}
+    AUTH_JWE_ACTIVE_KID: ${ssm:/papert/${self:provider.stage}/core/jwe-active-kid}
+    AUTH_JWE_KEYS: ${ssm:/aws/reference/secretsmanager/papert/${self:provider.stage}/core/jwe-keys}
+    DATABASE_URL: ${ssm:/papert/${self:provider.stage}/core/database-url}
+    LANGFUSE_BASE_URL: ${ssm:/papert/${self:provider.stage}/core/langfuse-url, ''}
+    LANGFUSE_PUBLIC_KEY: ${ssm:/papert/${self:provider.stage}/core/langfuse-public-key, ''}
+    LANGFUSE_SECRET_KEY: ${ssm:/papert/${self:provider.stage}/core/langfuse-secret-key, ''}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource: !ImportValue papert-shared-ChatQueueArn-${self:provider.stage}
+        - Effect: Allow
+          Action:
+            [sqs:ReceiveMessage, sqs:DeleteMessage, sqs:GetQueueAttributes]
+          Resource: !ImportValue papert-shared-ResultsQueueArn-${self:provider.stage}
+        - Effect: Allow
+          Action:
+            [
+              dynamodb:PutItem,
+              dynamodb:GetItem,
+              dynamodb:Query,
+              dynamodb:DeleteItem,
+            ]
+          Resource: !ImportValue papert-shared-SessionsTableArn-${self:provider.stage}
+        - Effect: Allow
+          Action: execute-api:ManageConnections
+          Resource: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebsocketsApi}/${self:provider.stage}/POST/@connections/*'
+
+        - Effect: Allow
+          Action: [s3:PutObject, s3:DeleteObject, s3:DeleteObjectVersion]
+          Resource: !Sub 'arn:aws:s3:::papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}/documents/*'
+        - Effect: Allow
+          Action: [s3:GetObject, s3:GetObjectVersion]
+          Resource:
+            - !Sub 'arn:aws:s3:::papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}/documents/*'
+            - !Sub 'arn:aws:s3:::papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}/renditions/*'
+        - Effect: Allow
+          Action: [s3:DeleteObject, s3:DeleteObjectVersion]
+          Resource: !Sub 'arn:aws:s3:::papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}/renditions/*'
+        - Effect: Allow
+          Action: s3:ListBucketVersions
+          Resource: !Sub 'arn:aws:s3:::papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}'
+          Condition:
+            StringLike:
+              s3:prefix: [documents/*, renditions/*]
+
+functions:
+  api:
+    reservedConcurrency: 4
+    image:
+      name: runtime
+      command: ['dist/lambda.handler']
+    events:
+      - httpApi:
+          path: /{proxy+}
+          method: ANY
+      - httpApi:
+          path: /auth/{proxy+}
+          method: ANY
+
+  resultsConsumer:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/executions/infrastructure/lambda-handlers.results']
+    events:
+      - sqs:
+          arn: !ImportValue papert-shared-ResultsQueueArn-${self:provider.stage}
+          batchSize: 1
+          maximumConcurrency: 2
+          functionResponseType: ReportBatchItemFailures
+
+  executionControl:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/executions/infrastructure/lambda-handlers.workerControl']
+
+  executionMaintenance:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/executions/infrastructure/lambda-handlers.maintenance']
+    events:
+      - schedule: rate(1 minute)
+
+  feedbackMaintenance:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/feedback/infrastructure/lambda-handlers.maintenance']
+    events:
+      - schedule: rate(5 minutes)
+
+  sourceControl:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/sources/infrastructure/lambda-handlers.sourceControl']
+
+  sourceMaintenance:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/sources/infrastructure/lambda-handlers.maintenance']
+    events:
+      - schedule: rate(5 minutes)
+
+  stream:
+    reservedConcurrency: 2
+    image:
+      name: runtime
+      command: ['dist/executions/infrastructure/lambda-handlers.websocket']
+    events:
+      - websocket: $connect
+      - websocket: $disconnect
+      - websocket: $default
+
+resources:
+  extensions:
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 10
+        RouteSettings:
+          'ANY /auth/{proxy+}':
+            ThrottlingBurstLimit: 5
+            ThrottlingRateLimit: 2
+    WebsocketsDeploymentStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingBurstLimit: 20
+          ThrottlingRateLimit: 10
+  Resources:
+    WorkerErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/Lambda
+        MetricName: Errors
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref ResultsConsumerLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']
+    WorkerThrottlesAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/Lambda
+        MetricName: Throttles
+        Dimensions:
+          - Name: FunctionName
+            Value: !Ref ResultsConsumerLambdaFunction
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']
+    ApiErrorsAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/ApiGateway
+        MetricName: 5xx
+        Dimensions:
+          - Name: ApiId
+            Value: !Ref HttpApi
+        Statistic: Sum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']
+    ApiLatencyAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/ApiGateway
+        MetricName: Latency
+        Dimensions:
+          - Name: ApiId
+            Value: !Ref HttpApi
+        ExtendedStatistic: p95
+        Period: 300
+        EvaluationPeriods: 2
+        Threshold: 1000
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']
+    # Lambda prefixes console output; match the serialized securityEvent field.
+    SignInFailedMetric:
+      Type: AWS::Logs::MetricFilter
+      Properties:
+        LogGroupName: !Ref ApiLogGroup
+        FilterPattern: '%\x22securityEvent\x22\s*:\s*\x22auth\.sign_in_failed\x22%'
+        MetricTransformations:
+          - MetricNamespace: Papert/Auth/${self:provider.stage}
+            MetricName: SignInFailed
+            MetricValue: '1'
+            DefaultValue: 0
+    SignInFailedAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: Papert/Auth/${self:provider.stage}
+        MetricName: SignInFailed
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 9
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']
+    RateLimitedMetric:
+      Type: AWS::Logs::MetricFilter
+      Properties:
+        LogGroupName: !Ref ApiLogGroup
+        FilterPattern: '%\x22securityEvent\x22\s*:\s*\x22auth\.rate_limited\x22%'
+        MetricTransformations:
+          - MetricNamespace: Papert/Auth/${self:provider.stage}
+            MetricName: RateLimited
+            MetricValue: '1'
+            DefaultValue: 0
+    RateLimitedAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: Papert/Auth/${self:provider.stage}
+        MetricName: RateLimited
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 9
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']
+    RefreshReuseMetric:
+      Type: AWS::Logs::MetricFilter
+      Properties:
+        LogGroupName: !Ref ApiLogGroup
+        FilterPattern: '%\x22securityEvent\x22\s*:\s*\x22auth\.refresh_reuse\x22%'
+        MetricTransformations:
+          - MetricNamespace: Papert/Auth/${self:provider.stage}
+            MetricName: RefreshReuse
+            MetricValue: '1'
+            DefaultValue: 0
+    RefreshReuseAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: Papert/Auth/${self:provider.stage}
+        MetricName: RefreshReuse
+        Statistic: Sum
+        Period: 300
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ['${param:alarmTopicArn}']

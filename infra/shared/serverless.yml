@@ -1,0 +1,295 @@
+service: papert-shared
+
+frameworkVersion: "4.46.0"
+
+provider:
+  name: aws
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'local'}
+
+resources:
+  Resources:
+    IngestionDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-ingestion-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    IngestionQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-ingestion-${self:provider.stage}
+        VisibilityTimeout: 720
+        MessageRetentionPeriod: 345600
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt IngestionDLQ.Arn
+          maxReceiveCount: 3
+
+    ChatDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-chat-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    ChatQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-chat-${self:provider.stage}
+        VisibilityTimeout: 360
+        MessageRetentionPeriod: 345600
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ChatDLQ.Arn
+          maxReceiveCount: 3
+
+    ResultsDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-results-dlq-${self:provider.stage}
+        MessageRetentionPeriod: 1209600
+
+    ResultsQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: papert-results-${self:provider.stage}
+        VisibilityTimeout: 180
+        MessageRetentionPeriod: 345600
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ResultsDLQ.Arn
+          maxReceiveCount: 3
+
+    IngestionQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref IngestionQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: s3.amazonaws.com
+              Action: sqs:SendMessage
+              Resource: !GetAtt IngestionQueue.Arn
+              Condition:
+                ArnEquals:
+                  aws:SourceArn: !Sub arn:aws:s3:::papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}
+                StringEquals:
+                  aws:SourceAccount: !Ref AWS::AccountId
+
+    SourcesBucket:
+      DependsOn: IngestionQueuePolicy
+      DeletionPolicy: Retain
+      UpdateReplacePolicy: Retain
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: !Sub papert-sources-${AWS::AccountId}-${AWS::Region}-${self:provider.stage}
+        VersioningConfiguration:
+          Status: Enabled
+        CorsConfiguration:
+          CorsRules:
+            - AllowedMethods: [PUT]
+              AllowedOrigins: ["${param:webOrigin}"]
+              AllowedHeaders: [content-type, content-length]
+              ExposedHeaders: [ETag]
+              MaxAge: 600
+            - AllowedMethods: [GET, HEAD]
+              AllowedOrigins: ["${param:webOrigin}"]
+              AllowedHeaders: [range]
+              ExposedHeaders:
+                [Content-Length, Content-Range, Accept-Ranges, ETag]
+              MaxAge: 600
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        NotificationConfiguration:
+          QueueConfigurations:
+            - Event: s3:ObjectCreated:*
+              Queue: !GetAtt IngestionQueue.Arn
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: prefix
+                      Value: documents/
+            - Event: s3:ObjectRemoved:*
+              Queue: !GetAtt IngestionQueue.Arn
+              Filter:
+                S3Key:
+                  Rules:
+                    - Name: prefix
+                      Value: documents/
+
+    SessionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: papert-sessions-${self:provider.stage}
+        SSESpecification:
+          SSEEnabled: true
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: pk
+            AttributeType: S
+          - AttributeName: sk
+            AttributeType: S
+        KeySchema:
+          - AttributeName: pk
+            KeyType: HASH
+          - AttributeName: sk
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: expires
+          Enabled: true
+
+    ChatAgeAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/SQS
+        MetricName: ApproximateAgeOfOldestMessage
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt ChatQueue.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 300
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+
+    ChatDLQAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt ChatDLQ.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+
+    ResultsAgeAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/SQS
+        MetricName: ApproximateAgeOfOldestMessage
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt ResultsQueue.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 300
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+
+    ResultsDLQAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt ResultsDLQ.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+
+    IngestionAgeAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/SQS
+        MetricName: ApproximateAgeOfOldestMessage
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt IngestionQueue.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 300
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+
+    IngestionDLQAlarm:
+      Type: AWS::CloudWatch::Alarm
+      Properties:
+        Namespace: AWS/SQS
+        MetricName: ApproximateNumberOfMessagesVisible
+        Dimensions:
+          - Name: QueueName
+            Value: !GetAtt IngestionDLQ.QueueName
+        Statistic: Maximum
+        Period: 60
+        EvaluationPeriods: 1
+        Threshold: 0
+        ComparisonOperator: GreaterThanThreshold
+        TreatMissingData: notBreaching
+        AlarmActions: ["${param:alarmTopicArn}"]
+
+    QueueDashboard:
+      Type: AWS::CloudWatch::Dashboard
+      Properties:
+        DashboardName: !Sub papert-queues-${AWS::Region}-${self:provider.stage}
+        DashboardBody: !Sub |
+          {"widgets":[{"type":"metric","width":24,"height":6,"properties":{"region":"${AWS::Region}","title":"Queue age (seconds)","stat":"Maximum","period":60,"metrics":[["AWS/SQS","ApproximateAgeOfOldestMessage","QueueName","${ChatQueue.QueueName}"],["AWS/SQS","ApproximateAgeOfOldestMessage","QueueName","${ResultsQueue.QueueName}"],["AWS/SQS","ApproximateAgeOfOldestMessage","QueueName","${IngestionQueue.QueueName}"]]}},{"type":"metric","width":24,"height":6,"properties":{"region":"${AWS::Region}","title":"Dead-letter messages","stat":"Maximum","period":60,"metrics":[["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","${ChatDLQ.QueueName}"],["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","${ResultsDLQ.QueueName}"],["AWS/SQS","ApproximateNumberOfMessagesVisible","QueueName","${IngestionDLQ.QueueName}"]]}}]}
+
+  Outputs:
+    IngestionQueueArn:
+      Value: !GetAtt IngestionQueue.Arn
+      Export:
+        Name: papert-shared-IngestionQueueArn-${self:provider.stage}
+
+    ChatQueueArn:
+      Value: !GetAtt ChatQueue.Arn
+      Export:
+        Name: papert-shared-ChatQueueArn-${self:provider.stage}
+
+    ResultsQueueArn:
+      Value: !GetAtt ResultsQueue.Arn
+      Export:
+        Name: papert-shared-ResultsQueueArn-${self:provider.stage}
+
+    SourcesBucketName:
+      Value: !Ref SourcesBucket
+      Export:
+        Name: papert-shared-SourcesBucketName-${self:provider.stage}
+
+    SessionsTableName:
+      Value: !Ref SessionsTable
+      Export:
+        Name: papert-shared-SessionsTableName-${self:provider.stage}
+
+    ChatQueueUrl:
+      Value: !Ref ChatQueue
+      Export:
+        Name: papert-shared-ChatQueueUrl-${self:provider.stage}
+
+    ResultsQueueUrl:
+      Value: !Ref ResultsQueue
+      Export:
+        Name: papert-shared-ResultsQueueUrl-${self:provider.stage}
+
+    SessionsTableArn:
+      Value: !GetAtt SessionsTable.Arn
+      Export:
+        Name: papert-shared-SessionsTableArn-${self:provider.stage}
+
+    SourcesBucketArn:
+      Value: !GetAtt SourcesBucket.Arn
+      Export:
+        Name: papert-shared-SourcesBucketArn-${self:provider.stage}

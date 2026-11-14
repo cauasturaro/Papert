@@ -1,0 +1,13 @@
+title = "Papert secret scan"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixture values that only look like credentials"
+regexes = [
+  # Planted fact the retrieval evaluation expects to find in the sample guide.
+  '''SABLE-COMET-28''',
+  # Idempotency key of a unit-test request.
+  '''4ca755d9-108c-497c-b9a0-1dab240cb901''',
+]
