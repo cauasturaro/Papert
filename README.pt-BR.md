@@ -7,7 +7,7 @@
 [English](README.md) · **Português**
 
 O Papert ensina desenvolvimento de software na prática. Você escolhe um roadmap, como
-*Hexagonal Architecture with NestJS*, e avança etapa por etapa em um editor de código que roda
+*Practical Unit Testing with pytest*, e avança etapa por etapa em um editor de código que roda
 no navegador. O Seymour, o tutor de IA da plataforma, lê o que você escreveu e os materiais de
 estudo que você enviou, e responde com dicas e referências em vez de soluções prontas. Quando
 achar que terminou uma etapa, você pede uma revisão: o Seymour confere o seu trabalho com os
@@ -62,6 +62,18 @@ make up-apps
 | Langfuse | http://localhost:3003 (credenciais em `.env.langfuse`) |
 
 Todas as portas escutam em `127.0.0.1`. Libere as portas 3000–3003, 4566 e 7001 antes de subir.
+
+## Frameworks suportados
+
+O editor faz realce de sintaxe para as linguagens mais comuns. Para as stacks abaixo, ele
+também oferece autocompletar e, em TypeScript e JavaScript, checagem de tipos enquanto você
+escreve.
+
+| Linguagem | Frameworks e bibliotecas |
+| --- | --- |
+| TypeScript e JavaScript | React, Next.js, Node.js, Express, Fastify, Hono, Koa, NestJS, tRPC, Zod, class-validator, Drizzle, TypeORM, Mongoose, Axios, LangChain, LangGraph, os SDKs da OpenAI, da Anthropic e o Vercel AI SDK, Vitest, Jest, Supertest |
+| Python | Flask, FastAPI, Django, Django REST Framework, Pydantic, SQLAlchemy, LangChain, LangGraph, pytest, Requests, HTTPX |
+| Java | Spring Boot: Web, Data JPA, Security, Validation e Test |
 
 ## Arquitetura
 

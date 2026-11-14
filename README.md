@@ -6,8 +6,8 @@
 
 **English** · [Português](README.pt-BR.md)
 
-Papert teaches software development by building. You pick a roadmap, such as *Hexagonal
-Architecture with NestJS*, and work through it step by step in a code editor that runs in the
+Papert teaches software development by building. You pick a roadmap, such as *Practical Unit
+Testing with pytest*, and work through it step by step in a code editor that runs in the
 browser. Seymour, the built-in AI tutor, reads what you wrote and the study materials you
 uploaded, and answers with hints and references instead of ready-made solutions. When you
 think a step is done, you ask for a review: Seymour checks your work against the goals of the
@@ -62,6 +62,17 @@ make up-apps
 | Langfuse | http://localhost:3003 (credentials in `.env.langfuse`) |
 
 Every port binds to `127.0.0.1`. Free ports 3000–3003, 4566 and 7001 before starting.
+
+## Supported frameworks
+
+The editor highlights most common languages. For the stacks below it also offers completions
+and, in TypeScript and JavaScript, type checking as you write.
+
+| Language | Frameworks and libraries |
+| --- | --- |
+| TypeScript and JavaScript | React, Next.js, Node.js, Express, Fastify, Hono, Koa, NestJS, tRPC, Zod, class-validator, Drizzle, TypeORM, Mongoose, Axios, LangChain, LangGraph, the OpenAI, Anthropic and Vercel AI SDKs, Vitest, Jest, Supertest |
+| Python | Flask, FastAPI, Django, Django REST Framework, Pydantic, SQLAlchemy, LangChain, LangGraph, pytest, Requests, HTTPX |
+| Java | Spring Boot: Web, Data JPA, Security, Validation and Test |
 
 ## Architecture
 
