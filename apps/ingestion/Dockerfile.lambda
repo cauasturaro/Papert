@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/python:3.12@sha256:e101b645fd89a17abe636ea521eea44c6fffa4d59c0a61be5ca1d7d07c4be3e3
+FROM public.ecr.aws/lambda/python:3.12@sha256:f229f304f82f5016fe26e4714d05b6a8196e0c6c61b463112841a5e3c3647163
 # Applies the OS security fixes published after the base image was built.
 RUN dnf upgrade -y --releasever=latest && dnf clean all
 COPY apps/ingestion/requirements.txt /tmp/requirements.txt
