@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/nodejs:22@sha256:f9688a2b965ccd05110ac254d7348bbd772bbf7d1b502aeaec50c2f10a377890 AS builder
+FROM public.ecr.aws/lambda/nodejs:22@sha256:42246b73ef598cf22bdb44e136cf21ff72f283426ba1b2da695f19293cf744d6 AS builder
 WORKDIR /build
 COPY apps/core/package.json apps/core/package-lock.json apps/core/prisma.config.ts ./
 COPY apps/core/prisma ./prisma
@@ -6,7 +6,7 @@ RUN npm ci
 COPY apps/core ./
 RUN npm run build && npm prune --omit=dev
 
-FROM public.ecr.aws/lambda/nodejs:22@sha256:f9688a2b965ccd05110ac254d7348bbd772bbf7d1b502aeaec50c2f10a377890
+FROM public.ecr.aws/lambda/nodejs:22@sha256:42246b73ef598cf22bdb44e136cf21ff72f283426ba1b2da695f19293cf744d6
 # Applies the OS security fixes published after the base image was built.
 RUN dnf upgrade -y --releasever=latest && dnf clean all
 # The function ships its own SDK and never installs packages, and Lambda supplies
